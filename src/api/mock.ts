@@ -1,4 +1,4 @@
-import type { Advice, Itinerary, Plan, PlanLeg, Place, Stop } from "./types";
+import type { Advice, Itinerary, Mode, Option, Plan, PlanLeg, Place, Stop } from "./types";
 
 // Deterministic fixtures keyed by case-insensitive substrings in the destination,
 // covering the four advice shapes the UI must handle.
@@ -129,18 +129,84 @@ function mockTransitItin(): Itinerary {
   return { minutes: 29, distance_m: 0, start_time: MS, end_time: at(29), legs };
 }
 
+function mockBikeRideItin(): Itinerary {
+  const legs: PlanLeg[] = [
+    { mode: "BICYCLE", minutes: 6, distance_m: 1300, route: null, route_long_name: null, headsign: null, from: ref("Amsterdam Centraal", 52.3791, 4.9003), to: ref("Weesperplein", 52.3617, 4.9087), geometry: null, start_time: MS, end_time: at(6), steps: [] },
+    { mode: "SUBWAY", minutes: 7, distance_m: null, route: "52", route_long_name: "Noord/Zuidlijn", headsign: "Zuid", from: ref("Weesperplein", 52.3617, 4.9087), to: ref("Europaplein", 52.3395, 4.8918), geometry: null, start_time: at(6), end_time: at(13), steps: [] },
+    { mode: "WALK", minutes: 4, distance_m: 300, route: null, route_long_name: null, headsign: null, from: ref("Europaplein", 52.3395, 4.8918), to: ref("Vondelpark", 52.358, 4.8686), geometry: null, start_time: at(13), end_time: at(17), steps: [] },
+  ];
+  return { minutes: 17, distance_m: 1600, start_time: MS, end_time: at(17), legs };
+}
+
+function opt(kind: Mode, recommended: boolean, rain_minutes: number, score: number, itinerary: Itinerary): Option {
+  return { kind, recommended, rain_minutes, score, itinerary };
+}
+
 export function mockPlanFor(_from: string, to: string): Plan {
   const t = to.toLowerCase();
   const origin = ref("Amsterdam Centraal", 52.3791, 4.9003);
   const destination = ref("Vondelpark", 52.358, 4.8686);
+  const base = { origin, destination };
+
   if (t.includes("rain") || t.includes("regen")) {
-    return { recommendation: "transit", reason: "rain around 15:10 (~1.2 mm/h) -> take tram 1 (29 min)", max_rain_mm_per_h: 1.2, rain_expected: true, origin, destination, bike: mockBikeItin(), transit: mockTransitItin() };
+    return {
+      ...base,
+      recommendation: "transit",
+      reason: "rain around 15:10 (~1.2 mm/h) -> take tram 1 (29 min)",
+      max_rain_mm_per_h: 1.2,
+      rain_expected: true,
+      options: [
+        opt("transit", true, 0, 29, mockTransitItin()),
+        opt("bike", false, 22, 46, mockBikeItin()),
+      ],
+    };
+  }
+  if (t.includes("mix") || t.includes("zuid")) {
+    return {
+      ...base,
+      recommendation: "bike_and_ride",
+      reason: "rain around 15:10 (~1.0 mm/h) -> bike to Weesperplein, then metro 52 (17 min)",
+      max_rain_mm_per_h: 1.0,
+      rain_expected: true,
+      options: [
+        opt("bike_and_ride", true, 6, 23, mockBikeRideItin()),
+        opt("transit", false, 0, 29, mockTransitItin()),
+        opt("bike", false, 24, 48, mockBikeItin()),
+      ],
+    };
   }
   if (t.includes("remote") || t.includes("polder")) {
-    return { recommendation: "bike", reason: "rain expected but no transit found -> bike (24 min), bring a raincoat", max_rain_mm_per_h: 0.8, rain_expected: true, origin, destination, bike: mockBikeItin(), transit: null };
+    return {
+      ...base,
+      recommendation: "bike",
+      reason: "rain expected but no transit found -> bike (24 min), bring a raincoat",
+      max_rain_mm_per_h: 0.8,
+      rain_expected: true,
+      options: [opt("bike", true, 24, 50, mockBikeItin())],
+    };
   }
   if (t.includes("unknown") || t.includes("fog")) {
-    return { recommendation: "bike", reason: "rain forecast unavailable -> bike (24 min)", max_rain_mm_per_h: null, rain_expected: null, origin, destination, bike: mockBikeItin(), transit: mockTransitItin() };
+    return {
+      ...base,
+      recommendation: "bike",
+      reason: "rain forecast unavailable -> fastest is bike (24 min)",
+      max_rain_mm_per_h: null,
+      rain_expected: null,
+      options: [
+        opt("bike", true, 0, 24, mockBikeItin()),
+        opt("transit", false, 0, 29, mockTransitItin()),
+      ],
+    };
   }
-  return { recommendation: "bike", reason: "dry during your 24-min ride (rain only from 15:40) -> bike", max_rain_mm_per_h: 0.0, rain_expected: false, origin, destination, bike: mockBikeItin(), transit: mockTransitItin() };
+  return {
+    ...base,
+    recommendation: "bike",
+    reason: "dry during your 24-min ride (rain only from 15:40) -> bike",
+    max_rain_mm_per_h: 0.0,
+    rain_expected: false,
+    options: [
+      opt("bike", true, 0, 24, mockBikeItin()),
+      opt("transit", false, 0, 29, mockTransitItin()),
+    ],
+  };
 }
