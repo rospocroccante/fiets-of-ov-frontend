@@ -1,4 +1,4 @@
-import type { Itinerary, Mode, Plan } from "../api/types";
+import type { Itinerary, Mode, Option, Plan } from "../api/types";
 
 // View-model for the results panel: one OptionView per available mode, recommended first.
 export interface OptionView {
@@ -44,39 +44,44 @@ function transitSummary(it: Itinerary): string {
   return lines.length ? lines.join(" -> ") : "Public transport";
 }
 
-function bikeOption(plan: Plan, recommended: boolean): OptionView {
-  const it = plan.bike;
-  const d = km(it.distance_m);
-  return {
-    mode: "bike",
-    title: "By bike",
-    minutes: it.minutes,
-    distanceKm: d,
-    recommended,
-    summary: d != null ? `${d} km by bike` : "Bike route",
-    itinerary: it,
-  };
+const TITLE: Record<Mode, string> = {
+  bike: "By bike",
+  transit: "Public transport",
+  bike_and_ride: "Bike + transit",
+};
+
+function bikeMinutes(it: Itinerary): number {
+  return it.legs
+    .filter((l) => l.mode === "BICYCLE")
+    .reduce((sum, l) => sum + l.minutes, 0);
 }
 
-function transitOption(it: Itinerary, recommended: boolean): OptionView {
+function summarise(kind: Mode, it: Itinerary): string {
+  if (kind === "bike") {
+    const d = km(it.distance_m);
+    return d != null ? `${d} km by bike` : "Bike route";
+  }
+  if (kind === "transit") return transitSummary(it);
+  // bike_and_ride: short bike leg + the transit lines
+  return `Bike ${bikeMinutes(it)} min -> ${transitSummary(it)}`;
+}
+
+function toOptionView(option: Option): OptionView {
+  const it = option.itinerary;
   return {
-    mode: "transit",
-    title: "Public transport",
+    mode: option.kind,
+    title: TITLE[option.kind],
     minutes: it.minutes,
-    distanceKm: null,
-    recommended,
-    summary: transitSummary(it),
+    distanceKm: option.kind === "bike" ? km(it.distance_m) : null,
+    recommended: option.recommended,
+    summary: summarise(option.kind, it),
     itinerary: it,
   };
 }
 
 export function buildPlanView(plan: Plan): PlanView {
-  const options: OptionView[] = [bikeOption(plan, plan.recommendation === "bike")];
-  if (plan.transit) {
-    options.push(transitOption(plan.transit, plan.recommendation === "transit"));
-  }
-  // Recommended option first.
-  options.sort((a, b) => Number(b.recommended) - Number(a.recommended));
+  // Backend returns options ranked, recommended first; preserve that order.
+  const options = plan.options.map(toOptionView);
   return {
     recommendation: plan.recommendation,
     reason: plan.reason,
