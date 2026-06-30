@@ -1,4 +1,4 @@
-import type { Advice, Stop, Place } from "./types";
+import type { Advice, Itinerary, Plan, PlanLeg, Place, Stop } from "./types";
 
 // Deterministic fixtures keyed by case-insensitive substrings in the destination,
 // covering the four advice shapes the UI must handle.
@@ -91,4 +91,56 @@ export function mockStops(lat: number, lon: number): Stop[] {
     location_type: 0,
     distance_m: Math.round((Math.abs(b.dlat) + Math.abs(b.dlon)) * 111000),
   }));
+}
+
+// Offline fixture for GET /v1/plan: a drawable bike + transit itinerary. Legs carry
+// from/to coords (no encoded geometry) so the map draws straight segments in mock mode;
+// live mode supplies real per-leg geometry.
+const MS = 1_700_000_000_000;
+const at = (min: number) => MS + min * 60_000;
+const ref = (name: string | null, lat: number, lon: number) => ({ name, lat, lon });
+
+function mockBikeItin(): Itinerary {
+  const leg: PlanLeg = {
+    mode: "BICYCLE",
+    minutes: 24,
+    distance_m: 4750,
+    route: null,
+    route_long_name: null,
+    headsign: null,
+    from: ref("Amsterdam Centraal", 52.3791, 4.9003),
+    to: ref("Vondelpark", 52.358, 4.8686),
+    geometry: null,
+    start_time: MS,
+    end_time: at(24),
+    steps: [],
+  };
+  return { minutes: 24, distance_m: 4750, start_time: MS, end_time: at(24), legs: [leg] };
+}
+
+function mockTransitItin(): Itinerary {
+  const legs: PlanLeg[] = [
+    { mode: "WALK", minutes: 4, distance_m: 300, route: null, route_long_name: null, headsign: null, from: ref("Amsterdam Centraal", 52.3791, 4.9003), to: ref("Centraal Station", 52.3789, 4.9005), geometry: null, start_time: MS, end_time: at(4), steps: [] },
+    { mode: "SUBWAY", minutes: 8, distance_m: null, route: "52", route_long_name: "Noord/Zuidlijn", headsign: "Zuid", from: ref("Centraal Station", 52.3789, 4.9005), to: ref("Vijzelgracht", 52.3637, 4.8912), geometry: null, start_time: at(4), end_time: at(12), steps: [] },
+    { mode: "WALK", minutes: 3, distance_m: 200, route: null, route_long_name: null, headsign: null, from: ref("Vijzelgracht", 52.3637, 4.8912), to: ref("Vijzelgracht", 52.3637, 4.8912), geometry: null, start_time: at(12), end_time: at(15), steps: [] },
+    { mode: "TRAM", minutes: 9, distance_m: null, route: "1", route_long_name: "Tram 1", headsign: "Osdorp", from: ref("Vijzelgracht", 52.3637, 4.8912), to: ref("Rhijnvis Feithstraat", 52.3596, 4.8676), geometry: null, start_time: at(15), end_time: at(24), steps: [] },
+    { mode: "WALK", minutes: 5, distance_m: 350, route: null, route_long_name: null, headsign: null, from: ref("Rhijnvis Feithstraat", 52.3596, 4.8676), to: ref("Vondelpark", 52.358, 4.8686), geometry: null, start_time: at(24), end_time: at(29), steps: [] },
+  ];
+  return { minutes: 29, distance_m: 0, start_time: MS, end_time: at(29), legs };
+}
+
+export function mockPlanFor(_from: string, to: string): Plan {
+  const t = to.toLowerCase();
+  const origin = ref("Amsterdam Centraal", 52.3791, 4.9003);
+  const destination = ref("Vondelpark", 52.358, 4.8686);
+  if (t.includes("rain") || t.includes("regen")) {
+    return { recommendation: "transit", reason: "rain around 15:10 (~1.2 mm/h) -> take tram 1 (29 min)", max_rain_mm_per_h: 1.2, rain_expected: true, origin, destination, bike: mockBikeItin(), transit: mockTransitItin() };
+  }
+  if (t.includes("remote") || t.includes("polder")) {
+    return { recommendation: "bike", reason: "rain expected but no transit found -> bike (24 min), bring a raincoat", max_rain_mm_per_h: 0.8, rain_expected: true, origin, destination, bike: mockBikeItin(), transit: null };
+  }
+  if (t.includes("unknown") || t.includes("fog")) {
+    return { recommendation: "bike", reason: "rain forecast unavailable -> bike (24 min)", max_rain_mm_per_h: null, rain_expected: null, origin, destination, bike: mockBikeItin(), transit: mockTransitItin() };
+  }
+  return { recommendation: "bike", reason: "dry during your 24-min ride (rain only from 15:40) -> bike", max_rain_mm_per_h: 0.0, rain_expected: false, origin, destination, bike: mockBikeItin(), transit: mockTransitItin() };
 }

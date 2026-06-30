@@ -1,34 +1,44 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { AdviceCard } from "./AdviceCard";
+import type { OptionView } from "../lib/planView";
+import type { Itinerary } from "../api/types";
 
-const recommended = {
-  mode: "bike" as const,
-  title: "By bike",
+const itinerary: Itinerary = {
   minutes: 24,
-  recommended: true,
-  chips: ["24 min", "dry"],
-  reason: "dry during your ride -> bike",
+  distance_m: 4750,
+  start_time: 0,
+  end_time: 0,
+  legs: [],
 };
 
-test("shows Recommended badge and title when recommended", () => {
-  render(<AdviceCard card={recommended} />);
+const recommended: OptionView = {
+  mode: "bike",
+  title: "By bike",
+  minutes: 24,
+  distanceKm: 4.8,
+  recommended: true,
+  summary: "4.8 km by bike",
+  itinerary,
+};
+
+test("shows Recommended badge, title, minutes and summary", () => {
+  render(<AdviceCard option={recommended} selected onSelect={() => {}} />);
   expect(screen.getByText("Recommended")).toBeInTheDocument();
   expect(screen.getByText("By bike")).toBeInTheDocument();
-  // "24 min" appears in both the rating-style minutes span and the chip
-  expect(screen.getAllByText("24 min").length).toBeGreaterThanOrEqual(1);
-});
-
-test("renders the reason when present", () => {
-  render(<AdviceCard card={recommended} />);
-  expect(screen.getByText(/dry during your ride/)).toBeInTheDocument();
+  expect(screen.getByText("24 min")).toBeInTheDocument();
+  expect(screen.getByText("4.8 km by bike")).toBeInTheDocument();
 });
 
 test("no badge when not recommended", () => {
-  render(<AdviceCard card={{ ...recommended, recommended: false, reason: undefined }} />);
+  render(
+    <AdviceCard option={{ ...recommended, recommended: false }} selected={false} onSelect={() => {}} />
+  );
   expect(screen.queryByText("Recommended")).not.toBeInTheDocument();
 });
 
-test("shows n/a when minutes is null", () => {
-  render(<AdviceCard card={{ ...recommended, minutes: null }} />);
-  expect(screen.getByText("n/a")).toBeInTheDocument();
+test("calls onSelect when clicked", () => {
+  const onSelect = vi.fn();
+  render(<AdviceCard option={recommended} selected={false} onSelect={onSelect} />);
+  fireEvent.click(screen.getByRole("button"));
+  expect(onSelect).toHaveBeenCalledTimes(1);
 });

@@ -16,6 +16,9 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
+    // Tests run fully offline against the mock data layer, regardless of any local
+    // .env.local that points the dev server at the live backend.
+    env: { VITE_API_MODE: "mock" },
     alias: {
       "react-leaflet": new URL("./src/__mocks__/react-leaflet.tsx", import.meta.url).pathname,
     },

@@ -12,6 +12,14 @@ export function CircleMarker({ children }: { children?: React.ReactNode }) {
   return <>{children}</>;
 }
 
+export function Polyline({ children }: { children?: React.ReactNode }) {
+  return <>{children}</>;
+}
+
+export function Marker({ children }: { children?: React.ReactNode }) {
+  return <>{children}</>;
+}
+
 export function Popup({ children }: { children?: React.ReactNode }) {
   return <span>{children}</span>;
 }

@@ -4,37 +4,49 @@ import { FilterBar } from "./components/FilterBar";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
 import { MapView } from "./components/MapView";
 import { HomeHero } from "./components/HomeHero";
-import { useTripAdvice } from "./hooks/useTripAdvice";
+import { useTripPlan } from "./hooks/useTripPlan";
 import { isLive } from "./api/client";
+import type { Mode } from "./api/types";
 
 export default function App() {
   const [trip, setTrip] = useState<Trip | null>(null);
   const [hideMap, setHideMap] = useState(false);
-  const view = useTripAdvice(trip);
+  const [selectedMode, setSelectedMode] = useState<Mode | null>(null);
+  const view = useTripPlan(trip);
 
+  function startTrip(t: Trip) {
+    setSelectedMode(null);
+    setTrip(t);
+  }
   function goHome() {
+    setSelectedMode(null);
     setTrip(null);
   }
 
   if (trip === null) {
-    return <HomeHero onSearch={setTrip} />;
+    return <HomeHero onSearch={startTrip} />;
   }
 
-  const panel: PanelState =
-    view.status === "ready" && view.result
-      ? { status: "ready", result: view.result }
-      : view.status === "error"
-        ? { status: "error", message: view.message ?? "error" }
-        : view.status === "loading"
-          ? { status: "loading" }
-          : { status: "idle" };
+  const planView = view.status === "ready" && view.view ? view.view : null;
+  const effectiveMode: Mode = selectedMode ?? planView?.recommendation ?? "bike";
+  const selectedOption =
+    planView?.options.find((o) => o.mode === effectiveMode) ?? planView?.options[0];
+  const route = selectedOption?.itinerary ?? null;
 
-  const count = view.status === "ready" ? view.result!.cards.length : 0;
+  const panel: PanelState = planView
+    ? { status: "ready", view: planView, selectedMode: effectiveMode, onSelect: setSelectedMode }
+    : view.status === "error"
+      ? { status: "error", message: view.message ?? "error" }
+      : view.status === "loading"
+        ? { status: "loading" }
+        : { status: "idle" };
+
+  const count = planView ? planView.options.length : 0;
 
   return (
     <div className="flex h-full flex-col">
       <header className="border-b border-gray-100 px-6 py-3">
-        <SearchBar onSearch={setTrip} onHome={goHome} />
+        <SearchBar onSearch={startTrip} onHome={goHome} />
       </header>
 
       <div className="px-6">
@@ -47,7 +59,12 @@ export default function App() {
         </section>
         {!hideMap && (
           <section className="w-1/2">
-            <MapView origin={view.origin} destination={view.destination} stops={view.stops} />
+            <MapView
+              origin={view.origin}
+              destination={view.destination}
+              stops={view.stops}
+              route={route}
+            />
           </section>
         )}
       </main>
