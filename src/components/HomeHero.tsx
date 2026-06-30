@@ -5,8 +5,8 @@ import type { Trip } from "./SearchBar";
 const POPULAR: Trip[] = [
   { from: "Amsterdam Centraal", to: "Vondelpark" },
   { from: "De Pijp", to: "Rijksmuseum" },
-  { from: "Jordaan", to: "Bijlmer ArenA" },
-  { from: "Amsterdam Zuid", to: "NDSM Wharf" },
+  { from: "Jordaan", to: "Amsterdamse Poort" },
+  { from: "Amsterdam Zuid", to: "NDSM" },
 ];
 
 export function HomeHero({ onSearch }: { onSearch: (trip: Trip) => void }) {
