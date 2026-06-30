@@ -3,7 +3,7 @@ export type Mode = "bike" | "transit" | "bike_and_ride";
 export interface Advice {
   recommendation: Mode;
   reason: string;
-  bike_minutes: number;
+  bike_minutes: number | null;
   transit_minutes: number | null;
   max_rain_mm_per_h: number | null;
   rain_expected: boolean | null;
