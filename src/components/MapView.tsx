@@ -16,6 +16,7 @@ type LatLon = { lat: number; lon: number };
 
 const AMS: [number, number] = [52.3728, 4.8936];
 const BRAND = "#13386E";
+const BIKE = "#16a34a";
 const WALK = "#94a3b8";
 
 // A leg's drawable path: its real geometry when present, else a straight line endpoints.
@@ -88,19 +89,20 @@ export function MapView({
         );
       })}
 
-      {/* The route itself: transit/bike solid brand, walking grey and dashed. */}
+      {/* The route itself: transit solid brand, bike green dashed, walking grey dotted. */}
       {legs.map((leg, i) => {
         const coords = legCoords(leg);
         if (coords.length < 2) return null;
         const walk = leg.mode === "WALK";
+        const bike = leg.mode === "BICYCLE";
         return (
           <Polyline
             key={`leg-${i}`}
             positions={coords as LatLngExpression[]}
             pathOptions={{
-              color: walk ? WALK : BRAND,
+              color: walk ? WALK : bike ? BIKE : BRAND,
               weight: walk ? 4 : 5,
-              dashArray: walk ? "1 9" : undefined,
+              dashArray: walk ? "1 9" : bike ? "8 6" : undefined,
               lineCap: "round",
             }}
           />

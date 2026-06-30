@@ -63,7 +63,8 @@ function summarise(kind: Mode, it: Itinerary): string {
   }
   if (kind === "transit") return transitSummary(it);
   // bike_and_ride: short bike leg + the transit lines
-  return `Bike ${bikeMinutes(it)} min -> ${transitSummary(it)}`;
+  const bm = bikeMinutes(it);
+  return bm > 0 ? `Bike ${bm} min -> ${transitSummary(it)}` : transitSummary(it);
 }
 
 function toOptionView(option: Option): OptionView {
