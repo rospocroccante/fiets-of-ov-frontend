@@ -3,7 +3,8 @@ import { ItineraryDetails } from "./ItineraryDetails";
 import { mockPlanFor } from "../api/mock";
 
 test("renders transit legs step by step with line badges", () => {
-  const itinerary = mockPlanFor("A", "Bijlmer rain").transit!;
+  const plan = mockPlanFor("A", "Bijlmer rain");
+  const itinerary = plan.options.find((o) => o.kind === "transit")!.itinerary;
   render(<ItineraryDetails itinerary={itinerary} />);
   expect(screen.getByText(/Step by step/)).toBeInTheDocument();
   expect(screen.getByText("Metro 52")).toBeInTheDocument();
@@ -12,7 +13,8 @@ test("renders transit legs step by step with line badges", () => {
 });
 
 test("renders a bike itinerary", () => {
-  const itinerary = mockPlanFor("A", "Vondelpark").bike;
+  const plan = mockPlanFor("A", "Vondelpark");
+  const itinerary = plan.options.find((o) => o.kind === "bike")!.itinerary;
   render(<ItineraryDetails itinerary={itinerary} />);
   expect(screen.getByText("Bike")).toBeInTheDocument();
 });
