@@ -1,0 +1,94 @@
+import type { Advice, Stop, Place } from "./types";
+
+// Deterministic fixtures keyed by case-insensitive substrings in the destination,
+// covering the four advice shapes the UI must handle.
+export function mockAdviceFor(_from: string, to: string): Advice {
+  const t = to.toLowerCase();
+  if (t.includes("rain") || t.includes("regen")) {
+    return {
+      recommendation: "transit",
+      reason: "rain around 15:10 (~1.2 mm/h) -> take tram 13 (28 min)",
+      bike_minutes: 22,
+      transit_minutes: 28,
+      max_rain_mm_per_h: 1.2,
+      rain_expected: true,
+    };
+  }
+  if (t.includes("remote") || t.includes("polder")) {
+    return {
+      recommendation: "bike",
+      reason:
+        "rain expected around 15:10 but no transit found -> bike (24 min), bring a raincoat",
+      bike_minutes: 24,
+      transit_minutes: null,
+      max_rain_mm_per_h: 0.8,
+      rain_expected: true,
+    };
+  }
+  if (t.includes("unknown") || t.includes("fog")) {
+    return {
+      recommendation: "bike",
+      reason: "rain forecast unavailable -> bike (19 min)",
+      bike_minutes: 19,
+      transit_minutes: 26,
+      max_rain_mm_per_h: null,
+      rain_expected: null,
+    };
+  }
+  return {
+    recommendation: "bike",
+    reason: "dry during your 24-min ride (rain only from 15:40) -> bike",
+    bike_minutes: 24,
+    transit_minutes: 30,
+    max_rain_mm_per_h: 0.0,
+    rain_expected: false,
+  };
+}
+
+// A representative set of well-known Amsterdam places for offline autocomplete.
+export const MOCK_PLACES: Place[] = [
+  { id: "centraal", name: "Amsterdam Centraal", label: "Amsterdam Centraal, Stationsplein", lat: 52.3791, lon: 4.9003 },
+  { id: "dam", name: "Dam", label: "Dam, Centrum", lat: 52.3731, lon: 4.8926 },
+  { id: "vondelpark", name: "Vondelpark", label: "Vondelpark, Zuid", lat: 52.358, lon: 4.8686 },
+  { id: "rijksmuseum", name: "Rijksmuseum", label: "Rijksmuseum, Museumstraat", lat: 52.36, lon: 4.8852 },
+  { id: "vangogh", name: "Van Gogh Museum", label: "Van Gogh Museum, Museumplein", lat: 52.3584, lon: 4.8811 },
+  { id: "leidseplein", name: "Leidseplein", label: "Leidseplein, Centrum", lat: 52.3641, lon: 4.8818 },
+  { id: "rembrandtplein", name: "Rembrandtplein", label: "Rembrandtplein, Centrum", lat: 52.3663, lon: 4.8957 },
+  { id: "jordaan", name: "Jordaan", label: "Jordaan, West", lat: 52.3738, lon: 4.8807 },
+  { id: "depijp", name: "De Pijp", label: "De Pijp, Zuid", lat: 52.3547, lon: 4.8925 },
+  { id: "bijlmer", name: "Bijlmer ArenA", label: "Bijlmer ArenA, Zuidoost", lat: 52.3119, lon: 4.9476 },
+  { id: "zuid", name: "Amsterdam Zuid", label: "Amsterdam Zuid station, Zuid", lat: 52.3389, lon: 4.8727 },
+  { id: "sloterdijk", name: "Amsterdam Sloterdijk", label: "Amsterdam Sloterdijk station, West", lat: 52.3887, lon: 4.8378 },
+  { id: "oost", name: "Amsterdam Oost", label: "Amsterdam Oost, Oost", lat: 52.3585, lon: 4.9295 },
+  { id: "westerpark", name: "Westerpark", label: "Westerpark, West", lat: 52.387, lon: 4.8758 },
+  { id: "oosterpark", name: "Oosterpark", label: "Oosterpark, Oost", lat: 52.3582, lon: 4.921 },
+  { id: "museumplein", name: "Museumplein", label: "Museumplein, Zuid", lat: 52.3579, lon: 4.8807 },
+  { id: "annefrank", name: "Anne Frank House", label: "Anne Frank House, Prinsengracht", lat: 52.3752, lon: 4.8839 },
+  { id: "ndsm", name: "NDSM Wharf", label: "NDSM Wharf, Noord", lat: 52.4014, lon: 4.8918 },
+  { id: "amstel", name: "Amstel Station", label: "Amstel Station, Oost", lat: 52.3469, lon: 4.9176 },
+  { id: "nieuwmarkt", name: "Nieuwmarkt", label: "Nieuwmarkt, Centrum", lat: 52.3725, lon: 4.9006 },
+];
+
+export function mockSearchPlaces(query: string): Place[] {
+  const s = query.trim().toLowerCase();
+  if (!s) return [];
+  return MOCK_PLACES.filter((p) => p.label.toLowerCase().includes(s)).slice(0, 6);
+}
+
+export function mockStops(lat: number, lon: number): Stop[] {
+  const base = [
+    { name: "Dam", dlat: 0.001, dlon: 0.0015, code: "GVB-001" },
+    { name: "Spui", dlat: -0.002, dlon: 0.001, code: "GVB-002" },
+    { name: "Leidseplein", dlat: 0.0015, dlon: -0.002, code: "GVB-003" },
+    { name: "Waterlooplein", dlat: -0.001, dlon: -0.0015, code: "GVB-004" },
+  ];
+  return base.map((b, i) => ({
+    stop_id: `mock-${i}`,
+    code: b.code,
+    name: b.name,
+    lat: lat + b.dlat,
+    lon: lon + b.dlon,
+    location_type: 0,
+    distance_m: Math.round((Math.abs(b.dlat) + Math.abs(b.dlon)) * 111000),
+  }));
+}
