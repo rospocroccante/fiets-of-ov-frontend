@@ -1,14 +1,15 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   CircleMarker,
   MapContainer,
+  Marker,
   Polyline,
   Popup,
   TileLayer,
-  Tooltip,
   useMap,
   useMapEvents,
 } from "react-leaflet";
+import L from "leaflet";
 import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
 import type { Itinerary, PlanLeg, Stop } from "../api/types";
 import { decodePolyline } from "../lib/polyline";
@@ -41,24 +42,67 @@ function FitRoute({ coords, fallback }: { coords: [number, number][]; fallback: 
   return null;
 }
 
-function MapClicker({ onPick }: { onPick: (c: LatLon) => void }) {
+function toLatLon(ll: { lat: number; lng: number }): LatLon {
+  return { lat: ll.lat, lon: ll.lng };
+}
+
+type MenuState = { lat: number; lon: number; x: number; y: number };
+
+function MapEvents({
+  onPick,
+  onContextMenu,
+}: {
+  onPick?: (c: LatLon) => void;
+  onContextMenu: (m: MenuState) => void;
+}) {
   useMapEvents({
-    click: (e) => onPick({ lat: e.latlng.lat, lon: e.latlng.lng }),
+    click: (e) => {
+      onPick?.({ lat: e.latlng.lat, lon: e.latlng.lng });
+      onContextMenu({ lat: 0, lon: 0, x: -1, y: -1 });
+    },
+    contextmenu: (e) =>
+      onContextMenu({
+        lat: e.latlng.lat,
+        lon: e.latlng.lng,
+        x: e.containerPoint.x,
+        y: e.containerPoint.y,
+      }),
   });
   return null;
 }
 
-function Pin({ at, label, color }: { at: LatLon; label: string; color: string }) {
+function pinIcon(label: string, color: string) {
+  return L.divIcon({
+    className: "fov-pin",
+    html: `<span style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:9999px;background:${color};border:3px solid #ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.3);color:#ffffff;font-size:12px;font-weight:700;line-height:1;">${label}</span>`,
+    iconSize: [22, 22],
+  });
+}
+
+function Pin({
+  at,
+  label,
+  color,
+  which,
+  onMovePoint,
+}: {
+  at: LatLon;
+  label: string;
+  color: string;
+  which: "start" | "end";
+  onMovePoint?: (which: "start" | "end", c: LatLon) => void;
+}) {
   return (
-    <CircleMarker
-      center={[at.lat, at.lon]}
-      radius={11}
-      pathOptions={{ color: "#ffffff", weight: 3, fillColor: color, fillOpacity: 1 }}
-    >
-      <Tooltip permanent direction="center" className="!m-0 !border-0 !bg-transparent !p-0 !shadow-none">
-        <span className="text-xs font-bold text-white">{label}</span>
-      </Tooltip>
-    </CircleMarker>
+    <Marker
+      position={[at.lat, at.lon]}
+      icon={pinIcon(label, color)}
+      title={which}
+      draggable={!!onMovePoint}
+      eventHandlers={{
+        dragend: (e: { target: { getLatLng: () => { lat: number; lng: number } } }) =>
+          onMovePoint?.(which, toLatLon(e.target.getLatLng())),
+      }}
+    />
   );
 }
 
@@ -69,6 +113,8 @@ export function MapView({
   route,
   onPick,
   picking,
+  onMovePoint,
+  onContextPick,
 }: {
   origin: LatLon | null;
   destination: LatLon | null;
@@ -76,23 +122,32 @@ export function MapView({
   route: Itinerary | null;
   onPick?: (c: LatLon) => void;
   picking?: boolean;
+  onMovePoint?: (which: "start" | "end", c: LatLon) => void;
+  onContextPick?: (which: "start" | "end", c: LatLon) => void;
 }) {
   const legs = route?.legs ?? [];
   const allCoords = legs.flatMap(legCoords);
+  const [menu, setMenu] = useState<MenuState | null>(null);
+
+  const handleMenu = (m: MenuState) => {
+    if (m.x < 0) setMenu(null);
+    else setMenu(m);
+  };
 
   return (
-    <MapContainer
-      center={AMS}
-      zoom={13}
-      className={`h-full w-full rounded-card ${picking ? "cursor-crosshair" : ""}`}
-      scrollWheelZoom
-    >
-      <TileLayer
-        attribution="&copy; OpenStreetMap, &copy; CARTO"
-        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-      />
-      {onPick && <MapClicker onPick={onPick} />}
-      <FitRoute coords={allCoords} fallback={origin ?? destination} />
+    <div className="relative h-full w-full">
+      <MapContainer
+        center={AMS}
+        zoom={13}
+        className={`h-full w-full rounded-card ${picking ? "cursor-crosshair" : ""}`}
+        scrollWheelZoom
+      >
+        <TileLayer
+          attribution="&copy; OpenStreetMap, &copy; CARTO"
+          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+        />
+        <MapEvents onPick={onPick} onContextMenu={handleMenu} />
+        <FitRoute coords={allCoords} fallback={origin ?? destination} />
 
       {/* White casing under the route for contrast on the light basemap. */}
       {legs.map((leg, i) => {
@@ -127,8 +182,12 @@ export function MapView({
         );
       })}
 
-      {origin && <Pin at={origin} label="A" color={BRAND} />}
-      {destination && <Pin at={destination} label="B" color="#0B2147" />}
+      {origin && (
+        <Pin at={origin} label="A" color={BRAND} which="start" onMovePoint={onMovePoint} />
+      )}
+      {destination && (
+        <Pin at={destination} label="B" color="#0B2147" which="end" onMovePoint={onMovePoint} />
+      )}
 
       {stops.map((s) => (
         <CircleMarker
@@ -140,6 +199,35 @@ export function MapView({
           <Popup>{s.name}</Popup>
         </CircleMarker>
       ))}
-    </MapContainer>
+      </MapContainer>
+
+      {menu && (
+        <div
+          className="absolute z-[1000] overflow-hidden rounded-lg border border-slate-200 bg-white text-sm shadow-lg"
+          style={{ left: menu.x, top: menu.y }}
+        >
+          <button
+            type="button"
+            className="block w-full px-4 py-2 text-left hover:bg-slate-100"
+            onClick={() => {
+              onContextPick?.("start", { lat: menu.lat, lon: menu.lon });
+              setMenu(null);
+            }}
+          >
+            Directions from here
+          </button>
+          <button
+            type="button"
+            className="block w-full px-4 py-2 text-left hover:bg-slate-100"
+            onClick={() => {
+              onContextPick?.("end", { lat: menu.lat, lon: menu.lon });
+              setMenu(null);
+            }}
+          >
+            Directions to here
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

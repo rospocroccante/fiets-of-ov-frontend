@@ -1,6 +1,10 @@
-import { render } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { MapView } from "./MapView";
-import { __fireMapClick } from "../__mocks__/react-leaflet";
+import {
+  __fireMapClick,
+  __fireMapContextMenu,
+  __fireMarkerDragEnd,
+} from "../__mocks__/react-leaflet";
 import type { Itinerary } from "../api/types";
 
 const route: Itinerary = {
@@ -58,4 +62,71 @@ test("without onPick, firing a map click is a no-op (no handler registered)", ()
   render(<MapView origin={null} destination={null} stops={[]} route={null} />);
   // Should not throw; no handler registered by MapView this render.
   expect(() => __fireMapClick(52.36, 4.89)).not.toThrow();
+});
+
+test("dragging the start pin calls onMovePoint with start + lat/lon", () => {
+  const moves: Array<[string, { lat: number; lon: number }]> = [];
+  render(
+    <MapView
+      origin={{ lat: 52.379, lon: 4.9 }}
+      destination={{ lat: 52.358, lon: 4.868 }}
+      stops={[]}
+      route={null}
+      onMovePoint={(which, c) => moves.push([which, c])}
+    />
+  );
+  __fireMarkerDragEnd("start", 52.36, 4.9);
+  expect(moves).toEqual([["start", { lat: 52.36, lon: 4.9 }]]);
+});
+
+test("dragging the end pin calls onMovePoint with end + lat/lon", () => {
+  const moves: Array<[string, { lat: number; lon: number }]> = [];
+  render(
+    <MapView
+      origin={{ lat: 52.379, lon: 4.9 }}
+      destination={{ lat: 52.358, lon: 4.868 }}
+      stops={[]}
+      route={null}
+      onMovePoint={(which, c) => moves.push([which, c])}
+    />
+  );
+  __fireMarkerDragEnd("end", 52.36, 4.9);
+  expect(moves).toEqual([["end", { lat: 52.36, lon: 4.9 }]]);
+});
+
+test("right-click opens a menu; 'from here' fires onContextPick('start') and closes", () => {
+  const picks: Array<[string, { lat: number; lon: number }]> = [];
+  render(
+    <MapView
+      origin={null}
+      destination={null}
+      stops={[]}
+      route={null}
+      onContextPick={(which, c) => picks.push([which, c])}
+    />
+  );
+  act(() => __fireMapContextMenu(52.36, 4.9, 10, 20));
+  const fromHere = screen.getByRole("button", { name: /directions from here/i });
+  fireEvent.click(fromHere);
+  expect(picks).toEqual([["start", { lat: 52.36, lon: 4.9 }]]);
+  // Menu closes after a choice.
+  expect(screen.queryByRole("button", { name: /directions from here/i })).toBeNull();
+});
+
+test("right-click menu 'to here' fires onContextPick('end') and closes", () => {
+  const picks: Array<[string, { lat: number; lon: number }]> = [];
+  render(
+    <MapView
+      origin={null}
+      destination={null}
+      stops={[]}
+      route={null}
+      onContextPick={(which, c) => picks.push([which, c])}
+    />
+  );
+  act(() => __fireMapContextMenu(52.36, 4.9, 10, 20));
+  const toHere = screen.getByRole("button", { name: /directions to here/i });
+  fireEvent.click(toHere);
+  expect(picks).toEqual([["end", { lat: 52.36, lon: 4.9 }]]);
+  expect(screen.queryByRole("button", { name: /directions to here/i })).toBeNull();
 });
