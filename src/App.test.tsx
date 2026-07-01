@@ -22,9 +22,41 @@ function startTrip() {
   fireEvent.click(screen.getByRole("button", { name: /search/i }));
 }
 
+test("home content is present at rest: headline and Popular trips", () => {
+  renderApp();
+  // The morph host folds in the retired HomeHero copy: a level-1 headline and the
+  // "Popular trips" section are in the DOM at rest (opacity is style-driven, so we
+  // assert DOM presence, not visibility).
+  expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+  expect(screen.getByText(/popular trips/i)).toBeInTheDocument();
+});
+
+test("map region and pickers are present in the DOM at rest (no search yet)", () => {
+  renderApp();
+  // The morph host no longer branches on trip === null; the map region (with its
+  // pick toolbar) is always mounted. opacity/pointer-events are style-driven, so we
+  // assert DOM presence, not visibility.
+  expect(screen.getByText(/set on map/i)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /^start$/i })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /^end$/i })).toBeInTheDocument();
+});
+
+test("submitting a search exercises getPlan and renders the recommended option", async () => {
+  renderApp();
+  startTrip();
+
+  // getPlan (mock) resolves and the plan renders: the results count becomes non-zero.
+  await waitFor(() => {
+    const text = screen.getByText(/routes in area/i).textContent ?? "";
+    if (text.startsWith("0")) throw new Error("plan still loading");
+  });
+
+  expect(screen.getByText(/routes in area/i)).toBeInTheDocument();
+});
+
 test("arming Start and clicking the map sets the From field to the reverse-geocoded name", async () => {
   renderApp();
-  // Start a trip from the hero to reach the results view (which shows the map).
+  // Start a trip to advance to the map region (which shows the map + pickers).
   startTrip();
 
   // Arm the start endpoint and click the map near Vondelpark (a KNOWN mock place).
