@@ -70,6 +70,28 @@ export default function App() {
     setArmed(null);
     setSelectedMode(null);
   }
+  async function setEndpointFromCoords(
+    which: "start" | "end",
+    c: { lat: number; lon: number }
+  ) {
+    const query = `${c.lat.toFixed(6)},${c.lon.toFixed(6)}`;
+    const label = await reverseGeocode(c.lat, c.lon);
+    if (which === "start") {
+      setFromText(label);
+      setOrigin({ label, query });
+    } else {
+      setToText(label);
+      setDestination({ label, query });
+    }
+    setSelectedMode(null);
+  }
+  function onMovePoint(which: "start" | "end", c: { lat: number; lon: number }) {
+    void setEndpointFromCoords(which, c);
+  }
+  function onContextPick(which: "start" | "end", c: { lat: number; lon: number }) {
+    setArmed(null);
+    void setEndpointFromCoords(which, c);
+  }
 
   if (trip === null) {
     return <HomeHero onSearch={startTrip} />;
@@ -151,6 +173,8 @@ export default function App() {
               route={route}
               onPick={handlePick}
               picking={armed !== null}
+              onMovePoint={onMovePoint}
+              onContextPick={onContextPick}
             />
           </section>
         )}
