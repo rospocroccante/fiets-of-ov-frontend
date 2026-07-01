@@ -81,20 +81,6 @@ export default function App() {
   function armPick(which: "start" | "end") {
     setArmed((a) => (a === which ? null : which));
   }
-  async function handlePick(c: { lat: number; lon: number }) {
-    if (!armed) return;
-    const query = `${c.lat.toFixed(6)},${c.lon.toFixed(6)}`;
-    const label = await reverseGeocode(c.lat, c.lon);
-    if (armed === "start") {
-      setFromText(label);
-      setOrigin({ label, query });
-    } else {
-      setToText(label);
-      setDestination({ label, query });
-    }
-    setArmed(null);
-    setSelectedMode(null);
-  }
   async function setEndpointFromCoords(
     which: "start" | "end",
     c: { lat: number; lon: number }
@@ -109,6 +95,11 @@ export default function App() {
       setDestination({ label, query });
     }
     setSelectedMode(null);
+  }
+  async function handlePick(c: { lat: number; lon: number }) {
+    if (!armed) return;
+    await setEndpointFromCoords(armed, c);
+    setArmed(null);
   }
   function onMovePoint(which: "start" | "end", c: { lat: number; lon: number }) {
     void setEndpointFromCoords(which, c);
@@ -165,54 +156,106 @@ export default function App() {
   const count = planView ? planView.options.length : 0;
 
   // Morph transforms (progress 0 = home, 1 = map). jsdom has no layout, so these
-  // only affect visuals at runtime; they are inert in unit tests.
-  const chromeOpacity = useTransform(progress, [0, 1], [0, 1]);
-  const headlineOpacity = useTransform(progress, [0, 0.5], [1, 0]);
-  const headlineY = useTransform(progress, [0, 1], [0, -40]);
-  const popularOpacity = useTransform(progress, [0, 0.3], [1, 0]);
-  const mapOpacity = useTransform(progress, [0.4, 1], [0, 1]);
-  // Search container drifts from a centered pill toward the top bar as it morphs.
-  const searchY = useTransform(progress, [0, 1], [0, -120]);
-  const searchScale = useTransform(progress, [0, 1], [1, 0.85]);
+  // only affect visuals at runtime; they are inert in unit tests. The search pill is a
+  // single shared element that flies from a centered hero pill to the map's top bar.
+  const homeOpacity = useTransform(progress, [0, 0.5], [1, 0]);
+  const homeY = useTransform(progress, [0, 1], [0, -30]);
+  const chromeOpacity = useTransform(progress, [0.5, 1], [0, 1]);
+  const mapOpacity = useTransform(progress, [0.35, 1], [0, 1]);
+  const searchY = useTransform(progress, [0, 1], [260, 14]);
 
   return (
     <div
       ref={containerRef}
-      className={reduced ? "flex h-full flex-col" : "h-[200vh]"}
+      className={reduced ? "h-screen" : "h-[200vh]"}
       data-reduced={reduced ? "true" : "false"}
     >
-      <div className="sticky top-0 flex h-screen flex-col overflow-hidden bg-gradient-to-b from-brand-light to-white">
-        <motion.header
-          className="flex items-center justify-between px-8 py-5"
-          style={{ opacity: chromeOpacity }}
+      <div className="sticky top-0 h-screen overflow-hidden bg-gradient-to-b from-brand-light to-white">
+        {/* Map stage (progress -> 1): fills the screen below the top bar. */}
+        <motion.div
+          className="absolute inset-0 z-0 flex flex-col bg-white pt-20"
+          style={{ opacity: mapOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
         >
-          <button onClick={goHome} className="text-2xl font-bold text-brand">
+          <div className="px-6">
+            <FilterBar count={count} hideMap={hideMap} onToggleMap={() => setHideMap((v) => !v)} />
+          </div>
+          <main className="flex min-h-0 flex-1 gap-4 px-6 pb-6">
+            <section className={hideMap ? "w-full overflow-y-auto" : "w-1/2 overflow-y-auto"}>
+              <ResultsPanel state={panel} />
+            </section>
+            {!hideMap && (
+              <section className="relative w-1/2">
+                <MapPickToolbar armed={armed} onArm={armPick} />
+                <MapView
+                  origin={view.origin}
+                  destination={view.destination}
+                  stops={view.stops}
+                  route={route}
+                  onPick={handlePick}
+                  picking={armed !== null}
+                  onMovePoint={onMovePoint}
+                  onContextPick={onContextPick}
+                  interactive={progressIs1}
+                />
+              </section>
+            )}
+          </main>
+        </motion.div>
+
+        {/* Home stage (progress -> 0): headline + popular, with a gap for the floating pill. */}
+        <motion.div
+          className="absolute inset-0 z-10"
+          style={{ opacity: homeOpacity, y: homeY, pointerEvents: progressIs1 ? "none" : "auto" }}
+        >
+          <section className="mx-auto max-w-4xl px-6 pt-20 text-center">
+            <h1 className="text-5xl font-bold leading-tight text-gray-900">
+              Bike or transit?
+              <br />
+              Let the weather decide.
+            </h1>
+            <p className="mx-auto mt-5 max-w-2xl text-lg text-gray-600">
+              Plan any trip across Amsterdam and get a rain-aware answer in one tap.
+            </p>
+          </section>
+          <section className="mx-auto mt-[7.5rem] w-full max-w-4xl px-6 text-left">
+            <h2 className="mb-4 text-xl font-semibold">Popular trips</h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {POPULAR.map((t) => (
+                <button
+                  key={`${t.from}-${t.to}`}
+                  onClick={() => pickPopular(t)}
+                  aria-label={`${t.from} → ${t.to}`}
+                  className="rounded-card border border-gray-100 bg-white p-4 text-left shadow-sm transition hover:shadow-md"
+                >
+                  <div className="flex h-20 items-center justify-center rounded-card bg-brand-light text-sm font-semibold text-brand">
+                    {t.from} {"→"} {t.to}
+                  </div>
+                  <p className="mt-3 text-sm font-medium text-gray-700">
+                    {t.from} {"→"} {t.to}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </section>
+        </motion.div>
+
+        {/* Top bar chrome (progress -> 1): wordmark (Home) + Menu, behind the search pill. */}
+        <motion.header
+          className="absolute inset-x-0 top-0 z-20 flex h-16 items-center justify-between border-b border-gray-100 bg-white/95 px-6"
+          style={{ opacity: chromeOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
+        >
+          <button onClick={goHome} className="text-xl font-bold text-brand">
             Fiets of OV
           </button>
-          <nav className="flex items-center gap-3 text-sm">
-            <button className="rounded-full border border-gray-200 px-5 py-2 font-medium">
-              Menu &#9776;
-            </button>
-          </nav>
+          <button className="rounded-full border border-gray-200 px-4 py-1.5 text-sm font-medium">
+            Menu &#9776;
+          </button>
         </motion.header>
 
-        <motion.section
-          className="mx-auto max-w-4xl px-6 pt-8 text-center"
-          style={{ opacity: headlineOpacity, y: headlineY }}
-        >
-          <h1 className="text-5xl font-bold leading-tight text-gray-900">
-            Bike or transit?
-            <br />
-            Let the weather decide.
-          </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg text-gray-600">
-            Plan any trip across Amsterdam and get a rain-aware answer in one tap.
-          </p>
-        </motion.section>
-
+        {/* Shared morphing search pill: usable in both stages, flies center -> top bar. */}
         <motion.div
-          className="mx-auto flex w-full max-w-3xl items-center gap-2 rounded-full border border-gray-200 bg-white p-2 shadow-md"
-          style={{ y: searchY, scale: searchScale }}
+          className="absolute inset-x-0 top-0 z-30 mx-auto flex w-full max-w-3xl items-center gap-2 rounded-full border border-gray-200 bg-white p-2 shadow-md"
+          style={{ y: searchY }}
         >
           <div className="flex flex-1 items-center px-3">
             <EndpointField
@@ -249,60 +292,6 @@ export default function App() {
           >
             Search
           </button>
-        </motion.div>
-
-        <motion.section
-          className="mx-auto mt-8 w-full max-w-4xl px-6 text-left"
-          style={{ opacity: popularOpacity, pointerEvents: progressIs1 ? "none" : "auto" }}
-        >
-          <h2 className="mb-4 text-xl font-semibold">Popular trips</h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {POPULAR.map((t) => (
-              <button
-                key={`${t.from}-${t.to}`}
-                onClick={() => pickPopular(t)}
-                aria-label={`${t.from} → ${t.to}`}
-                className="rounded-card border border-gray-100 bg-white p-4 text-left shadow-sm transition hover:shadow-md"
-              >
-                <div className="flex h-20 items-center justify-center rounded-card bg-brand-light text-sm font-semibold text-brand">
-                  {t.from} {"→"} {t.to}
-                </div>
-                <p className="mt-3 text-sm font-medium text-gray-700">
-                  {t.from} {"→"} {t.to}
-                </p>
-              </button>
-            ))}
-          </div>
-        </motion.section>
-
-        <motion.div
-          className="absolute inset-0 flex flex-col bg-white pt-24"
-          style={{ opacity: mapOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
-        >
-          <div className="px-6">
-            <FilterBar count={count} hideMap={hideMap} onToggleMap={() => setHideMap((v) => !v)} />
-          </div>
-          <main className="flex min-h-0 flex-1 gap-4 px-6 pb-6">
-            <section className={hideMap ? "w-full overflow-y-auto" : "w-1/2 overflow-y-auto"}>
-              <ResultsPanel state={panel} />
-            </section>
-            {!hideMap && (
-              <section className="relative w-1/2">
-                <MapPickToolbar armed={armed} onArm={armPick} />
-                <MapView
-                  origin={view.origin}
-                  destination={view.destination}
-                  stops={view.stops}
-                  route={route}
-                  onPick={handlePick}
-                  picking={armed !== null}
-                  onMovePoint={onMovePoint}
-                  onContextPick={onContextPick}
-                  interactive={progressIs1}
-                />
-              </section>
-            )}
-          </main>
         </motion.div>
       </div>
 

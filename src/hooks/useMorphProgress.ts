@@ -1,9 +1,5 @@
-import { useRef } from "react";
-import {
-  useScroll,
-  useMotionValue,
-  type MotionValue,
-} from "framer-motion";
+import { useEffect, useRef } from "react";
+import { useMotionValue, type MotionValue } from "framer-motion";
 
 export interface MorphControls {
   progress: MotionValue<number>;
@@ -13,6 +9,8 @@ export interface MorphControls {
   reduced: boolean;
 }
 
+// The host renders an h-[200vh] scroll container, so exactly one viewport of scroll
+// distance drives the morph. Progress = clamp(scrollY / oneViewport, 0, 1).
 export function useMorphProgress(): MorphControls {
   const reduced =
     typeof window !== "undefined" && typeof window.matchMedia === "function"
@@ -21,40 +19,41 @@ export function useMorphProgress(): MorphControls {
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Under reduced motion we skip scroll scrubbing and use a plain motion value.
-  // We must call hooks unconditionally, so we call both and choose below.
-  //
-  // NOTE: we do NOT pass containerRef as the `container` option to useScroll.
-  // framer-motion defers scroll tracking to a microtask and throws an invariant
-  // if the ref is defined but its `.current` is null (unattached) at that point —
-  // which is always the case in jsdom tests. Instead we track window scroll
-  // (no container option), which works in both jsdom and a real browser, and
-  // still produces a 0..1 scrollYProgress over the full document height.
-  // The containerRef is still attached to the scroll container div by the host so
-  // toMap() can read offsetHeight for the scroll target.
-  const reducedProgress = useMotionValue(0);
-  const { scrollYProgress } = useScroll({
-    offset: ["start start", "end start"],
-  });
+  // A plain motion value we drive ourselves from the window scroll position. This is
+  // deterministic and monotonic — unlike framer's scrollYProgress, it does not drift when
+  // the map stage mounts and changes document scrollHeight mid-morph. Safe in jsdom (the
+  // effect is a no-op without a real window scroll).
+  const progress = useMotionValue(0);
 
-  const progress = reduced ? reducedProgress : scrollYProgress;
+  useEffect(() => {
+    if (reduced || typeof window === "undefined") return;
+    const update = () => {
+      const dist = window.innerHeight || 1;
+      const p = Math.min(1, Math.max(0, window.scrollY / dist));
+      progress.set(p);
+    };
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [reduced, progress]);
 
   const toMap = () => {
     if (reduced) {
-      reducedProgress.set(1);
+      progress.set(1);
       return;
     }
     if (typeof window !== "undefined" && typeof window.scrollTo === "function") {
-      window.scrollTo({
-        top: containerRef.current?.offsetHeight ?? 0,
-        behavior: "smooth",
-      });
+      window.scrollTo({ top: window.innerHeight, behavior: "smooth" });
     }
   };
 
   const toHome = () => {
     if (reduced) {
-      reducedProgress.set(0);
+      progress.set(0);
       return;
     }
     if (typeof window !== "undefined" && typeof window.scrollTo === "function") {
