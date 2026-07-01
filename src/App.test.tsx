@@ -64,6 +64,17 @@ test("right-click 'Directions from here' sets the From field", async () => {
   expect(fromField).toBeInTheDocument();
 });
 
+test("right-click 'Directions to here' sets the To field", async () => {
+  renderApp();
+  startTrip();
+
+  __fireMapContextMenu(52.358, 4.8686);
+  fireEvent.click(await screen.findByRole("button", { name: /directions to here/i }));
+
+  const toField = await screen.findByDisplayValue(/vondelpark/i);
+  expect(toField).toBeInTheDocument();
+});
+
 test("swap exchanges the From and To fields", () => {
   renderApp();
   startTrip();
