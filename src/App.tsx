@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { SearchBar, type Trip } from "./components/SearchBar";
+import { SearchBar } from "./components/SearchBar";
 import { FilterBar } from "./components/FilterBar";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
 import { MapView } from "./components/MapView";
@@ -9,11 +9,8 @@ import { useTripPlan } from "./hooks/useTripPlan";
 import { isLive } from "./api/client";
 import { reverseGeocode } from "./geocode";
 import type { Mode } from "./api/types";
+import type { Endpoint, Trip } from "./trip";
 
-interface Endpoint {
-  label: string; // shown in the From/To field
-  query: string; // sent to the planner: a name, or "lat,lon" for a map click
-}
 type Armed = "start" | "end" | null;
 
 export default function App() {

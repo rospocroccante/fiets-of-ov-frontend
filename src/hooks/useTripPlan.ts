@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getPlan, getStops } from "../api/client";
 import { buildPlanView, type PlanView } from "../lib/planView";
 import type { PlaceRef, Stop } from "../api/types";
-import type { Trip } from "../components/SearchBar";
+import type { Trip } from "../trip";
 
 type LatLon = { lat: number; lon: number };
 

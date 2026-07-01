@@ -1,7 +1,4 @@
-export interface Trip {
-  from: string;
-  to: string;
-}
+export type { Trip } from "../trip";
 
 export function SearchBar({
   fromValue,
