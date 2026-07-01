@@ -1,17 +1,31 @@
 export type { Trip } from "../trip";
 
+import { EndpointField } from "./EndpointField";
+import type { Place } from "../api/types";
+import type { Endpoint } from "../trip";
+
 export function SearchBar({
   fromValue,
   toValue,
-  onFromChange,
-  onToChange,
+  onFromText,
+  onToText,
+  onFromSelect,
+  onToSelect,
+  onFromLocate,
+  onToLocate,
+  onSwap,
   onSubmit,
   onHome,
 }: {
   fromValue: string;
   toValue: string;
-  onFromChange: (text: string) => void;
-  onToChange: (text: string) => void;
+  onFromText: (t: string) => void;
+  onToText: (t: string) => void;
+  onFromSelect: (p: Place) => void;
+  onToSelect: (p: Place) => void;
+  onFromLocate: (ep: Endpoint) => void;
+  onToLocate: (ep: Endpoint) => void;
+  onSwap: () => void;
   onSubmit: () => void;
   onHome?: () => void;
 }) {
@@ -23,20 +37,29 @@ export function SearchBar({
 
       <div className="flex flex-1 items-center justify-center">
         <div className="flex items-center rounded-full border border-gray-200 bg-white shadow-sm">
-          <input
-            className="w-40 rounded-l-full px-5 py-3 text-sm outline-none"
-            placeholder="From"
+          <EndpointField
             value={fromValue}
-            onChange={(e) => onFromChange(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && onSubmit()}
+            placeholder="From"
+            onText={onFromText}
+            onSelect={onFromSelect}
+            onLocate={onFromLocate}
+            className="rounded-l-full px-3"
           />
-          <span className="h-6 w-px bg-gray-200" />
-          <input
-            className="w-40 px-5 py-3 text-sm outline-none"
-            placeholder="To"
+          <button
+            type="button"
+            aria-label="Swap start and end"
+            onClick={onSwap}
+            className="flex-shrink-0 px-2 text-gray-400 hover:text-brand"
+          >
+            &#8646;
+          </button>
+          <EndpointField
             value={toValue}
-            onChange={(e) => onToChange(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && onSubmit()}
+            placeholder="To"
+            onText={onToText}
+            onSelect={onToSelect}
+            onLocate={onToLocate}
+            className="px-3"
           />
           <span className="h-6 w-px bg-gray-200" />
           <span className="px-5 py-3 text-sm text-gray-500">Now</span>

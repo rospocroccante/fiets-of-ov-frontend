@@ -8,7 +8,7 @@ import { HomeHero } from "./components/HomeHero";
 import { useTripPlan } from "./hooks/useTripPlan";
 import { isLive } from "./api/client";
 import { reverseGeocode } from "./geocode";
-import type { Mode } from "./api/types";
+import type { Mode, Place } from "./api/types";
 import type { Endpoint, Trip } from "./trip";
 
 type Armed = "start" | "end" | null;
@@ -97,8 +97,37 @@ export default function App() {
         <SearchBar
           fromValue={fromText}
           toValue={toText}
-          onFromChange={setFromText}
-          onToChange={setToText}
+          onFromText={setFromText}
+          onToText={setToText}
+          onFromSelect={(p: Place) => {
+            const q = `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`;
+            setFromText(p.name);
+            setOrigin({ label: p.name, query: q });
+            setSelectedMode(null);
+          }}
+          onToSelect={(p: Place) => {
+            const q = `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`;
+            setToText(p.name);
+            setDestination({ label: p.name, query: q });
+            setSelectedMode(null);
+          }}
+          onFromLocate={(ep: Endpoint) => {
+            setFromText(ep.label);
+            setOrigin(ep);
+            setSelectedMode(null);
+          }}
+          onToLocate={(ep: Endpoint) => {
+            setToText(ep.label);
+            setDestination(ep);
+            setSelectedMode(null);
+          }}
+          onSwap={() => {
+            setFromText(toText);
+            setToText(fromText);
+            setOrigin(destination);
+            setDestination(origin);
+            setSelectedMode(null);
+          }}
           onSubmit={commitSearch}
           onHome={goHome}
         />
