@@ -7,6 +7,7 @@ import {
   TileLayer,
   Tooltip,
   useMap,
+  useMapEvents,
 } from "react-leaflet";
 import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
 import type { Itinerary, PlanLeg, Stop } from "../api/types";
@@ -40,6 +41,13 @@ function FitRoute({ coords, fallback }: { coords: [number, number][]; fallback: 
   return null;
 }
 
+function MapClicker({ onPick }: { onPick: (c: LatLon) => void }) {
+  useMapEvents({
+    click: (e) => onPick({ lat: e.latlng.lat, lon: e.latlng.lng }),
+  });
+  return null;
+}
+
 function Pin({ at, label, color }: { at: LatLon; label: string; color: string }) {
   return (
     <CircleMarker
@@ -59,21 +67,31 @@ export function MapView({
   destination,
   stops,
   route,
+  onPick,
+  picking,
 }: {
   origin: LatLon | null;
   destination: LatLon | null;
   stops: Stop[];
   route: Itinerary | null;
+  onPick?: (c: LatLon) => void;
+  picking?: boolean;
 }) {
   const legs = route?.legs ?? [];
   const allCoords = legs.flatMap(legCoords);
 
   return (
-    <MapContainer center={AMS} zoom={13} className="h-full w-full rounded-card" scrollWheelZoom>
+    <MapContainer
+      center={AMS}
+      zoom={13}
+      className={`h-full w-full rounded-card ${picking ? "cursor-crosshair" : ""}`}
+      scrollWheelZoom
+    >
       <TileLayer
         attribution="&copy; OpenStreetMap, &copy; CARTO"
         url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
       />
+      {onPick && <MapClicker onPick={onPick} />}
       <FitRoute coords={allCoords} fallback={origin ?? destination} />
 
       {/* White casing under the route for contrast on the light basemap. */}

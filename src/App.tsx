@@ -1,26 +1,77 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { SearchBar, type Trip } from "./components/SearchBar";
 import { FilterBar } from "./components/FilterBar";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
 import { MapView } from "./components/MapView";
+import { MapPickToolbar } from "./components/MapPickToolbar";
 import { HomeHero } from "./components/HomeHero";
 import { useTripPlan } from "./hooks/useTripPlan";
 import { isLive } from "./api/client";
+import { reverseGeocode } from "./geocode";
 import type { Mode } from "./api/types";
 
+interface Endpoint {
+  label: string; // shown in the From/To field
+  query: string; // sent to the planner: a name, or "lat,lon" for a map click
+}
+type Armed = "start" | "end" | null;
+
 export default function App() {
-  const [trip, setTrip] = useState<Trip | null>(null);
+  const [fromText, setFromText] = useState("");
+  const [toText, setToText] = useState("");
+  const [origin, setOrigin] = useState<Endpoint | null>(null);
+  const [destination, setDestination] = useState<Endpoint | null>(null);
+  const [armed, setArmed] = useState<Armed>(null);
   const [hideMap, setHideMap] = useState(false);
   const [selectedMode, setSelectedMode] = useState<Mode | null>(null);
+
+  const trip: Trip | null = useMemo(
+    () => (origin && destination ? { from: origin.query, to: destination.query } : null),
+    [origin, destination]
+  );
   const view = useTripPlan(trip);
 
   function startTrip(t: Trip) {
+    setFromText(t.from);
+    setToText(t.to);
+    setOrigin({ label: t.from, query: t.from });
+    setDestination({ label: t.to, query: t.to });
     setSelectedMode(null);
-    setTrip(t);
+    setArmed(null);
   }
   function goHome() {
+    setFromText("");
+    setToText("");
+    setOrigin(null);
+    setDestination(null);
     setSelectedMode(null);
-    setTrip(null);
+    setArmed(null);
+    setHideMap(false);
+  }
+  function commitSearch() {
+    const f = fromText.trim();
+    const t = toText.trim();
+    if (!f || !t) return;
+    setOrigin({ label: f, query: f });
+    setDestination({ label: t, query: t });
+    setSelectedMode(null);
+  }
+  function armPick(which: "start" | "end") {
+    setArmed((a) => (a === which ? null : which));
+  }
+  async function handlePick(c: { lat: number; lon: number }) {
+    if (!armed) return;
+    const query = `${c.lat.toFixed(6)},${c.lon.toFixed(6)}`;
+    const label = await reverseGeocode(c.lat, c.lon);
+    if (armed === "start") {
+      setFromText(label);
+      setOrigin({ label, query });
+    } else {
+      setToText(label);
+      setDestination({ label, query });
+    }
+    setArmed(null);
+    setSelectedMode(null);
   }
 
   if (trip === null) {
@@ -46,7 +97,14 @@ export default function App() {
   return (
     <div className="flex h-full flex-col">
       <header className="border-b border-gray-100 px-6 py-3">
-        <SearchBar onSearch={startTrip} onHome={goHome} />
+        <SearchBar
+          fromValue={fromText}
+          toValue={toText}
+          onFromChange={setFromText}
+          onToChange={setToText}
+          onSubmit={commitSearch}
+          onHome={goHome}
+        />
       </header>
 
       <div className="px-6">
@@ -58,12 +116,15 @@ export default function App() {
           <ResultsPanel state={panel} />
         </section>
         {!hideMap && (
-          <section className="w-1/2">
+          <section className="relative w-1/2">
+            <MapPickToolbar armed={armed} onArm={armPick} />
             <MapView
               origin={view.origin}
               destination={view.destination}
               stops={view.stops}
               route={route}
+              onPick={handlePick}
+              picking={armed !== null}
             />
           </section>
         )}
