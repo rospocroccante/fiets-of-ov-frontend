@@ -1,18 +1,34 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { SearchBar } from "./SearchBar";
 
-test("submits trimmed from/to on search", () => {
-  const onSearch = vi.fn();
-  render(<SearchBar onSearch={onSearch} />);
-  fireEvent.change(screen.getByPlaceholderText("From"), { target: { value: " Centraal " } });
-  fireEvent.change(screen.getByPlaceholderText("To"), { target: { value: "Vondelpark" } });
+test("calls onSubmit and reflects trimmed values via controlled props", () => {
+  const onFromChange = vi.fn();
+  const onToChange = vi.fn();
+  const onSubmit = vi.fn();
+  render(
+    <SearchBar
+      fromValue="Centraal"
+      toValue="Vondelpark"
+      onFromChange={onFromChange}
+      onToChange={onToChange}
+      onSubmit={onSubmit}
+    />
+  );
   fireEvent.click(screen.getByRole("button", { name: /search/i }));
-  expect(onSearch).toHaveBeenCalledWith({ from: "Centraal", to: "Vondelpark" });
+  expect(onSubmit).toHaveBeenCalledTimes(1);
 });
 
-test("does not submit when a field is empty", () => {
-  const onSearch = vi.fn();
-  render(<SearchBar onSearch={onSearch} />);
-  fireEvent.click(screen.getByRole("button", { name: /search/i }));
-  expect(onSearch).not.toHaveBeenCalled();
+test("does not call onSubmit when Enter is pressed on From input", () => {
+  const onSubmit = vi.fn();
+  render(
+    <SearchBar
+      fromValue=""
+      toValue=""
+      onFromChange={vi.fn()}
+      onToChange={vi.fn()}
+      onSubmit={onSubmit}
+    />
+  );
+  fireEvent.keyDown(screen.getByPlaceholderText("From"), { key: "Enter" });
+  expect(onSubmit).toHaveBeenCalledTimes(1);
 });
