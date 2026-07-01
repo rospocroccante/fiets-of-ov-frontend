@@ -1,9 +1,9 @@
-export type Mode = "bike" | "transit";
+export type Mode = "bike" | "transit" | "bike_and_ride";
 
 export interface Advice {
   recommendation: Mode;
   reason: string;
-  bike_minutes: number;
+  bike_minutes: number | null;
   transit_minutes: number | null;
   max_rain_mm_per_h: number | null;
   rain_expected: boolean | null;
@@ -70,6 +70,14 @@ export interface Itinerary {
   legs: PlanLeg[];
 }
 
+export interface Option {
+  kind: Mode;
+  recommended: boolean;
+  score: number;
+  rain_minutes: number;
+  itinerary: Itinerary;
+}
+
 export interface Plan {
   recommendation: Mode;
   reason: string;
@@ -77,6 +85,5 @@ export interface Plan {
   rain_expected: boolean | null;
   origin: PlaceRef;
   destination: PlaceRef;
-  bike: Itinerary;
-  transit: Itinerary | null;
+  options: Option[];
 }

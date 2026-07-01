@@ -1,6 +1,10 @@
 import type { OptionView } from "../lib/planView";
 
-const ICON: Record<OptionView["mode"], string> = { bike: "Bike", transit: "Transit" };
+const ICON: Record<OptionView["mode"], string> = {
+  bike: "Bike",
+  transit: "Transit",
+  bike_and_ride: "Bike + OV",
+};
 
 export function AdviceCard({
   option,
