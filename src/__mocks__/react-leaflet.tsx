@@ -34,3 +34,15 @@ export function useMap() {
     setView: () => {},
   };
 }
+
+let _clickHandler: ((e: { latlng: { lat: number; lng: number } }) => void) | null = null;
+
+export function useMapEvents(handlers: { click?: (e: { latlng: { lat: number; lng: number } }) => void }) {
+  _clickHandler = handlers.click ?? null;
+  return {};
+}
+
+// Test helper: simulate a user clicking the map at (lat, lng).
+export function __fireMapClick(lat: number, lng: number) {
+  _clickHandler?.({ latlng: { lat, lng } });
+}

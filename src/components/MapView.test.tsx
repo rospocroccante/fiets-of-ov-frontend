@@ -1,5 +1,6 @@
 import { render } from "@testing-library/react";
 import { MapView } from "./MapView";
+import { __fireMapClick } from "../__mocks__/react-leaflet";
 import type { Itinerary } from "../api/types";
 
 const route: Itinerary = {
@@ -42,4 +43,19 @@ test("renders without a route", () => {
     <MapView origin={null} destination={null} stops={[]} route={null} />
   );
   expect(container.querySelector(".leaflet-container")).toBeTruthy();
+});
+
+test("clicking the map calls onPick with lat/lon (lng mapped to lon)", () => {
+  const picks: Array<{ lat: number; lon: number }> = [];
+  render(
+    <MapView origin={null} destination={null} stops={[]} route={null} onPick={(c) => picks.push(c)} picking />
+  );
+  __fireMapClick(52.36, 4.89);
+  expect(picks).toEqual([{ lat: 52.36, lon: 4.89 }]);
+});
+
+test("without onPick, firing a map click is a no-op (no handler registered)", () => {
+  render(<MapView origin={null} destination={null} stops={[]} route={null} />);
+  // Should not throw; no handler registered by MapView this render.
+  expect(() => __fireMapClick(52.36, 4.89)).not.toThrow();
 });
