@@ -46,6 +46,7 @@ export default function App() {
     setDestination(null);
     setSelectedMode(null);
     setArmed(null);
+    setHideMap(false);
   }
   function commitSearch() {
     const f = fromText.trim();
