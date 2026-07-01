@@ -9,7 +9,7 @@ import { useTripPlan } from "./hooks/useTripPlan";
 import { isLive } from "./api/client";
 import { reverseGeocode } from "./geocode";
 import type { Mode, Place } from "./api/types";
-import type { Endpoint, Trip } from "./trip";
+import type { Endpoint, Trip, TripDraft } from "./trip";
 
 type Armed = "start" | "end" | null;
 
@@ -28,11 +28,11 @@ export default function App() {
   );
   const view = useTripPlan(trip);
 
-  function startTrip(t: Trip) {
-    setFromText(t.from);
-    setToText(t.to);
-    setOrigin({ label: t.from, query: t.from });
-    setDestination({ label: t.to, query: t.to });
+  function startTrip(t: TripDraft) {
+    setFromText(t.from.label);
+    setToText(t.to.label);
+    setOrigin(t.from);
+    setDestination(t.to);
     setSelectedMode(null);
     setArmed(null);
   }

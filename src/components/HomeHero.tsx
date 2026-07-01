@@ -1,23 +1,62 @@
 import { useState } from "react";
-import { PlaceInput } from "./PlaceInput";
-import type { Trip } from "./SearchBar";
+import { EndpointField } from "./EndpointField";
+import type { Endpoint, TripDraft } from "../trip";
+import type { Place } from "../api/types";
 
-const POPULAR: Trip[] = [
+interface PopularTrip {
+  from: string;
+  to: string;
+}
+
+const POPULAR: PopularTrip[] = [
   { from: "Amsterdam Centraal", to: "Vondelpark" },
   { from: "De Pijp", to: "Rijksmuseum" },
   { from: "Jordaan", to: "Amsterdamse Poort" },
   { from: "Amsterdam Zuid", to: "NDSM" },
 ];
 
-export function HomeHero({ onSearch }: { onSearch: (trip: Trip) => void }) {
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+function emptyEndpoint(): Endpoint {
+  return { label: "", query: "" };
+}
+
+export function HomeHero({ onSearch }: { onSearch: (trip: TripDraft) => void }) {
+  const [from, setFrom] = useState<Endpoint>(emptyEndpoint());
+  const [to, setTo] = useState<Endpoint>(emptyEndpoint());
 
   function submit() {
-    const f = from.trim();
-    const t = to.trim();
-    if (!f || !t) return;
-    onSearch({ from: f, to: t });
+    if (!from.query.trim() || !to.query.trim()) return;
+    onSearch({ from, to });
+  }
+
+  function handleFromText(text: string) {
+    setFrom({ label: text, query: text });
+  }
+
+  function handleToText(text: string) {
+    setTo({ label: text, query: text });
+  }
+
+  function handleFromSelect(place: Place) {
+    setFrom({ label: place.name, query: `${place.lat},${place.lon}` });
+  }
+
+  function handleToSelect(place: Place) {
+    setTo({ label: place.name, query: `${place.lat},${place.lon}` });
+  }
+
+  function handleFromLocate(ep: Endpoint) {
+    setFrom(ep);
+  }
+
+  function handleToLocate(ep: Endpoint) {
+    setTo(ep);
+  }
+
+  function pickPopular(trip: PopularTrip) {
+    onSearch({
+      from: { label: trip.from, query: trip.from },
+      to: { label: trip.to, query: trip.to },
+    });
   }
 
   return (
@@ -44,20 +83,22 @@ export function HomeHero({ onSearch }: { onSearch: (trip: Trip) => void }) {
 
         <div className="mx-auto mt-10 flex max-w-3xl items-center gap-2 rounded-full border border-gray-200 bg-white p-2 shadow-md">
           <div className="flex flex-1 items-center px-3">
-            <PlaceInput
-              value={from}
+            <EndpointField
+              value={from.label}
               placeholder="From"
-              onChange={setFrom}
-              onSelect={(p) => setFrom(p.name)}
+              onText={handleFromText}
+              onSelect={handleFromSelect}
+              onLocate={handleFromLocate}
             />
           </div>
           <span className="h-7 w-px bg-gray-200" />
           <div className="flex flex-1 items-center px-3">
-            <PlaceInput
-              value={to}
+            <EndpointField
+              value={to.label}
               placeholder="To"
-              onChange={setTo}
-              onSelect={(p) => setTo(p.name)}
+              onText={handleToText}
+              onSelect={handleToSelect}
+              onLocate={handleToLocate}
             />
           </div>
           <span className="h-7 w-px bg-gray-200" />
@@ -79,15 +120,15 @@ export function HomeHero({ onSearch }: { onSearch: (trip: Trip) => void }) {
             {POPULAR.map((trip) => (
               <button
                 key={`${trip.from}-${trip.to}`}
-                onClick={() => onSearch(trip)}
+                onClick={() => pickPopular(trip)}
                 aria-label={`${trip.from} → ${trip.to}`}
                 className="rounded-card border border-gray-100 bg-white p-4 text-left shadow-sm transition hover:shadow-md"
               >
                 <div className="flex h-20 items-center justify-center rounded-card bg-brand-light text-sm font-semibold text-brand">
-                  {trip.from} → {trip.to}
+                  {trip.from} {"→"} {trip.to}
                 </div>
                 <p className="mt-3 text-sm font-medium text-gray-700">
-                  {trip.from} → {trip.to}
+                  {trip.from} {"→"} {trip.to}
                 </p>
               </button>
             ))}
