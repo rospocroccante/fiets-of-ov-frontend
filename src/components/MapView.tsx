@@ -71,31 +71,40 @@ function MapEvents({
   return null;
 }
 
-function pinIcon(label: string, color: string) {
+// A map marker rendered with a Google Material Symbol glyph. `anchorBottom` puts the
+// anchor at the glyph's tip (teardrop pins); otherwise it is centered (ring markers).
+function pinIcon(icon: string, color: string, anchorBottom: boolean) {
+  const size = 34;
   return L.divIcon({
     className: "fov-pin",
-    html: `<span style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:9999px;background:${color};border:3px solid #ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.3);color:#ffffff;font-size:12px;font-weight:700;line-height:1;">${label}</span>`,
-    iconSize: [22, 22],
+    html:
+      `<span class="material-symbols-rounded" style="font-size:${size}px;line-height:1;` +
+      `color:${color};font-variation-settings:'FILL' 1,'wght' 600;` +
+      `filter:drop-shadow(0 1px 2px rgba(0,0,0,0.45));">${icon}</span>`,
+    iconSize: [size, size],
+    iconAnchor: anchorBottom ? [size / 2, size] : [size / 2, size / 2],
   });
 }
 
 function Pin({
   at,
-  label,
+  icon,
   color,
   which,
+  anchorBottom,
   onMovePoint,
 }: {
   at: LatLon;
-  label: string;
+  icon: string;
   color: string;
   which: "start" | "end";
+  anchorBottom: boolean;
   onMovePoint?: (which: "start" | "end", c: LatLon) => void;
 }) {
   return (
     <Marker
       position={[at.lat, at.lon]}
-      icon={pinIcon(label, color)}
+      icon={pinIcon(icon, color, anchorBottom)}
       title={which}
       draggable={!!onMovePoint}
       eventHandlers={{
@@ -183,10 +192,24 @@ export function MapView({
       })}
 
       {origin && (
-        <Pin at={origin} label="A" color={BRAND} which="start" onMovePoint={onMovePoint} />
+        <Pin
+          at={origin}
+          icon="trip_origin"
+          color={BRAND}
+          which="start"
+          anchorBottom={false}
+          onMovePoint={onMovePoint}
+        />
       )}
       {destination && (
-        <Pin at={destination} label="B" color="#0B2147" which="end" onMovePoint={onMovePoint} />
+        <Pin
+          at={destination}
+          icon="location_on"
+          color="#0B2147"
+          which="end"
+          anchorBottom
+          onMovePoint={onMovePoint}
+        />
       )}
 
       {stops.map((s) => (

@@ -37,11 +37,11 @@ export function HomeHero({ onSearch }: { onSearch: (trip: TripDraft) => void }) 
   }
 
   function handleFromSelect(place: Place) {
-    setFrom({ label: place.name, query: `${place.lat},${place.lon}` });
+    setFrom({ label: place.name, query: `${place.lat.toFixed(6)},${place.lon.toFixed(6)}` });
   }
 
   function handleToSelect(place: Place) {
-    setTo({ label: place.name, query: `${place.lat},${place.lon}` });
+    setTo({ label: place.name, query: `${place.lat.toFixed(6)},${place.lon.toFixed(6)}` });
   }
 
   function handleFromLocate(ep: Endpoint) {
