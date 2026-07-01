@@ -130,3 +130,16 @@ test("right-click menu 'to here' fires onContextPick('end') and closes", () => {
   expect(picks).toEqual([["end", { lat: 52.36, lon: 4.9 }]]);
   expect(screen.queryByRole("button", { name: /directions to here/i })).toBeNull();
 });
+
+test("renders without error when interactive={false}", () => {
+  const { container } = render(
+    <MapView
+      origin={null}
+      destination={null}
+      stops={[]}
+      route={null}
+      interactive={false}
+    />
+  );
+  expect(container.querySelector(".leaflet-container")).toBeTruthy();
+});

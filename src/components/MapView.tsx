@@ -124,6 +124,7 @@ export function MapView({
   picking,
   onMovePoint,
   onContextPick,
+  interactive = true,
 }: {
   origin: LatLon | null;
   destination: LatLon | null;
@@ -133,6 +134,7 @@ export function MapView({
   picking?: boolean;
   onMovePoint?: (which: "start" | "end", c: LatLon) => void;
   onContextPick?: (which: "start" | "end", c: LatLon) => void;
+  interactive?: boolean;
 }) {
   const legs = route?.legs ?? [];
   const allCoords = legs.flatMap(legCoords);
@@ -149,7 +151,7 @@ export function MapView({
         center={AMS}
         zoom={13}
         className={`h-full w-full rounded-card ${picking ? "cursor-crosshair" : ""}`}
-        scrollWheelZoom
+        scrollWheelZoom={interactive}
       >
         <TileLayer
           attribution="&copy; OpenStreetMap, &copy; CARTO"
