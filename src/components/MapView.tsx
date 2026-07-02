@@ -107,12 +107,14 @@ export function MapView({
         );
       })}
 
-      {/* The route itself: transit solid brand, bike green dashed, walking grey dotted. */}
+      {/* The route itself: transit solid brand, bike green dashed, walking grey dotted,
+          ferry brand dotted (a crossing over water, not a street being ridden). */}
       {legs.map((leg, i) => {
         const coords = legCoords(leg);
         if (coords.length < 2) return null;
         const walk = leg.mode === "WALK";
         const bike = leg.mode === "BICYCLE";
+        const ferry = leg.mode === "FERRY";
         return (
           <Polyline
             key={`leg-${i}`}
@@ -120,7 +122,7 @@ export function MapView({
             pathOptions={{
               color: walk ? WALK : bike ? BIKE : BRAND,
               weight: walk ? 4 : 5,
-              dashArray: walk ? "1 9" : bike ? "8 6" : undefined,
+              dashArray: walk ? "1 9" : bike ? "8 6" : ferry ? "1 12" : undefined,
               lineCap: "round",
             }}
           />
