@@ -12,7 +12,9 @@ import {
 import L from "leaflet";
 import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
 import type { Itinerary, PlanLeg, Stop } from "../api/types";
+import { useRainRadar } from "../hooks/useRainRadar";
 import { decodePolyline } from "../lib/polyline";
+import { RadarControl, RadarOverlay } from "./RainRadar";
 
 type LatLon = { lat: number; lon: number };
 
@@ -142,6 +144,10 @@ export function MapView({
   const legs = route?.legs ?? [];
   const allCoords = legs.flatMap(legCoords);
   const [menu, setMenu] = useState<MenuState | null>(null);
+  // Mixed mode: live precipitation radar layered between basemap and route.
+  const [radar, setRadar] = useState(false);
+  const [radarFrameTime, setRadarFrameTime] = useState<number | null>(null);
+  const radarFrames = useRainRadar(radar);
 
   const handleMenu = (m: MenuState) => {
     if (m.x < 0) setMenu(null);
@@ -160,6 +166,7 @@ export function MapView({
           attribution="&copy; OpenStreetMap, &copy; CARTO"
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
         />
+        {radar && <RadarOverlay frames={radarFrames} onFrameChange={setRadarFrameTime} />}
         <MapEvents onPick={onPick} onContextMenu={handleMenu} />
         <FitRoute coords={allCoords} fallback={origin ?? destination} />
 
@@ -230,6 +237,11 @@ export function MapView({
         </CircleMarker>
       ))}
       </MapContainer>
+      <RadarControl
+        active={radar}
+        frameTime={radarFrameTime}
+        onToggle={() => setRadar((r) => !r)}
+      />
 
       {menu && (
         <div

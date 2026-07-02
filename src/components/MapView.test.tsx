@@ -1,4 +1,6 @@
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { fireEvent, render, screen, act } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactElement } from "react";
 import { MapView } from "./MapView";
 import {
   __fireMapClick,
@@ -6,6 +8,12 @@ import {
   __fireMarkerDragEnd,
 } from "../__mocks__/react-leaflet";
 import type { Itinerary } from "../api/types";
+
+// MapView hosts the rain-radar hook (react-query), so every render needs a client.
+function renderMap(ui: ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
 
 const route: Itinerary = {
   minutes: 10,
@@ -31,7 +39,7 @@ const route: Itinerary = {
 };
 
 test("renders a leaflet container with a route", () => {
-  const { container } = render(
+  const { container } = renderMap(
     <MapView
       origin={{ lat: 52.379, lon: 4.9 }}
       destination={{ lat: 52.358, lon: 4.868 }}
@@ -43,7 +51,7 @@ test("renders a leaflet container with a route", () => {
 });
 
 test("renders without a route", () => {
-  const { container } = render(
+  const { container } = renderMap(
     <MapView origin={null} destination={null} stops={[]} route={null} />
   );
   expect(container.querySelector(".leaflet-container")).toBeTruthy();
@@ -51,7 +59,7 @@ test("renders without a route", () => {
 
 test("clicking the map calls onPick with lat/lon (lng mapped to lon)", () => {
   const picks: Array<{ lat: number; lon: number }> = [];
-  render(
+  renderMap(
     <MapView origin={null} destination={null} stops={[]} route={null} onPick={(c) => picks.push(c)} picking />
   );
   __fireMapClick(52.36, 4.89);
@@ -59,14 +67,14 @@ test("clicking the map calls onPick with lat/lon (lng mapped to lon)", () => {
 });
 
 test("without onPick, firing a map click is a no-op (no handler registered)", () => {
-  render(<MapView origin={null} destination={null} stops={[]} route={null} />);
+  renderMap(<MapView origin={null} destination={null} stops={[]} route={null} />);
   // Should not throw; no handler registered by MapView this render.
   expect(() => __fireMapClick(52.36, 4.89)).not.toThrow();
 });
 
 test("dragging the start pin calls onMovePoint with start + lat/lon", () => {
   const moves: Array<[string, { lat: number; lon: number }]> = [];
-  render(
+  renderMap(
     <MapView
       origin={{ lat: 52.379, lon: 4.9 }}
       destination={{ lat: 52.358, lon: 4.868 }}
@@ -81,7 +89,7 @@ test("dragging the start pin calls onMovePoint with start + lat/lon", () => {
 
 test("dragging the end pin calls onMovePoint with end + lat/lon", () => {
   const moves: Array<[string, { lat: number; lon: number }]> = [];
-  render(
+  renderMap(
     <MapView
       origin={{ lat: 52.379, lon: 4.9 }}
       destination={{ lat: 52.358, lon: 4.868 }}
@@ -96,7 +104,7 @@ test("dragging the end pin calls onMovePoint with end + lat/lon", () => {
 
 test("right-click opens a menu; 'from here' fires onContextPick('start') and closes", () => {
   const picks: Array<[string, { lat: number; lon: number }]> = [];
-  render(
+  renderMap(
     <MapView
       origin={null}
       destination={null}
@@ -115,7 +123,7 @@ test("right-click opens a menu; 'from here' fires onContextPick('start') and clo
 
 test("right-click menu 'to here' fires onContextPick('end') and closes", () => {
   const picks: Array<[string, { lat: number; lon: number }]> = [];
-  render(
+  renderMap(
     <MapView
       origin={null}
       destination={null}
@@ -132,7 +140,7 @@ test("right-click menu 'to here' fires onContextPick('end') and closes", () => {
 });
 
 test("renders without error when interactive={false}", () => {
-  const { container } = render(
+  const { container } = renderMap(
     <MapView
       origin={null}
       destination={null}
@@ -142,4 +150,21 @@ test("renders without error when interactive={false}", () => {
     />
   );
   expect(container.querySelector(".leaflet-container")).toBeTruthy();
+});
+
+test("radar toggle switches mixed mode on and off", () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ host: "https://tc.test", radar: { past: [], nowcast: [] } }),
+    })),
+  );
+  renderMap(<MapView origin={null} destination={null} stops={[]} route={null} />);
+  const btn = screen.getByRole("button", { name: "Radar" });
+  expect(btn).toHaveAttribute("aria-pressed", "false");
+  fireEvent.click(btn);
+  expect(btn).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(btn);
+  expect(btn).toHaveAttribute("aria-pressed", "false");
 });
