@@ -56,10 +56,23 @@ function bikeMinutes(it: Itinerary): number {
     .reduce((sum, l) => sum + l.minutes, 0);
 }
 
+// Distance actually ridden: a "bike" itinerary may include a GVB ferry crossing whose
+// metres are not cycled, so sum the BICYCLE legs instead of the itinerary total.
+function bikeDistanceM(it: Itinerary): number | null {
+  const legs = it.legs.filter((l) => l.mode === "BICYCLE");
+  if (!legs.length) return it.distance_m;
+  return legs.reduce((sum, l) => sum + (l.distance_m ?? 0), 0);
+}
+
+function hasFerry(it: Itinerary): boolean {
+  return it.legs.some((l) => l.mode === "FERRY");
+}
+
 function summarise(kind: Mode, it: Itinerary): string {
   if (kind === "bike") {
-    const d = km(it.distance_m);
-    return d != null ? `${d} km by bike` : "Bike route";
+    const d = km(bikeDistanceM(it));
+    const base = d != null ? `${d} km by bike` : "Bike route";
+    return hasFerry(it) ? `${base} + ferry` : base;
   }
   if (kind === "transit") return transitSummary(it);
   // bike_and_ride: short bike leg + the transit lines
@@ -73,7 +86,7 @@ function toOptionView(option: Option): OptionView {
     mode: option.kind,
     title: TITLE[option.kind],
     minutes: it.minutes,
-    distanceKm: option.kind === "bike" ? km(it.distance_m) : null,
+    distanceKm: option.kind === "bike" ? km(bikeDistanceM(it)) : null,
     recommended: option.recommended,
     summary: summarise(option.kind, it),
     itinerary: it,
