@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   CircleMarker,
   MapContainer,
@@ -11,7 +11,9 @@ import {
 } from "react-leaflet";
 import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
 import type { Itinerary, PlanLeg, Stop } from "../api/types";
+import { useRainRadar } from "../hooks/useRainRadar";
 import { decodePolyline } from "../lib/polyline";
+import { RadarControl, RadarOverlay } from "./RainRadar";
 
 type LatLon = { lat: number; lon: number };
 
@@ -82,18 +84,24 @@ export function MapView({
 }) {
   const legs = route?.legs ?? [];
   const allCoords = legs.flatMap(legCoords);
+  // Mixed mode: live precipitation radar layered between basemap and route.
+  const [radar, setRadar] = useState(false);
+  const [radarFrameTime, setRadarFrameTime] = useState<number | null>(null);
+  const radarFrames = useRainRadar(radar);
 
   return (
-    <MapContainer
-      center={AMS}
-      zoom={13}
-      className={`h-full w-full rounded-card ${picking ? "cursor-crosshair" : ""}`}
-      scrollWheelZoom
-    >
+    <div className="relative h-full w-full">
+      <MapContainer
+        center={AMS}
+        zoom={13}
+        className={`h-full w-full rounded-card ${picking ? "cursor-crosshair" : ""}`}
+        scrollWheelZoom
+      >
       <TileLayer
         attribution="&copy; OpenStreetMap, &copy; CARTO"
         url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
       />
+      {radar && <RadarOverlay frames={radarFrames} onFrameChange={setRadarFrameTime} />}
       {onPick && <MapClicker onPick={onPick} />}
       <FitRoute coords={allCoords} fallback={origin ?? destination} />
 
@@ -145,6 +153,12 @@ export function MapView({
           <Popup>{s.name}</Popup>
         </CircleMarker>
       ))}
-    </MapContainer>
+      </MapContainer>
+      <RadarControl
+        active={radar}
+        frameTime={radarFrameTime}
+        onToggle={() => setRadar((r) => !r)}
+      />
+    </div>
   );
 }
