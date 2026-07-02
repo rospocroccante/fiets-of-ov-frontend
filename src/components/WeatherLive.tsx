@@ -32,14 +32,17 @@ export function CloudOverlay({ times }: { times: string[] }) {
       {times.map((t, i) => (
         <WMSTileLayer
           key={t}
-          url={EUMETSAT_WMS_URL}
+          // TIME lives in the URL, not in `params`: a params object is recreated on
+          // every animation tick, and react-leaflet answers any new params reference
+          // with setParams() -> full tile redraw, so the slow EUMETSAT tiles would be
+          // discarded every 700ms and never paint.
+          url={`${EUMETSAT_WMS_URL}?time=${encodeURIComponent(t)}`}
           layers={CLOUD_LAYER}
           format="image/png"
           transparent
           version="1.3.0"
           opacity={i === active ? 0.75 : 0}
           zIndex={4}
-          params={{ time: t } as never}
         />
       ))}
     </>
