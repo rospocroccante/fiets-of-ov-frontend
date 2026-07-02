@@ -86,3 +86,7 @@ export function __fireMarkerDragEnd(which: string, lat: number, lng: number): vo
   const handlers = _markerHandlers.get(which);
   handlers?.dragend?.({ target: { getLatLng: () => ({ lat, lng }) } });
 }
+
+export function WMSTileLayer() {
+  return null;
+}
