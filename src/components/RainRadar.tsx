@@ -52,19 +52,36 @@ export function RadarOverlay({
   );
 }
 
-// Map-corner control: toggles the radar and, when active, shows the frame clock so
-// the user knows whether they are looking at the past sweep or the nowcast.
+export interface WeatherLayersState {
+  rain: boolean;
+  clouds: boolean;
+  wind: boolean;
+}
+
+const LAYER_LABEL: Record<keyof WeatherLayersState, string> = {
+  rain: "Rain",
+  clouds: "Clouds",
+  wind: "Wind",
+};
+
+// Map-corner control: a master Radar toggle plus, when active, one chip per weather
+// layer and the radar frame clock so the user knows whether they are looking at the
+// past sweep or the nowcast.
 export function RadarControl({
   active,
   frameTime,
+  layers,
   onToggle,
+  onLayerToggle,
 }: {
   active: boolean;
   frameTime: number | null;
+  layers: WeatherLayersState;
   onToggle: () => void;
+  onLayerToggle: (layer: keyof WeatherLayersState) => void;
 }) {
   const label =
-    active && frameTime != null
+    active && layers.rain && frameTime != null
       ? new Date(frameTime * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       : null;
   return (
@@ -86,9 +103,26 @@ export function RadarControl({
           Radar
         </button>
       </div>
-      {/* Legend: the layer only paints where precipitation is, so on a dry day the map
-          stays clean — this row is the cue that the radar is live anyway. */}
       {active && (
+        <div className="flex items-center gap-1">
+          {(Object.keys(LAYER_LABEL) as (keyof WeatherLayersState)[]).map((k) => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={layers[k]}
+              onClick={() => onLayerToggle(k)}
+              className={`rounded-full px-2 py-1 text-[10px] font-semibold shadow transition ${
+                layers[k] ? "bg-brand/90 text-white" : "bg-white/90 text-gray-500 hover:bg-white"
+              }`}
+            >
+              {LAYER_LABEL[k]}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* Legend: the rain layer only paints where precipitation is, so on a dry day the
+          map stays clean — this row is the cue that the radar is live anyway. */}
+      {active && layers.rain && (
         <span className="flex items-center gap-1.5 rounded-full bg-white/90 px-2 py-1 text-[10px] font-medium text-gray-600 shadow">
           <span>light</span>
           <span
