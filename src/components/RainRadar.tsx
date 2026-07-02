@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { TileLayer } from "react-leaflet";
+import { RADAR_TILE_OPTIONS } from "../hooks/useRainRadar";
 import type { RadarFrame } from "../hooks/useRainRadar";
 
 // Animated precipitation overlay: all frames stay mounted (tiles cache, no flicker),
@@ -44,6 +45,7 @@ export function RadarOverlay({
           className="rain-radar-tiles"
           opacity={i === active ? 0.65 : 0}
           zIndex={5}
+          {...RADAR_TILE_OPTIONS}
         />
       ))}
     </>
