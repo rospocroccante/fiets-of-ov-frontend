@@ -19,3 +19,13 @@ test("no suggestion box for empty input", () => {
   render(<PlaceInput value="" placeholder="To" onChange={() => {}} onSelect={() => {}} />);
   expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
 });
+
+test("programmatic value change (e.g. a suggested trip) does not open suggestions", async () => {
+  const { rerender } = render(
+    <PlaceInput value="" placeholder="From" onChange={() => {}} onSelect={() => {}} />,
+  );
+  rerender(<PlaceInput value="NDSM" placeholder="From" onChange={() => {}} onSelect={() => {}} />);
+  // Past the fetch debounce: still no dropdown, the user never typed here.
+  await new Promise((r) => setTimeout(r, 300));
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+});
