@@ -11,12 +11,13 @@ import {
 } from "react-leaflet";
 import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
 import type { Itinerary, PlanLeg, Stop } from "../api/types";
+import { useCloudFrames } from "../hooks/useCloudFrames";
 import { useRainRadar } from "../hooks/useRainRadar";
-import { useWeatherGrid } from "../hooks/useWeatherGrid";
+import { useWindField } from "../hooks/useWindField";
 import { decodePolyline } from "../lib/polyline";
 import { RadarControl, RadarOverlay } from "./RainRadar";
 import type { WeatherLayersState } from "./RainRadar";
-import { CloudCover, WindArrows } from "./WeatherGrid";
+import { CloudOverlay, WindVelocityLayer } from "./WeatherLive";
 
 type LatLon = { lat: number; lon: number };
 
@@ -97,7 +98,8 @@ export function MapView({
   });
   const [radarFrameTime, setRadarFrameTime] = useState<number | null>(null);
   const radarFrames = useRainRadar(radar && wLayers.rain);
-  const weatherPoints = useWeatherGrid(radar && (wLayers.clouds || wLayers.wind));
+  const cloudTimes = useCloudFrames(radar && wLayers.clouds);
+  const windField = useWindField(radar && wLayers.wind);
 
   return (
     <div className="relative h-full w-full">
@@ -111,11 +113,11 @@ export function MapView({
         attribution="&copy; OpenStreetMap, &copy; CARTO"
         url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
       />
+      {radar && wLayers.clouds && <CloudOverlay times={cloudTimes} />}
       {radar && wLayers.rain && (
         <RadarOverlay frames={radarFrames} onFrameChange={setRadarFrameTime} />
       )}
-      {radar && wLayers.wind && <WindArrows points={weatherPoints} />}
-      {radar && wLayers.clouds && <CloudCover points={weatherPoints} />}
+      {radar && wLayers.wind && <WindVelocityLayer data={windField} />}
       {onPick && <MapClicker onPick={onPick} />}
       <FitRoute coords={allCoords} fallback={origin ?? destination} />
 
