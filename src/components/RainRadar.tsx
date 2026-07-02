@@ -90,14 +90,14 @@ export function RadarControl({
           stays clean — this row is the cue that the radar is live anyway. */}
       {active && (
         <span className="flex items-center gap-1.5 rounded-full bg-white/90 px-2 py-1 text-[10px] font-medium text-gray-600 shadow">
-          light
+          <span>light</span>
           <span
             className="h-1.5 w-16 rounded-full"
             style={{
               background: "linear-gradient(90deg, #9be1ff, #2f80ed, #7b2ff7, #e63946)",
             }}
           />
-          heavy
+          <span>heavy</span>
         </span>
       )}
     </div>
