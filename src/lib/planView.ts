@@ -80,6 +80,19 @@ function summarise(kind: Mode, it: Itinerary): string {
   return bm > 0 ? `Bike ${bm} min -> ${transitSummary(it)}` : transitSummary(it);
 }
 
+// When the itinerary leaves within a couple of minutes it is a leave-now trip; otherwise
+// show the departure clock time — e.g. the next ferry worth catching leaves at 14:32.
+// The ranking already charges that wait as cost; this only makes it visible.
+export function departureLabel(it: Itinerary, nowMs: number): string {
+  const deltaMin = (it.start_time - nowMs) / 60_000;
+  if (deltaMin <= 2) return "Leave now";
+  const t = new Date(it.start_time).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `Leave at ${t}`;
+}
+
 function toOptionView(option: Option): OptionView {
   const it = option.itinerary;
   return {
