@@ -21,8 +21,11 @@ const BIKE = "#16a34a";
 const WALK = "#94a3b8";
 
 // A leg's drawable path: its real geometry when present, else a straight line endpoints.
+// Ferries are always drawn dock-to-dock: OTP's shape follows the line's full stop
+// pattern (F7 calls at Distelweg between Pontsteiger and NDSM), which on the map reads
+// as a broken detour over the water rather than a crossing.
 function legCoords(leg: PlanLeg): [number, number][] {
-  if (leg.geometry) return decodePolyline(leg.geometry);
+  if (leg.geometry && leg.mode !== "FERRY") return decodePolyline(leg.geometry);
   const pts: [number, number][] = [];
   if (leg.from.lat != null && leg.from.lon != null) pts.push([leg.from.lat, leg.from.lon]);
   if (leg.to.lat != null && leg.to.lon != null) pts.push([leg.to.lat, leg.to.lon]);
