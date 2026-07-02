@@ -13,9 +13,14 @@ export function PlaceInput({ value, placeholder, onChange, onSelect }: Props) {
   const [suggestions, setSuggestions] = useState<Place[]>([]);
   const [open, setOpen] = useState(false);
   const justSelected = useRef(false);
+  // Suggestions may only open in response to typing in THIS input. A programmatic
+  // value change (a suggested trip from the home, use-my-location) syncs the text
+  // but must not pop the dropdown over the results.
+  const typedHere = useRef(false);
   const [query, setQuery] = useState(value);
 
   useEffect(() => {
+    typedHere.current = false;
     setQuery(value);
   }, [value]);
 
@@ -25,7 +30,7 @@ export function PlaceInput({ value, placeholder, onChange, onSelect }: Props) {
       return;
     }
     const q = query.trim();
-    if (q.length < 2) {
+    if (q.length < 2 || !typedHere.current) {
       setSuggestions([]);
       setOpen(false);
       return;
@@ -49,6 +54,7 @@ export function PlaceInput({ value, placeholder, onChange, onSelect }: Props) {
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const text = e.target.value;
+    typedHere.current = true;
     setQuery(text);
     onChange(text);
   }
