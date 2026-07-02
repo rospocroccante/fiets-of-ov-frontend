@@ -13,8 +13,11 @@ import L from "leaflet";
 import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
 import type { Itinerary, PlanLeg, Stop } from "../api/types";
 import { useRainRadar } from "../hooks/useRainRadar";
+import { useWeatherGrid } from "../hooks/useWeatherGrid";
 import { decodePolyline } from "../lib/polyline";
 import { RadarControl, RadarOverlay } from "./RainRadar";
+import type { WeatherLayersState } from "./RainRadar";
+import { CloudCover, WindArrows } from "./WeatherGrid";
 
 type LatLon = { lat: number; lon: number };
 
@@ -144,10 +147,17 @@ export function MapView({
   const legs = route?.legs ?? [];
   const allCoords = legs.flatMap(legCoords);
   const [menu, setMenu] = useState<MenuState | null>(null);
-  // Mixed mode: live precipitation radar layered between basemap and route.
+  // Mixed mode: live precipitation radar, wind arrows and cloud cover layered
+  // between basemap and route.
   const [radar, setRadar] = useState(false);
+  const [wLayers, setWLayers] = useState<WeatherLayersState>({
+    rain: true,
+    clouds: true,
+    wind: true,
+  });
   const [radarFrameTime, setRadarFrameTime] = useState<number | null>(null);
-  const radarFrames = useRainRadar(radar);
+  const radarFrames = useRainRadar(radar && wLayers.rain);
+  const weatherPoints = useWeatherGrid(radar && (wLayers.clouds || wLayers.wind));
 
   const handleMenu = (m: MenuState) => {
     if (m.x < 0) setMenu(null);
@@ -166,7 +176,11 @@ export function MapView({
           attribution="&copy; OpenStreetMap, &copy; CARTO"
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
         />
-        {radar && <RadarOverlay frames={radarFrames} onFrameChange={setRadarFrameTime} />}
+        {radar && wLayers.rain && (
+          <RadarOverlay frames={radarFrames} onFrameChange={setRadarFrameTime} />
+        )}
+        {radar && wLayers.wind && <WindArrows points={weatherPoints} />}
+        {radar && wLayers.clouds && <CloudCover points={weatherPoints} />}
         <MapEvents onPick={onPick} onContextMenu={handleMenu} />
         <FitRoute coords={allCoords} fallback={origin ?? destination} />
 
@@ -240,7 +254,9 @@ export function MapView({
       <RadarControl
         active={radar}
         frameTime={radarFrameTime}
+        layers={wLayers}
         onToggle={() => setRadar((r) => !r)}
+        onLayerToggle={(k) => setWLayers((s) => ({ ...s, [k]: !s[k] }))}
       />
 
       {menu && (

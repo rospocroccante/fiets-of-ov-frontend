@@ -167,6 +167,10 @@ test("radar toggle switches mixed mode on and off", () => {
   expect(btn).toHaveAttribute("aria-pressed", "true");
   // Legend is the cue that the layer is live even on a dry (fully transparent) day.
   expect(screen.getByText("light")).toBeInTheDocument();
+  // Per-layer chips appear with the master toggle.
+  expect(screen.getByRole("button", { name: "Rain" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Clouds" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Wind" })).toHaveAttribute("aria-pressed", "true");
   fireEvent.click(btn);
   expect(btn).toHaveAttribute("aria-pressed", "false");
   expect(screen.queryByText("light")).toBeNull();
