@@ -42,3 +42,8 @@ test("calls onSelect when clicked", () => {
   fireEvent.click(screen.getByRole("button"));
   expect(onSelect).toHaveBeenCalledTimes(1);
 });
+
+test("shows when the trip leaves", () => {
+  render(<AdviceCard option={recommended} selected={false} onSelect={() => {}} />);
+  expect(screen.getByText(/^Leave (now|at)/)).toBeInTheDocument();
+});

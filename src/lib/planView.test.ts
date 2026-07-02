@@ -1,4 +1,4 @@
-import { buildPlanView } from "./planView";
+import { buildPlanView, departureLabel } from "./planView";
 import { mockPlanFor } from "../api/mock";
 import type { Plan, PlanLeg } from "../api/types";
 
@@ -73,4 +73,13 @@ test("bike km counts only bicycle legs and the ferry crossing is called out", ()
 test("carries the rain fields through", () => {
   const v = buildPlanView(mockPlanFor("A", "Unknown spot"));
   expect(v.rainExpected).toBeNull();
+});
+
+test("departureLabel: leave now when imminent, clock time when the trip departs later", () => {
+  const it = bikeWithFerryPlan().options[0].itinerary;
+  const now = Date.UTC(2026, 6, 2, 12, 0);
+  expect(departureLabel({ ...it, start_time: now + 90_000 }, now)).toBe("Leave now");
+  expect(departureLabel({ ...it, start_time: now + 34 * 60_000 }, now)).toMatch(
+    /^Leave at \d{1,2}[:.]\d{2}/,
+  );
 });

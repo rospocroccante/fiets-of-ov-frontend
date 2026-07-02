@@ -1,3 +1,4 @@
+import { departureLabel } from "../lib/planView";
 import type { OptionView } from "../lib/planView";
 
 const ICON: Record<OptionView["mode"], string> = {
@@ -37,6 +38,9 @@ export function AdviceCard({
         <span className="shrink-0 text-sm font-semibold text-brand">{option.minutes} min</span>
       </div>
       <p className="mt-1 text-sm text-gray-500">{option.summary}</p>
+      <p className="mt-1 text-xs font-medium text-gray-400">
+        {departureLabel(option.itinerary, Date.now())}
+      </p>
     </button>
   );
 }
