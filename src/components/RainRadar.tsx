@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { TileLayer } from "react-leaflet";
 import { RADAR_TILE_OPTIONS } from "../hooks/useRainRadar";
 import type { RadarFrame } from "../hooks/useRainRadar";
-import { PRIMARY_GRADIENT } from "../lib/gradients";
 import { publishRadarFrame, useRadarFrame } from "../lib/radarFrame";
 
 // Animated precipitation overlay: all frames stay mounted (tiles cache, no flicker),
@@ -81,7 +80,7 @@ export function RadarControls({
         aria-pressed={active}
         onClick={onToggle}
         className={`rounded-full px-4 py-1.5 text-sm transition ${
-          active ? `text-white ${PRIMARY_GRADIENT}` : "border border-gray-200 hover:bg-gray-50"
+          active ? "bg-brand text-white" : "border border-gray-200 hover:bg-gray-50"
         }`}
       >
         Radar
@@ -95,7 +94,7 @@ export function RadarControls({
             onClick={() => onLayerToggle(k)}
             className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
               layers[k]
-                ? `text-white ${PRIMARY_GRADIENT}`
+                ? "bg-brand text-white"
                 : "border border-gray-200 text-gray-500 hover:bg-gray-50"
             }`}
           >

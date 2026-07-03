@@ -1,4 +1,3 @@
-import { PRIMARY_GRADIENT } from "../lib/gradients";
 import { RadarControls } from "./RainRadar";
 import type { WeatherLayersState } from "./RainRadar";
 
@@ -31,9 +30,7 @@ export function FilterBar({
       onClick={() => onArm(which)}
       aria-pressed={armed === which}
       className={`rounded-full px-3 py-1.5 text-sm transition ${
-        armed === which
-          ? `text-white ${PRIMARY_GRADIENT}`
-          : "border border-gray-200 hover:bg-gray-50"
+        armed === which ? "bg-brand text-white" : "border border-gray-200 hover:bg-gray-50"
       }`}
     >
       {label}
@@ -44,7 +41,7 @@ export function FilterBar({
     <div className="flex items-center justify-between gap-3 py-3">
       <div className="flex items-center gap-2">
         <button className="rounded-full bg-gray-100 px-4 py-1.5 text-sm font-medium">Bike</button>
-        <button className={`rounded-full px-4 py-1.5 text-sm font-medium text-white ${PRIMARY_GRADIENT}`}>
+        <button className="rounded-full bg-brand px-4 py-1.5 text-sm font-medium text-white">
           Transit
         </button>
       </div>

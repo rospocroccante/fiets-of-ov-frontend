@@ -1,9 +1,11 @@
 import type { CSSProperties } from "react";
 
-// Decorative drifting light blobs for the home background. Purely presentational and
-// aria-hidden; the motion lives in CSS (see index.css .aurora-blob + @keyframes) so no
-// JS runs per frame. Colours are soft tints biased to the brand blues with a teal and a
-// warm accent, kept low-opacity so hero text stays readable on top.
+// The home's living background: vivid drifting colour blobs, the one place in the UI
+// where colour runs free (the foreground stays clean and calm on purpose). Purely
+// decorative and aria-hidden; the motion is CSS-only (see index.css .aurora-blob +
+// @keyframes), so nothing runs on the main thread per frame. Normal blending on the
+// light backdrop keeps the saturated colours reading true (screen would wash them to
+// white); each blob fades to transparent at its rim so overlaps layer softly.
 interface Blob {
   color: string;
   size: string;
@@ -14,19 +16,21 @@ interface Blob {
   pos: Pick<CSSProperties, "top" | "left" | "right" | "bottom">;
 }
 
-// Vivid Fresha-style sweep: violet, fuchsia, cyan, amber and blue at higher
-// saturation, matching the gradient pairs in lib/gradients.
 const BLOBS: Blob[] = [
-  { color: "#8b5cf6", size: "36rem", opacity: 0.6, anim: "aurora-a", duration: "23s", delay: "0s", pos: { top: "-6rem", left: "-8rem" } },
-  { color: "#e879f9", size: "32rem", opacity: 0.55, anim: "aurora-b", duration: "27s", delay: "-6s", pos: { top: "-4rem", right: "-6rem" } },
-  { color: "#22d3ee", size: "30rem", opacity: 0.5, anim: "aurora-c", duration: "31s", delay: "-3s", pos: { bottom: "-8rem", right: "4rem" } },
-  { color: "#fbbf24", size: "28rem", opacity: 0.42, anim: "aurora-b", duration: "25s", delay: "-11s", pos: { bottom: "-6rem", left: "2rem" } },
-  { color: "#60a5fa", size: "26rem", opacity: 0.48, anim: "aurora-a", duration: "29s", delay: "-15s", pos: { top: "28%", left: "34%" } },
+  { color: "#7c3aed", size: "40rem", opacity: 0.7, anim: "aurora-a", duration: "24s", delay: "0s", pos: { top: "-10rem", left: "-10rem" } },
+  { color: "#ec4899", size: "34rem", opacity: 0.65, anim: "aurora-b", duration: "28s", delay: "-6s", pos: { top: "-6rem", right: "-8rem" } },
+  { color: "#06b6d4", size: "36rem", opacity: 0.6, anim: "aurora-c", duration: "32s", delay: "-3s", pos: { bottom: "-10rem", right: "2rem" } },
+  { color: "#f59e0b", size: "28rem", opacity: 0.5, anim: "aurora-b", duration: "26s", delay: "-12s", pos: { bottom: "-8rem", left: "0rem" } },
+  { color: "#3b82f6", size: "30rem", opacity: 0.6, anim: "aurora-a", duration: "30s", delay: "-16s", pos: { top: "26%", left: "30%" } },
+  { color: "#8b5cf6", size: "26rem", opacity: 0.5, anim: "aurora-c", duration: "22s", delay: "-9s", pos: { top: "38%", right: "22%" } },
 ];
 
 export function HomeAurora() {
   return (
-    <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
+    <div
+      className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+      aria-hidden="true"
+    >
       {BLOBS.map((b, i) => (
         <span
           key={i}

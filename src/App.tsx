@@ -3,7 +3,7 @@ import { motion, useTransform, useMotionValueEvent } from "framer-motion";
 import { EndpointField } from "./components/EndpointField";
 import { FilterBar } from "./components/FilterBar";
 import { HomeAurora } from "./components/HomeAurora";
-import { CARD_GRADIENTS, PRIMARY_GRADIENT, TEXT_GRADIENT } from "./lib/gradients";
+import { CARD_ACCENTS, PRIMARY_GRADIENT, TEXT_GRADIENT } from "./lib/gradients";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
 import { MapView } from "./components/MapView";
 import type { WeatherLayersState } from "./components/RainRadar";
@@ -251,24 +251,38 @@ export default function App() {
             <h2 className="mb-4 text-xl font-semibold text-slate-900">Popular trips</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {POPULAR.map((t, i) => {
-                // Full vivid gradient per card (Fresha-style), rotating through the
-                // shared pairs so the grid reads colourful but deliberate.
-                const gradient = CARD_GRADIENTS[i % CARD_GRADIENTS.length];
+                // Clean frosted card. Colour is confined to one small accent (the
+                // origin dot and the connector line) so the grid stays calm and the
+                // vivid background does the talking.
+                const accent = CARD_ACCENTS[i % CARD_ACCENTS.length];
                 return (
                   <button
                     key={`${t.from}-${t.to}`}
                     onClick={() => pickPopular(t)}
                     aria-label={`${t.from} → ${t.to}`}
-                    className={`group rounded-card p-5 text-left text-white shadow-md transition hover:-translate-y-0.5 hover:shadow-lg ${gradient}`}
+                    className="group flex flex-col gap-3 rounded-card border border-white/60 bg-white/70 p-5 text-left shadow-sm ring-1 ring-slate-900/5 backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-white/90 hover:shadow-lg"
                   >
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-white/70">
-                      Popular trip
+                    {/* Mini route: origin dot, connector, destination flag. */}
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: accent }}
+                      />
+                      <span
+                        className="h-px flex-1"
+                        style={{ backgroundImage: `linear-gradient(to right, ${accent}, transparent)` }}
+                      />
+                      <span
+                        className="material-symbols-rounded text-[18px] leading-none text-slate-400"
+                        aria-hidden="true"
+                      >
+                        sports_score
+                      </span>
                     </span>
-                    <p className="mt-3 truncate text-[15px] font-semibold">{t.from}</p>
-                    <p className="truncate text-sm text-white/80">to {t.to}</p>
-                    <span className="mt-4 inline-block text-xs font-semibold text-white/90 transition group-hover:translate-x-0.5">
-                      Plan this trip {"→"}
-                    </span>
+                    <div>
+                      <p className="truncate text-[15px] font-semibold text-slate-900">{t.from}</p>
+                      <p className="truncate text-sm text-slate-500">to {t.to}</p>
+                    </div>
                   </button>
                 );
               })}
@@ -281,7 +295,7 @@ export default function App() {
           className="absolute inset-x-0 top-0 z-20 flex h-16 items-center justify-between border-b border-gray-100 bg-white/95 px-6"
           style={{ opacity: chromeOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
         >
-          <button onClick={goHome} className={`text-xl font-bold ${TEXT_GRADIENT}`}>
+          <button onClick={goHome} className="text-xl font-bold text-brand">
             Fiets of OV
           </button>
           <button className="rounded-full border border-gray-200 px-4 py-1.5 text-sm font-medium">
