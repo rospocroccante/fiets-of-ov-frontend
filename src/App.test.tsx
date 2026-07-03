@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import {
@@ -89,7 +89,7 @@ test("right-click 'Directions from here' sets the From field", async () => {
   renderApp();
   startTrip();
 
-  __fireMapContextMenu(52.358, 4.8686);
+  act(() => __fireMapContextMenu(52.358, 4.8686));
   fireEvent.click(await screen.findByRole("button", { name: /directions from here/i }));
 
   const fromField = await screen.findByDisplayValue(/vondelpark/i);
@@ -100,7 +100,7 @@ test("right-click 'Directions to here' sets the To field", async () => {
   renderApp();
   startTrip();
 
-  __fireMapContextMenu(52.358, 4.8686);
+  act(() => __fireMapContextMenu(52.358, 4.8686));
   fireEvent.click(await screen.findByRole("button", { name: /directions to here/i }));
 
   const toField = await screen.findByDisplayValue(/vondelpark/i);

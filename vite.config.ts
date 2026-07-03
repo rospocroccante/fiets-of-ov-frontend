@@ -3,6 +3,20 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        // Split the two heaviest, rarely-changing stacks out of the app chunk so a
+        // code change does not invalidate the whole bundle in users' caches.
+        // leaflet-velocity stays out of the list: it is dynamically imported and
+        // must keep its own lazy chunk.
+        manualChunks: {
+          leaflet: ["leaflet", "react-leaflet"],
+          motion: ["framer-motion"],
+        },
+      },
+    },
+  },
   server: {
     proxy: {
       "/api": {
@@ -16,6 +30,9 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
+    // Stubbed globals (fetch, geolocation) are reset after every test so one file's
+    // stubs can never leak into another.
+    unstubGlobals: true,
     // Tests run fully offline against the mock data layer, regardless of any local
     // .env.local that points the dev server at the live backend.
     env: { VITE_API_MODE: "mock" },
