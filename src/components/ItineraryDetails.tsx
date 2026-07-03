@@ -1,5 +1,5 @@
 import type { Itinerary, PlanLeg } from "../api/types";
-import { modeColor } from "../lib/modeColors";
+import { modeGradient } from "../lib/modeColors";
 import { transitLabel } from "../lib/planView";
 
 function hhmm(ms: number): string {
@@ -29,10 +29,11 @@ export function ItineraryDetails({ itinerary }: { itinerary: Itinerary }) {
         {itinerary.legs.map((leg, i) => (
           <li key={i} className="flex gap-3">
             <div className="flex flex-col items-center">
-              {/* Chip colour matches the leg's line colour on the map (lib/modeColors). */}
+              {/* Chip sweeps from the leg's map-line colour into its bright partner
+                  tone (lib/modeColors), so list and map stay recognisably paired. */}
               <span
                 className="flex h-7 min-w-[2rem] items-center justify-center whitespace-nowrap rounded-full px-2 text-xs font-semibold text-white"
-                style={{ backgroundColor: modeColor(leg.mode) }}
+                style={{ backgroundImage: modeGradient(leg.mode) }}
               >
                 {legTitle(leg)}
               </span>

@@ -1,3 +1,4 @@
+import { OPTION_GRADIENTS } from "../lib/gradients";
 import { departureLabel } from "../lib/planView";
 import type { OptionView } from "../lib/planView";
 
@@ -24,13 +25,18 @@ export function AdviceCard({
         selected ? "border-brand ring-2 ring-brand/30" : "border-gray-100 hover:shadow-md"
       }`}
     >
-      <div className="relative mb-3 flex h-24 items-center justify-center rounded-card bg-brand-light">
+      {/* Mode banner: vivid per-mode gradient (lib/gradients), white lettering. */}
+      <div
+        className={`relative mb-3 flex h-24 items-center justify-center rounded-card ${
+          OPTION_GRADIENTS[option.mode] ?? OPTION_GRADIENTS.transit
+        }`}
+      >
         {option.recommended && (
-          <span className="absolute left-3 top-3 rounded-full bg-brand px-3 py-1 text-xs font-semibold text-white">
+          <span className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-brand">
             Recommended
           </span>
         )}
-        <span className="text-2xl font-bold text-brand">{ICON[option.mode]}</span>
+        <span className="text-2xl font-bold text-white">{ICON[option.mode]}</span>
       </div>
 
       <div className="flex items-start justify-between">

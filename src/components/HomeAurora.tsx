@@ -14,14 +14,14 @@ interface Blob {
   pos: Pick<CSSProperties, "top" | "left" | "right" | "bottom">;
 }
 
-// Same family as the transport palette (lib/modeColors): blues and indigo around the
-// brand, teal for water, one soft amber counterpoint.
+// Vivid Fresha-style sweep: violet, fuchsia, cyan, amber and blue at higher
+// saturation, matching the gradient pairs in lib/gradients.
 const BLOBS: Blob[] = [
-  { color: "#60a5fa", size: "36rem", opacity: 0.55, anim: "aurora-a", duration: "23s", delay: "0s", pos: { top: "-6rem", left: "-8rem" } },
-  { color: "#818cf8", size: "32rem", opacity: 0.5, anim: "aurora-b", duration: "27s", delay: "-6s", pos: { top: "-4rem", right: "-6rem" } },
-  { color: "#2dd4bf", size: "30rem", opacity: 0.42, anim: "aurora-c", duration: "31s", delay: "-3s", pos: { bottom: "-8rem", right: "4rem" } },
-  { color: "#fcd34d", size: "28rem", opacity: 0.35, anim: "aurora-b", duration: "25s", delay: "-11s", pos: { bottom: "-6rem", left: "2rem" } },
-  { color: "#93c5fd", size: "26rem", opacity: 0.4, anim: "aurora-a", duration: "29s", delay: "-15s", pos: { top: "28%", left: "34%" } },
+  { color: "#8b5cf6", size: "36rem", opacity: 0.6, anim: "aurora-a", duration: "23s", delay: "0s", pos: { top: "-6rem", left: "-8rem" } },
+  { color: "#e879f9", size: "32rem", opacity: 0.55, anim: "aurora-b", duration: "27s", delay: "-6s", pos: { top: "-4rem", right: "-6rem" } },
+  { color: "#22d3ee", size: "30rem", opacity: 0.5, anim: "aurora-c", duration: "31s", delay: "-3s", pos: { bottom: "-8rem", right: "4rem" } },
+  { color: "#fbbf24", size: "28rem", opacity: 0.42, anim: "aurora-b", duration: "25s", delay: "-11s", pos: { bottom: "-6rem", left: "2rem" } },
+  { color: "#60a5fa", size: "26rem", opacity: 0.48, anim: "aurora-a", duration: "29s", delay: "-15s", pos: { top: "28%", left: "34%" } },
 ];
 
 export function HomeAurora() {

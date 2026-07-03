@@ -18,3 +18,21 @@ const DEFAULT_MODE_COLOR = "#13386E";
 export function modeColor(mode: string): string {
   return MODE_COLORS[mode] ?? DEFAULT_MODE_COLOR;
 }
+
+// A brighter partner tone per mode: chips and badges render a 135deg sweep from the
+// base colour into this one instead of a flat fill.
+const MODE_COLORS_BRIGHT: Record<string, string> = {
+  BICYCLE: "#34d399",
+  WALK: "#cbd5e1",
+  FERRY: "#22d3ee",
+  TRAM: "#fb7185",
+  BUS: "#c084fc",
+  SUBWAY: "#818cf8",
+  RAIL: "#fbbf24",
+};
+
+export function modeGradient(mode: string): string {
+  const from = modeColor(mode);
+  const to = MODE_COLORS_BRIGHT[mode] ?? "#3b82f6";
+  return `linear-gradient(135deg, ${from}, ${to})`;
+}

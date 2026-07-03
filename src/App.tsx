@@ -3,6 +3,7 @@ import { motion, useTransform, useMotionValueEvent } from "framer-motion";
 import { EndpointField } from "./components/EndpointField";
 import { FilterBar } from "./components/FilterBar";
 import { HomeAurora } from "./components/HomeAurora";
+import { CARD_GRADIENTS, PRIMARY_GRADIENT, TEXT_GRADIENT } from "./lib/gradients";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
 import { MapView } from "./components/MapView";
 import type { WeatherLayersState } from "./components/RainRadar";
@@ -28,9 +29,6 @@ const POPULAR: PopularTrip[] = [
   { from: "Amsterdam Zuid", to: "NDSM" },
 ];
 
-// Accents drawn from the transport palette (lib/modeColors family): teal, green,
-// indigo, amber. Rotated across the popular-trip cards.
-const CARD_ACCENTS = ["#0e7490", "#059669", "#4f46e5", "#d97706"];
 
 export default function App() {
   const { progress, containerRef, toMap, toHome, reduced } = useMorphProgress();
@@ -243,7 +241,7 @@ export default function App() {
             <h1 className="text-5xl font-bold leading-tight text-gray-900">
               Bike or transit?
               <br />
-              Let the weather decide.
+              <span className={TEXT_GRADIENT}>Let the weather decide.</span>
             </h1>
             <p className="mx-auto mt-5 max-w-2xl text-lg text-gray-600">
               Plan any trip across Amsterdam and get a rain-aware answer in one tap.
@@ -253,31 +251,22 @@ export default function App() {
             <h2 className="mb-4 text-xl font-semibold text-slate-900">Popular trips</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {POPULAR.map((t, i) => {
-                // One accent per card, rotating through the mode palette family so the
-                // grid ties into the map colours without shouting.
-                const accent = CARD_ACCENTS[i % CARD_ACCENTS.length];
+                // Full vivid gradient per card (Fresha-style), rotating through the
+                // shared pairs so the grid reads colourful but deliberate.
+                const gradient = CARD_GRADIENTS[i % CARD_GRADIENTS.length];
                 return (
                   <button
                     key={`${t.from}-${t.to}`}
                     onClick={() => pickPopular(t)}
                     aria-label={`${t.from} → ${t.to}`}
-                    className="group rounded-card border border-slate-200/70 bg-white/80 p-5 text-left shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:shadow-md"
+                    className={`group rounded-card p-5 text-left text-white shadow-md transition hover:-translate-y-0.5 hover:shadow-lg ${gradient}`}
                   >
-                    <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                      <span
-                        className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: accent }}
-                      />
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-white/70">
                       Popular trip
                     </span>
-                    <p className="mt-3 truncate text-[15px] font-semibold text-slate-900">
-                      {t.from}
-                    </p>
-                    <p className="truncate text-sm text-slate-500">to {t.to}</p>
-                    <span
-                      className="mt-4 inline-block text-xs font-semibold opacity-80 transition group-hover:opacity-100"
-                      style={{ color: accent }}
-                    >
+                    <p className="mt-3 truncate text-[15px] font-semibold">{t.from}</p>
+                    <p className="truncate text-sm text-white/80">to {t.to}</p>
+                    <span className="mt-4 inline-block text-xs font-semibold text-white/90 transition group-hover:translate-x-0.5">
                       Plan this trip {"→"}
                     </span>
                   </button>
@@ -292,7 +281,7 @@ export default function App() {
           className="absolute inset-x-0 top-0 z-20 flex h-16 items-center justify-between border-b border-gray-100 bg-white/95 px-6"
           style={{ opacity: chromeOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
         >
-          <button onClick={goHome} className="text-xl font-bold text-brand">
+          <button onClick={goHome} className={`text-xl font-bold ${TEXT_GRADIENT}`}>
             Fiets of OV
           </button>
           <button className="rounded-full border border-gray-200 px-4 py-1.5 text-sm font-medium">
@@ -336,7 +325,7 @@ export default function App() {
           <button
             aria-label="Search"
             onClick={commitSearch}
-            className="rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-dark"
+            className={`rounded-full px-6 py-3 text-sm font-semibold text-white shadow-md transition hover:brightness-110 ${PRIMARY_GRADIENT}`}
           >
             Search
           </button>
