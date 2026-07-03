@@ -1,15 +1,11 @@
-import type { Advice, Plan, Stop, Place } from "./types";
-import { mockAdviceFor, mockPlanFor, mockStops, mockSearchPlaces } from "./mock";
+import type { Plan, Stop, Place } from "./types";
+import { mockPlanFor, mockStops, mockSearchPlaces } from "./mock";
 
 const MODE = import.meta.env.VITE_API_MODE ?? "mock";
+const BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
 export function isLive(): boolean {
   return MODE === "live";
-}
-
-export async function getAdvice(from: string, to: string): Promise<Advice> {
-  if (!isLive()) return mockAdviceFor(from, to);
-  return liveGetAdvice(from, to);
 }
 
 export async function getStops(lat: number, lon: number, radius = 500): Promise<Stop[]> {
@@ -23,20 +19,17 @@ export async function getPlan(from: string, to: string): Promise<Plan> {
 }
 
 export async function liveGetPlan(from: string, to: string): Promise<Plan> {
-  const base = import.meta.env.VITE_API_BASE ?? "/api";
-  const url = `${base}/v1/plan?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  const url = `${BASE}/v1/plan?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) throw new Error(await errorDetail(res, "plan unavailable"));
-  return (await res.json()) as Plan;
-}
-
-const BASE = import.meta.env.VITE_API_BASE ?? "/api";
-
-export async function liveGetAdvice(from: string, to: string): Promise<Advice> {
-  const url = `${BASE}/v1/advice?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error(await errorDetail(res, "advice unavailable"));
-  return (await res.json()) as Advice;
+  const plan = (await res.json()) as Plan;
+  // The Plan shape is hand-maintained against the backend. Fail with a readable
+  // message on drift instead of letting a TypeError escape from deep inside the
+  // view builder and reach the results panel verbatim.
+  if (!plan || typeof plan.recommendation !== "string" || !Array.isArray(plan.options)) {
+    throw new Error("unexpected server response");
+  }
+  return plan;
 }
 
 export async function liveGetStops(lat: number, lon: number, radius: number): Promise<Stop[]> {

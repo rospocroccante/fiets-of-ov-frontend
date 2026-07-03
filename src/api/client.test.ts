@@ -1,26 +1,61 @@
 import { vi } from "vitest";
-import { liveGetAdvice, liveGetStops } from "./client";
+import { liveGetPlan, liveGetStops } from "./client";
 
-test("liveGetAdvice calls the advice endpoint and returns json", async () => {
-  const payload = {
-    recommendation: "bike",
-    reason: "x",
-    bike_minutes: 10,
-    transit_minutes: 12,
-    max_rain_mm_per_h: 0,
-    rain_expected: false,
-  };
-  const fetchMock = vi.fn().mockResolvedValue({
-    ok: true,
-    json: async () => payload,
-  });
+const PLAN = {
+  recommendation: "bike",
+  reason: "dry",
+  max_rain_mm_per_h: 0,
+  rain_expected: false,
+  origin: { name: null, lat: 52.37, lon: 4.89 },
+  destination: { name: null, lat: 52.4, lon: 4.9 },
+  options: [],
+};
+
+test("liveGetPlan calls the plan endpoint with encoded from/to and returns json", async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => PLAN });
   vi.stubGlobal("fetch", fetchMock);
 
-  const a = await liveGetAdvice("Centraal", "Vondelpark");
-  expect(a.bike_minutes).toBe(10);
+  const plan = await liveGetPlan("Amsterdam Zuid", "NDSM werf");
+  expect(plan.recommendation).toBe("bike");
   const calledUrl = fetchMock.mock.calls[0][0] as string;
-  expect(calledUrl).toContain("/api/v1/advice");
-  expect(calledUrl).toContain("from=Centraal");
+  expect(calledUrl).toContain("/api/v1/plan");
+  expect(calledUrl).toContain("from=Amsterdam%20Zuid");
+  expect(calledUrl).toContain("to=NDSM%20werf");
+  vi.unstubAllGlobals();
+});
+
+test("liveGetPlan surfaces the backend's error detail on a non-ok response", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ detail: "no route found between these points" }),
+    }),
+  );
+  await expect(liveGetPlan("a", "b")).rejects.toThrow("no route found between these points");
+  vi.unstubAllGlobals();
+});
+
+test("liveGetPlan falls back to a generic message when the error body is not json", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => {
+        throw new Error("not json");
+      },
+    }),
+  );
+  await expect(liveGetPlan("a", "b")).rejects.toThrow("plan unavailable");
+  vi.unstubAllGlobals();
+});
+
+test("liveGetPlan rejects a drifted response shape with a readable error", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({ ok: true, json: async () => ({ recommendation: "bike" }) }),
+  );
+  await expect(liveGetPlan("a", "b")).rejects.toThrow("unexpected server response");
   vi.unstubAllGlobals();
 });
 
