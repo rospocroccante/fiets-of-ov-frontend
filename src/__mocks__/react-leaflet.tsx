@@ -46,10 +46,21 @@ export function Tooltip({ children }: { children?: React.ReactNode }) {
   return <span>{children}</span>;
 }
 
+// Test spy: records the last scrollWheelZoom enable/disable driven through useMap.
+export const __wheelZoom = { enabled: null as boolean | null };
+
 export function useMap() {
   return {
     fitBounds: () => {},
     setView: () => {},
+    scrollWheelZoom: {
+      enable: () => {
+        __wheelZoom.enabled = true;
+      },
+      disable: () => {
+        __wheelZoom.enabled = false;
+      },
+    },
   };
 }
 

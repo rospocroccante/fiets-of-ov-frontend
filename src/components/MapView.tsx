@@ -38,6 +38,20 @@ function legCoords(leg: PlanLeg): [number, number][] {
   return pts;
 }
 
+// react-leaflet v4 freezes MapContainer options at creation, so a changing
+// scrollWheelZoom prop is silently ignored; the handler must be driven imperatively.
+// The morph mounts the map non-interactive and flips `interactive` on completion.
+function MapInteraction({ interactive }: { interactive: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    const wheel = (map as L.Map).scrollWheelZoom;
+    if (!wheel || typeof wheel.enable !== "function") return;
+    if (interactive) wheel.enable();
+    else wheel.disable();
+  }, [map, interactive]);
+  return null;
+}
+
 function FitRoute({ coords, fallback }: { coords: [number, number][]; fallback: LatLon | null }) {
   const map = useMap();
   useEffect(() => {
@@ -166,13 +180,16 @@ export function MapView({
   };
 
   return (
-    <div className="relative h-full w-full">
+    // The picking cursor lives on the wrapper (see .map-picking in index.css):
+    // MapContainer's className is frozen at mount, so it cannot carry a toggling class.
+    <div className={`relative h-full w-full ${picking ? "map-picking" : ""}`}>
       <MapContainer
         center={AMS}
         zoom={13}
-        className={`h-full w-full rounded-card ${picking ? "cursor-crosshair" : ""}`}
+        className="h-full w-full rounded-card"
         scrollWheelZoom={interactive}
       >
+        <MapInteraction interactive={interactive} />
         <TileLayer
           attribution="&copy; OpenStreetMap, &copy; CARTO"
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"

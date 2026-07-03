@@ -6,6 +6,7 @@ import {
   __fireMapClick,
   __fireMapContextMenu,
   __fireMarkerDragEnd,
+  __wheelZoom,
 } from "../__mocks__/react-leaflet";
 import type { Itinerary } from "../api/types";
 
@@ -150,6 +151,20 @@ test("renders without error when interactive={false}", () => {
     />
   );
   expect(container.querySelector(".leaflet-container")).toBeTruthy();
+});
+
+test("interactive prop drives wheel zoom imperatively (options are frozen at mount)", () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const view = (interactive: boolean) => (
+    <QueryClientProvider client={client}>
+      <MapView origin={null} destination={null} stops={[]} route={null} interactive={interactive} />
+    </QueryClientProvider>
+  );
+  const { rerender } = render(view(false));
+  expect(__wheelZoom.enabled).toBe(false);
+  // The morph completes: the same mounted map must gain wheel zoom.
+  rerender(view(true));
+  expect(__wheelZoom.enabled).toBe(true);
 });
 
 test("radar readout (legend) renders only when radar+rain are enabled via props", () => {

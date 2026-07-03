@@ -5,6 +5,15 @@
 html, body, #root { height: 100%; margin: 0; }
 body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; color: #111; }
 
+/* When picking a point on the map, the crosshair must beat Leaflet's own grab cursor
+   (set on the container by .leaflet-grab). The class sits on MapView's wrapper because
+   react-leaflet freezes the container's className at mount. */
+.map-picking .leaflet-container,
+.map-picking .leaflet-grab,
+.map-picking .leaflet-interactive {
+  cursor: crosshair !important;
+}
+
 /* Home background: soft blurred colour blobs drifting slowly (Fresha-style aurora).
    Only transform/opacity animate, so it stays on the GPU compositor and off the main
    thread. Each blob picks one of these paths with its own duration/delay for an
