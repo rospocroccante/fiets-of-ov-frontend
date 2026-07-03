@@ -41,7 +41,7 @@ export function FilterBar({
     <div className="flex items-center justify-between gap-3 py-3">
       <div className="flex items-center gap-2">
         <button className="rounded-full bg-gray-100 px-4 py-1.5 text-sm font-medium">Bike</button>
-        <button className="rounded-full bg-black px-4 py-1.5 text-sm font-medium text-white">
+        <button className="rounded-full bg-brand px-4 py-1.5 text-sm font-medium text-white">
           Transit
         </button>
       </div>

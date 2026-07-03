@@ -14,11 +14,13 @@ interface Blob {
   pos: Pick<CSSProperties, "top" | "left" | "right" | "bottom">;
 }
 
+// Same family as the transport palette (lib/modeColors): blues and indigo around the
+// brand, teal for water, one soft amber counterpoint.
 const BLOBS: Blob[] = [
-  { color: "#6aa8ff", size: "36rem", opacity: 0.55, anim: "aurora-a", duration: "23s", delay: "0s", pos: { top: "-6rem", left: "-8rem" } },
-  { color: "#a78bfa", size: "32rem", opacity: 0.5, anim: "aurora-b", duration: "27s", delay: "-6s", pos: { top: "-4rem", right: "-6rem" } },
-  { color: "#5eead4", size: "30rem", opacity: 0.42, anim: "aurora-c", duration: "31s", delay: "-3s", pos: { bottom: "-8rem", right: "4rem" } },
-  { color: "#f5a8d0", size: "28rem", opacity: 0.42, anim: "aurora-b", duration: "25s", delay: "-11s", pos: { bottom: "-6rem", left: "2rem" } },
+  { color: "#60a5fa", size: "36rem", opacity: 0.55, anim: "aurora-a", duration: "23s", delay: "0s", pos: { top: "-6rem", left: "-8rem" } },
+  { color: "#818cf8", size: "32rem", opacity: 0.5, anim: "aurora-b", duration: "27s", delay: "-6s", pos: { top: "-4rem", right: "-6rem" } },
+  { color: "#2dd4bf", size: "30rem", opacity: 0.42, anim: "aurora-c", duration: "31s", delay: "-3s", pos: { bottom: "-8rem", right: "4rem" } },
+  { color: "#fcd34d", size: "28rem", opacity: 0.35, anim: "aurora-b", duration: "25s", delay: "-11s", pos: { bottom: "-6rem", left: "2rem" } },
   { color: "#93c5fd", size: "26rem", opacity: 0.4, anim: "aurora-a", duration: "29s", delay: "-15s", pos: { top: "28%", left: "34%" } },
 ];
 

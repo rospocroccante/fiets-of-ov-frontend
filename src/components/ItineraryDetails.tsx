@@ -1,4 +1,5 @@
 import type { Itinerary, PlanLeg } from "../api/types";
+import { modeColor } from "../lib/modeColors";
 import { transitLabel } from "../lib/planView";
 
 function hhmm(ms: number): string {
@@ -7,10 +8,6 @@ function hhmm(ms: number): string {
     minute: "2-digit",
     timeZone: "Europe/Amsterdam",
   });
-}
-
-function isTransit(mode: string): boolean {
-  return mode !== "WALK" && mode !== "BICYCLE";
 }
 
 function legTitle(leg: PlanLeg): string {
@@ -32,10 +29,10 @@ export function ItineraryDetails({ itinerary }: { itinerary: Itinerary }) {
         {itinerary.legs.map((leg, i) => (
           <li key={i} className="flex gap-3">
             <div className="flex flex-col items-center">
+              {/* Chip colour matches the leg's line colour on the map (lib/modeColors). */}
               <span
-                className={`flex h-7 min-w-[2rem] items-center justify-center whitespace-nowrap rounded-full px-2 text-xs font-semibold ${
-                  isTransit(leg.mode) ? "bg-brand text-white" : "bg-gray-100 text-gray-700"
-                }`}
+                className="flex h-7 min-w-[2rem] items-center justify-center whitespace-nowrap rounded-full px-2 text-xs font-semibold text-white"
+                style={{ backgroundColor: modeColor(leg.mode) }}
               >
                 {legTitle(leg)}
               </span>

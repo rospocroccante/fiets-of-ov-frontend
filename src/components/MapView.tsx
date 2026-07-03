@@ -14,6 +14,7 @@ import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
 import type { Itinerary, PlanLeg, Stop } from "../api/types";
 import { useRainRadar } from "../hooks/useRainRadar";
 import { useWindField } from "../hooks/useWindField";
+import { modeColor } from "../lib/modeColors";
 import { decodePolyline } from "../lib/polyline";
 import { RadarOverlay, RadarReadout } from "./RainRadar";
 import type { WeatherLayersState } from "./RainRadar";
@@ -23,8 +24,7 @@ type LatLon = { lat: number; lon: number };
 
 const AMS: [number, number] = [52.3728, 4.8936];
 const BRAND = "#13386E";
-const BIKE = "#16a34a";
-const WALK = "#94a3b8";
+const FLAG = "#0B2147";
 
 // A leg's drawable path: its real geometry when present, else a straight line endpoints.
 // Ferries are always drawn dock-to-dock: OTP's shape follows the line's full stop
@@ -93,9 +93,12 @@ function MapEvents({
   return null;
 }
 
-// A map marker rendered with a Google Material Symbol glyph. `anchorBottom` puts the
-// anchor at the glyph's tip (teardrop pins); otherwise it is centered (ring markers).
-function pinIcon(icon: string, color: string, anchorBottom: boolean) {
+// A map marker rendered with a Google Material Symbol glyph. The anchor names the
+// point of the glyph that must sit on the coordinate: "tip" for teardrop pins,
+// "pole" for the checkered flag (its mast is at the glyph's bottom-left).
+type PinAnchor = "tip" | "pole";
+
+function pinIcon(icon: string, color: string, anchor: PinAnchor) {
   const size = 34;
   return L.divIcon({
     className: "fov-pin",
@@ -104,7 +107,7 @@ function pinIcon(icon: string, color: string, anchorBottom: boolean) {
       `color:${color};font-variation-settings:'FILL' 1,'wght' 600;` +
       `filter:drop-shadow(0 1px 2px rgba(0,0,0,0.45));">${icon}</span>`,
     iconSize: [size, size],
-    iconAnchor: anchorBottom ? [size / 2, size] : [size / 2, size / 2],
+    iconAnchor: anchor === "tip" ? [size / 2, size] : [size * 0.22, size],
   });
 }
 
@@ -113,20 +116,20 @@ function Pin({
   icon,
   color,
   which,
-  anchorBottom,
+  anchor,
   onMovePoint,
 }: {
   at: LatLon;
   icon: string;
   color: string;
   which: "start" | "end";
-  anchorBottom: boolean;
+  anchor: PinAnchor;
   onMovePoint?: (which: "start" | "end", c: LatLon) => void;
 }) {
   return (
     <Marker
       position={[at.lat, at.lon]}
-      icon={pinIcon(icon, color, anchorBottom)}
+      icon={pinIcon(icon, color, anchor)}
       title={which}
       draggable={!!onMovePoint}
       eventHandlers={{
@@ -192,12 +195,10 @@ export function MapView({
         zoom={13}
         className="h-full w-full rounded-card"
         scrollWheelZoom={interactive}
+        attributionControl={false}
       >
         <MapInteraction interactive={interactive} />
-        <TileLayer
-          attribution="&copy; OpenStreetMap, &copy; CARTO"
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-        />
+        <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
         {showWeather && wLayers.rain && <RadarOverlay frames={rain.frames} />}
         {showWeather && wLayers.wind && <WindVelocityLayer data={wind.data} />}
         <MapEvents onPick={onPick} onContextMenu={handleMenu} />
@@ -216,45 +217,42 @@ export function MapView({
         );
       })}
 
-      {/* The route itself: transit solid brand, bike green dashed, walking grey dotted,
-          ferry brand dotted (a crossing over water, not a street being ridden). */}
+      {/* The route itself: solid lines throughout, one colour per transport mode
+          (see lib/modeColors, shared with the step-by-step chips). */}
       {legs.map((leg, i) => {
         const coords = legCoords(leg);
         if (coords.length < 2) return null;
-        const walk = leg.mode === "WALK";
-        const bike = leg.mode === "BICYCLE";
-        const ferry = leg.mode === "FERRY";
         return (
           <Polyline
             key={`leg-${i}`}
             positions={coords as LatLngExpression[]}
             pathOptions={{
-              color: walk ? WALK : bike ? BIKE : BRAND,
-              weight: walk ? 4 : 5,
-              dashArray: walk ? "1 9" : bike ? "8 6" : ferry ? "1 12" : undefined,
+              color: modeColor(leg.mode),
+              weight: leg.mode === "WALK" ? 4 : 5,
               lineCap: "round",
             }}
           />
         );
       })}
 
+      {/* Start is the position pin, arrival is the checkered finish flag. */}
       {origin && (
         <Pin
           at={origin}
-          icon="trip_origin"
+          icon="location_on"
           color={BRAND}
           which="start"
-          anchorBottom={false}
+          anchor="tip"
           onMovePoint={onMovePoint}
         />
       )}
       {destination && (
         <Pin
           at={destination}
-          icon="location_on"
-          color="#0B2147"
+          icon="sports_score"
+          color={FLAG}
           which="end"
-          anchorBottom
+          anchor="pole"
           onMovePoint={onMovePoint}
         />
       )}

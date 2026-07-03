@@ -28,6 +28,10 @@ const POPULAR: PopularTrip[] = [
   { from: "Amsterdam Zuid", to: "NDSM" },
 ];
 
+// Accents drawn from the transport palette (lib/modeColors family): teal, green,
+// indigo, amber. Rotated across the popular-trip cards.
+const CARD_ACCENTS = ["#0e7490", "#059669", "#4f46e5", "#d97706"];
+
 export default function App() {
   const { progress, containerRef, toMap, toHome, reduced } = useMorphProgress();
 
@@ -246,23 +250,39 @@ export default function App() {
             </p>
           </section>
           <section className="mx-auto mt-[7.5rem] w-full max-w-4xl px-6 text-left">
-            <h2 className="mb-4 text-xl font-semibold">Popular trips</h2>
+            <h2 className="mb-4 text-xl font-semibold text-slate-900">Popular trips</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {POPULAR.map((t) => (
-                <button
-                  key={`${t.from}-${t.to}`}
-                  onClick={() => pickPopular(t)}
-                  aria-label={`${t.from} → ${t.to}`}
-                  className="rounded-card border border-gray-100 bg-white p-4 text-left shadow-sm transition hover:shadow-md"
-                >
-                  <div className="flex h-20 items-center justify-center rounded-card bg-brand-light text-sm font-semibold text-brand">
-                    {t.from} {"→"} {t.to}
-                  </div>
-                  <p className="mt-3 text-sm font-medium text-gray-700">
-                    {t.from} {"→"} {t.to}
-                  </p>
-                </button>
-              ))}
+              {POPULAR.map((t, i) => {
+                // One accent per card, rotating through the mode palette family so the
+                // grid ties into the map colours without shouting.
+                const accent = CARD_ACCENTS[i % CARD_ACCENTS.length];
+                return (
+                  <button
+                    key={`${t.from}-${t.to}`}
+                    onClick={() => pickPopular(t)}
+                    aria-label={`${t.from} → ${t.to}`}
+                    className="group rounded-card border border-slate-200/70 bg-white/80 p-5 text-left shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:shadow-md"
+                  >
+                    <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      <span
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: accent }}
+                      />
+                      Popular trip
+                    </span>
+                    <p className="mt-3 truncate text-[15px] font-semibold text-slate-900">
+                      {t.from}
+                    </p>
+                    <p className="truncate text-sm text-slate-500">to {t.to}</p>
+                    <span
+                      className="mt-4 inline-block text-xs font-semibold opacity-80 transition group-hover:opacity-100"
+                      style={{ color: accent }}
+                    >
+                      Plan this trip {"→"}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </section>
         </motion.div>
@@ -316,7 +336,7 @@ export default function App() {
           <button
             aria-label="Search"
             onClick={commitSearch}
-            className="rounded-full bg-black px-6 py-3 text-sm font-semibold text-white"
+            className="rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-dark"
           >
             Search
           </button>
