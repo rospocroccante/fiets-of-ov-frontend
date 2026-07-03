@@ -18,11 +18,18 @@ export function PlaceInput({ value, placeholder, onChange, onSelect }: Props) {
   // but must not pop the dropdown over the results.
   const typedHere = useRef(false);
   const [query, setQuery] = useState(value);
+  const lastValue = useRef(value);
 
   useEffect(() => {
+    if (value === lastValue.current) return;
+    lastValue.current = value;
+    // A controlled parent echoes each keystroke straight back as `value`. That echo
+    // (value already equal to what was typed) is not an external change: resetting
+    // typedHere on it would close the dropdown on every keystroke.
+    if (value === query) return;
     typedHere.current = false;
     setQuery(value);
-  }, [value]);
+  }, [value, query]);
 
   useEffect(() => {
     if (justSelected.current) {
@@ -67,6 +74,7 @@ export function PlaceInput({ value, placeholder, onChange, onSelect }: Props) {
         value={query}
         onChange={handleChange}
         onFocus={() => suggestions.length > 0 && setOpen(true)}
+        onBlur={() => setOpen(false)}
       />
       {open && (
         <ul

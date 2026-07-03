@@ -1,5 +1,29 @@
 import { render, screen, fireEvent } from "@testing-library/react";
+import { useState } from "react";
 import { PlaceInput } from "./PlaceInput";
+
+// The real app wires PlaceInput as a controlled input: every keystroke goes up via
+// onChange and comes back down as `value`. The regression this guards: treating that
+// echo as an external change killed the dropdown on every keystroke.
+function ControlledHarness() {
+  const [text, setText] = useState("");
+  return <PlaceInput value={text} placeholder="From" onChange={setText} onSelect={() => {}} />;
+}
+
+test("typing with real controlled wiring (parent echoes value) opens suggestions", async () => {
+  render(<ControlledHarness />);
+  fireEvent.change(screen.getByPlaceholderText("From"), { target: { value: "vondel" } });
+  expect(await screen.findByRole("listbox")).toBeInTheDocument();
+});
+
+test("blurring the input closes the suggestion list", async () => {
+  render(<ControlledHarness />);
+  const input = screen.getByPlaceholderText("From");
+  fireEvent.change(input, { target: { value: "vondel" } });
+  await screen.findByRole("listbox");
+  fireEvent.blur(input);
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+});
 
 test("shows suggestions and selects one (mock mode)", async () => {
   const onChange = vi.fn();
