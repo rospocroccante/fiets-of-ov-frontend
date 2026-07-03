@@ -46,7 +46,3 @@ export function useMapEvents(handlers: { click?: (e: { latlng: { lat: number; ln
 export function __fireMapClick(lat: number, lng: number) {
   _clickHandler?.({ latlng: { lat, lng } });
 }
-
-export function WMSTileLayer() {
-  return null;
-}
