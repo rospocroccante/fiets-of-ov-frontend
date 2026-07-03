@@ -12,13 +12,12 @@ import {
 import L from "leaflet";
 import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
 import type { Itinerary, PlanLeg, Stop } from "../api/types";
-import { useCloudFrames } from "../hooks/useCloudFrames";
 import { useRainRadar } from "../hooks/useRainRadar";
 import { useWindField } from "../hooks/useWindField";
 import { decodePolyline } from "../lib/polyline";
 import { RadarControl, RadarOverlay } from "./RainRadar";
 import type { WeatherLayersState } from "./RainRadar";
-import { CloudOverlay, WindVelocityLayer } from "./WeatherLive";
+import { WindVelocityLayer } from "./WeatherLive";
 
 type LatLon = { lat: number; lon: number };
 
@@ -148,17 +147,16 @@ export function MapView({
   const legs = route?.legs ?? [];
   const allCoords = legs.flatMap(legCoords);
   const [menu, setMenu] = useState<MenuState | null>(null);
-  // Mixed mode: live precipitation radar, wind arrows and cloud cover layered
-  // between basemap and route.
+  // Mixed mode: live precipitation radar and wind particles layered between
+  // basemap and route. No cloud layer: satellite cloud fields resolve ~1 km and
+  // only read well at country zoom, useless at the city zoom this map lives at.
   const [radar, setRadar] = useState(false);
   const [wLayers, setWLayers] = useState<WeatherLayersState>({
     rain: true,
-    clouds: true,
     wind: true,
   });
   const [radarFrameTime, setRadarFrameTime] = useState<number | null>(null);
   const radarFrames = useRainRadar(radar && wLayers.rain);
-  const cloudTimes = useCloudFrames(radar && wLayers.clouds);
   const windField = useWindField(radar && wLayers.wind);
 
   const handleMenu = (m: MenuState) => {
@@ -178,7 +176,6 @@ export function MapView({
           attribution="&copy; OpenStreetMap, &copy; CARTO"
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
         />
-        {radar && wLayers.clouds && <CloudOverlay times={cloudTimes} />}
         {radar && wLayers.rain && (
           <RadarOverlay frames={radarFrames} onFrameChange={setRadarFrameTime} />
         )}

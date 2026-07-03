@@ -54,13 +54,11 @@ export function RadarOverlay({
 
 export interface WeatherLayersState {
   rain: boolean;
-  clouds: boolean;
   wind: boolean;
 }
 
 const LAYER_LABEL: Record<keyof WeatherLayersState, string> = {
   rain: "Rain",
-  clouds: "Clouds",
   wind: "Wind",
 };
 
