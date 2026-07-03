@@ -171,8 +171,12 @@ export function MapView({
   // the viewport back mid-pan); tie it to route identity instead.
   const allCoords = useMemo(() => (route?.legs ?? []).flatMap(legCoords), [route]);
   const [menu, setMenu] = useState<MenuState | null>(null);
-  const radarFrames = useRainRadar(radar && wLayers.rain);
-  const windField = useWindField(radar && wLayers.wind);
+  // Weather layers pause entirely while the map is not interactive (scrolled back to
+  // the home view, mid-morph): the map stays mounted at opacity 0 there, and the
+  // particle rAF loop plus the radar frame interval would otherwise burn CPU unseen.
+  const showWeather = radar && interactive;
+  const rain = useRainRadar(showWeather && wLayers.rain);
+  const wind = useWindField(showWeather && wLayers.wind);
 
   const handleMenu = (m: MenuState) => {
     if (m.x < 0) setMenu(null);
@@ -194,8 +198,8 @@ export function MapView({
           attribution="&copy; OpenStreetMap, &copy; CARTO"
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
         />
-        {radar && wLayers.rain && <RadarOverlay frames={radarFrames} />}
-        {radar && wLayers.wind && <WindVelocityLayer data={windField} />}
+        {showWeather && wLayers.rain && <RadarOverlay frames={rain.frames} />}
+        {showWeather && wLayers.wind && <WindVelocityLayer data={wind.data} />}
         <MapEvents onPick={onPick} onContextMenu={handleMenu} />
         <FitRoute coords={allCoords} fallback={origin ?? destination} />
 
@@ -266,7 +270,13 @@ export function MapView({
         </CircleMarker>
       ))}
       </MapContainer>
-      {radar && wLayers.rain && <RadarReadout />}
+      {showWeather && (
+        <RadarReadout
+          showRain={wLayers.rain}
+          rainError={wLayers.rain && rain.error}
+          windError={wLayers.wind && wind.error}
+        />
+      )}
 
       {menu && (
         <div

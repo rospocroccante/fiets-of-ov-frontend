@@ -103,15 +103,25 @@ export function RadarControls({
   );
 }
 
-// On-map readout for the rain layer: the frame clock (so the user knows whether they
-// are looking at the past sweep or the nowcast) and the intensity legend. The rain
-// layer only paints where precipitation is, so on a dry day the map stays clean — the
-// legend is the cue that the radar is live anyway. Subscribes to the frame store so the
-// 700ms clock update is isolated to this chip.
-export function RadarReadout() {
+// On-map readout for the weather layers: the rain frame clock (so the user knows
+// whether they are looking at the past sweep or the nowcast), the intensity legend,
+// and explicit unavailability chips. The rain layer only paints where precipitation
+// is, so on a dry day the map stays clean — the legend is the cue that the radar is
+// live; and a failed feed must say so, or an outage reads as "dry". Subscribes to the
+// frame store so the 700ms clock update is isolated to this chip.
+export function RadarReadout({
+  showRain,
+  rainError,
+  windError,
+}: {
+  showRain: boolean;
+  rainError: boolean;
+  windError: boolean;
+}) {
   const frameTime = useRadarFrame();
+  const rainLive = showRain && !rainError;
   const label =
-    frameTime != null
+    rainLive && frameTime != null
       ? new Date(frameTime * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       : null;
   return (
@@ -121,16 +131,28 @@ export function RadarReadout() {
           {label}
         </span>
       )}
-      <span className="flex items-center gap-1.5 rounded-full bg-white/90 px-2 py-1 text-[10px] font-medium text-gray-600 shadow">
-        <span>light</span>
-        <span
-          className="h-1.5 w-16 rounded-full"
-          style={{
-            background: "linear-gradient(90deg, #9be1ff, #2f80ed, #7b2ff7, #e63946)",
-          }}
-        />
-        <span>heavy</span>
-      </span>
+      {rainError && (
+        <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-red-600 shadow">
+          Rain radar unavailable
+        </span>
+      )}
+      {windError && (
+        <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-red-600 shadow">
+          Wind data unavailable
+        </span>
+      )}
+      {rainLive && (
+        <span className="flex items-center gap-1.5 rounded-full bg-white/90 px-2 py-1 text-[10px] font-medium text-gray-600 shadow">
+          <span>light</span>
+          <span
+            className="h-1.5 w-16 rounded-full"
+            style={{
+              background: "linear-gradient(90deg, #9be1ff, #2f80ed, #7b2ff7, #e63946)",
+            }}
+          />
+          <span>heavy</span>
+        </span>
+      )}
     </div>
   );
 }

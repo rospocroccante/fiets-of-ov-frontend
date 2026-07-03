@@ -29,16 +29,17 @@ test("builds tile URLs from the RainViewer index: last 6 past frames + 2 nowcast
 
   const { result } = renderHook(() => useRainRadar(true), { wrapper });
 
-  await waitFor(() => expect(result.current).toHaveLength(8));
+  await waitFor(() => expect(result.current.frames).toHaveLength(8));
   // First frame is the 7th-from-last past snapshot; last is the second nowcast.
-  expect(result.current[0].time).toBe(past[7].time);
-  expect(result.current[0].url).toBe(
+  expect(result.current.frames[0].time).toBe(past[7].time);
+  expect(result.current.frames[0].url).toBe(
     `https://tc.test/v2/radar/${past[7].time}/512/{z}/{x}/{y}/2/1_1.png`,
   );
-  expect(result.current[7].time).toBe(9600);
-  expect(result.current[7].url).toBe(
+  expect(result.current.frames[7].time).toBe(9600);
+  expect(result.current.frames[7].url).toBe(
     "https://tc.test/v2/radar/nowcast_9600/512/{z}/{x}/{y}/2/1_1.png",
   );
+  expect(result.current.error).toBe(false);
 });
 
 test("disabled hook never fetches", () => {
@@ -46,4 +47,14 @@ test("disabled hook never fetches", () => {
   vi.stubGlobal("fetch", fetchMock);
   renderHook(() => useRainRadar(false), { wrapper });
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test("a failed or malformed index surfaces error instead of silent emptiness", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: true, json: async () => ({ host: "https://tc.test" }) })),
+  );
+  const { result } = renderHook(() => useRainRadar(true), { wrapper });
+  await waitFor(() => expect(result.current.error).toBe(true));
+  expect(result.current.frames).toEqual([]);
 });

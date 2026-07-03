@@ -196,3 +196,25 @@ test("radar readout (legend) renders only when radar+rain are enabled via props"
   );
   expect(screen.getByText("light")).toBeInTheDocument();
 });
+
+test("weather layers pause while the map is not interactive (hidden behind the home)", () => {
+  const fetchMock = vi.fn(async () => ({
+    ok: true,
+    json: async () => ({ host: "https://tc.test", radar: { past: [], nowcast: [] } }),
+  }));
+  vi.stubGlobal("fetch", fetchMock);
+  renderMap(
+    <MapView
+      origin={null}
+      destination={null}
+      stops={[]}
+      route={null}
+      radar
+      wLayers={{ rain: true, wind: true }}
+      interactive={false}
+    />,
+  );
+  // No readout on screen and no weather fetches while invisible.
+  expect(screen.queryByText("light")).toBeNull();
+  expect(fetchMock).not.toHaveBeenCalled();
+});

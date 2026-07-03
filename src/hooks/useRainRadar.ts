@@ -31,15 +31,28 @@ export const RADAR_TILE_OPTIONS = { tileSize: 512, zoomOffset: -1, maxNativeZoom
 const PAST_FRAMES = 6;
 const NOWCAST_FRAMES = 2;
 
-export function useRainRadar(enabled: boolean): RadarFrame[] {
+export interface RainRadarState {
+  frames: RadarFrame[];
+  // Surfaced so the UI can say "radar unavailable" instead of silently showing a
+  // clean map that reads as "dry" during an outage.
+  error: boolean;
+}
+
+export function useRainRadar(enabled: boolean): RainRadarState {
   const query = useQuery<RadarFrame[]>({
     queryKey: ["rain-radar"],
     enabled,
     refetchInterval: 5 * 60 * 1000,
-    queryFn: async () => {
-      const res = await fetch(INDEX_URL);
+    // The index refreshes ~every 5 minutes: re-enabling the layer (chip toggle,
+    // coming back to the map) within that window must not refetch.
+    staleTime: 5 * 60 * 1000,
+    queryFn: async ({ signal }) => {
+      const res = await fetch(INDEX_URL, { signal });
       if (!res.ok) throw new Error(`radar index failed: ${res.status}`);
       const data = (await res.json()) as RainViewerMaps;
+      if (!Array.isArray(data?.radar?.past) || !Array.isArray(data?.radar?.nowcast)) {
+        throw new Error("radar index: unexpected shape");
+      }
       const frames = [
         ...data.radar.past.slice(-PAST_FRAMES),
         ...data.radar.nowcast.slice(0, NOWCAST_FRAMES),
@@ -47,5 +60,5 @@ export function useRainRadar(enabled: boolean): RadarFrame[] {
       return frames.map((f) => ({ time: f.time, url: `${data.host}${f.path}${TILE_SUFFIX}` }));
     },
   });
-  return query.data ?? [];
+  return { frames: query.data ?? [], error: query.isError };
 }

@@ -28,17 +28,27 @@ test("hook builds the two grib-style U/V records from the 81-point grid", async 
   vi.stubGlobal("fetch", fetchMock);
 
   const { result } = renderHook(() => useWindField(true), { wrapper });
-  await waitFor(() => expect(result.current).not.toBeNull());
+  await waitFor(() => expect(result.current.data).not.toBeNull());
 
   const url = fetchMock.mock.calls[0][0];
   expect(url).toContain("wind_speed_unit=ms");
   expect(url.match(/latitude=([\d.,]+)/)![1].split(",")).toHaveLength(81);
 
-  const [u, v] = result.current!;
+  const [u, v] = result.current.data!;
   expect(u.header).toMatchObject({ parameterCategory: 2, parameterNumber: 2, nx: 9, ny: 9 });
   expect(v.header.parameterNumber).toBe(3);
   expect(u.header.la1).toBeGreaterThan(u.header.la2); // scan starts at the north edge
   expect(u.data).toHaveLength(81);
   expect(u.data[0]).toBeCloseTo(5); // from the west -> eastward u
   expect(v.data[0]).toBeCloseTo(0);
+});
+
+test("an upstream failure surfaces error instead of silent null", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })),
+  );
+  const { result } = renderHook(() => useWindField(true), { wrapper });
+  await waitFor(() => expect(result.current.error).toBe(true));
+  expect(result.current.data).toBeNull();
 });

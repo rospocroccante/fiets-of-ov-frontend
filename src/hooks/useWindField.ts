@@ -55,14 +55,22 @@ function gridUrl(): string {
   );
 }
 
+export interface WindFieldState {
+  data: VelocityRecord[] | null;
+  error: boolean;
+}
+
 // leaflet-velocity's grib-json shape: one record for U (2,2), one for V (2,3).
-export function useWindField(enabled: boolean): VelocityRecord[] | null {
+export function useWindField(enabled: boolean): WindFieldState {
   const query = useQuery<VelocityRecord[]>({
     queryKey: ["wind-field"],
     enabled,
     refetchInterval: 15 * 60 * 1000,
-    queryFn: async () => {
-      const res = await fetch(gridUrl());
+    // Current conditions change slowly; a chip re-toggle within the refresh window
+    // must not refetch the 81-point grid.
+    staleTime: 15 * 60 * 1000,
+    queryFn: async ({ signal }) => {
+      const res = await fetch(gridUrl(), { signal });
       if (!res.ok) throw new Error(`wind field failed: ${res.status}`);
       const points = (await res.json()) as OpenMeteoPoint[];
       if (!Array.isArray(points) || points.length !== NX * NY) {
@@ -91,5 +99,5 @@ export function useWindField(enabled: boolean): VelocityRecord[] | null {
       ];
     },
   });
-  return query.data ?? null;
+  return { data: query.data ?? null, error: query.isError };
 }
