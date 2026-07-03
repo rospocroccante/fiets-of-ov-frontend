@@ -152,7 +152,7 @@ test("renders without error when interactive={false}", () => {
   expect(container.querySelector(".leaflet-container")).toBeTruthy();
 });
 
-test("radar toggle switches mixed mode on and off", () => {
+test("radar readout (legend) renders only when radar+rain are enabled via props", () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => ({
@@ -160,18 +160,24 @@ test("radar toggle switches mixed mode on and off", () => {
       json: async () => ({ host: "https://tc.test", radar: { past: [], nowcast: [] } }),
     })),
   );
-  renderMap(<MapView origin={null} destination={null} stops={[]} route={null} />);
-  const btn = screen.getByRole("button", { name: "Radar" });
-  expect(btn).toHaveAttribute("aria-pressed", "false");
-  fireEvent.click(btn);
-  expect(btn).toHaveAttribute("aria-pressed", "true");
-  // Legend is the cue that the layer is live even on a dry (fully transparent) day.
-  expect(screen.getByText("light")).toBeInTheDocument();
-  // Per-layer chips appear with the master toggle.
-  expect(screen.getByRole("button", { name: "Rain" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByRole("button", { name: "Wind" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.queryByRole("button", { name: "Clouds" })).toBeNull();
-  fireEvent.click(btn);
-  expect(btn).toHaveAttribute("aria-pressed", "false");
+  // Radar off by default: no legend on the map. The toggle now lives in the filter bar,
+  // so MapView only reflects the radar/wLayers props it is handed.
+  const { unmount } = renderMap(
+    <MapView origin={null} destination={null} stops={[]} route={null} />,
+  );
   expect(screen.queryByText("light")).toBeNull();
+  unmount();
+
+  // Radar + rain on: the intensity legend is the cue the layer is live even on a dry day.
+  renderMap(
+    <MapView
+      origin={null}
+      destination={null}
+      stops={[]}
+      route={null}
+      radar
+      wLayers={{ rain: true, wind: true }}
+    />,
+  );
+  expect(screen.getByText("light")).toBeInTheDocument();
 });

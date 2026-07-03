@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CircleMarker,
   MapContainer,
@@ -15,7 +15,7 @@ import type { Itinerary, PlanLeg, Stop } from "../api/types";
 import { useRainRadar } from "../hooks/useRainRadar";
 import { useWindField } from "../hooks/useWindField";
 import { decodePolyline } from "../lib/polyline";
-import { RadarControl, RadarOverlay } from "./RainRadar";
+import { RadarOverlay, RadarReadout } from "./RainRadar";
 import type { WeatherLayersState } from "./RainRadar";
 import { WindVelocityLayer } from "./WeatherLive";
 
@@ -133,6 +133,8 @@ export function MapView({
   onMovePoint,
   onContextPick,
   interactive = true,
+  radar = false,
+  wLayers = { rain: true, wind: true },
 }: {
   origin: LatLon | null;
   destination: LatLon | null;
@@ -143,19 +145,18 @@ export function MapView({
   onMovePoint?: (which: "start" | "end", c: LatLon) => void;
   onContextPick?: (which: "start" | "end", c: LatLon) => void;
   interactive?: boolean;
+  // Mixed mode: live precipitation radar and wind particles layered between basemap
+  // and route. State is owned by the app (the toggles live in the filter bar); the
+  // map just renders what it is told. No cloud layer: satellite cloud fields resolve
+  // ~1 km and only read well at country zoom, useless at the city zoom this map is at.
+  radar?: boolean;
+  wLayers?: WeatherLayersState;
 }) {
   const legs = route?.legs ?? [];
-  const allCoords = legs.flatMap(legCoords);
+  // Fresh array per render would re-fire FitRoute's fitBounds on every render (snapping
+  // the viewport back mid-pan); tie it to route identity instead.
+  const allCoords = useMemo(() => (route?.legs ?? []).flatMap(legCoords), [route]);
   const [menu, setMenu] = useState<MenuState | null>(null);
-  // Mixed mode: live precipitation radar and wind particles layered between
-  // basemap and route. No cloud layer: satellite cloud fields resolve ~1 km and
-  // only read well at country zoom, useless at the city zoom this map lives at.
-  const [radar, setRadar] = useState(false);
-  const [wLayers, setWLayers] = useState<WeatherLayersState>({
-    rain: true,
-    wind: true,
-  });
-  const [radarFrameTime, setRadarFrameTime] = useState<number | null>(null);
   const radarFrames = useRainRadar(radar && wLayers.rain);
   const windField = useWindField(radar && wLayers.wind);
 
@@ -176,9 +177,7 @@ export function MapView({
           attribution="&copy; OpenStreetMap, &copy; CARTO"
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
         />
-        {radar && wLayers.rain && (
-          <RadarOverlay frames={radarFrames} onFrameChange={setRadarFrameTime} />
-        )}
+        {radar && wLayers.rain && <RadarOverlay frames={radarFrames} />}
         {radar && wLayers.wind && <WindVelocityLayer data={windField} />}
         <MapEvents onPick={onPick} onContextMenu={handleMenu} />
         <FitRoute coords={allCoords} fallback={origin ?? destination} />
@@ -250,13 +249,7 @@ export function MapView({
         </CircleMarker>
       ))}
       </MapContainer>
-      <RadarControl
-        active={radar}
-        frameTime={radarFrameTime}
-        layers={wLayers}
-        onToggle={() => setRadar((r) => !r)}
-        onLayerToggle={(k) => setWLayers((s) => ({ ...s, [k]: !s[k] }))}
-      />
+      {radar && wLayers.rain && <RadarReadout />}
 
       {menu && (
         <div

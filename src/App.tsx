@@ -4,7 +4,7 @@ import { EndpointField } from "./components/EndpointField";
 import { FilterBar } from "./components/FilterBar";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
 import { MapView } from "./components/MapView";
-import { MapPickToolbar } from "./components/MapPickToolbar";
+import type { WeatherLayersState } from "./components/RainRadar";
 import { useMorphProgress } from "./hooks/useMorphProgress";
 import { useTripPlan } from "./hooks/useTripPlan";
 import { isLive } from "./api/client";
@@ -36,6 +36,10 @@ export default function App() {
   const [armed, setArmed] = useState<Armed>(null);
   const [hideMap, setHideMap] = useState(false);
   const [selectedMode, setSelectedMode] = useState<Mode | null>(null);
+  // Weather overlay state lives here (not in MapView) so its toggles can sit in the
+  // filter bar alongside Filters, a sibling of the map.
+  const [radar, setRadar] = useState(false);
+  const [wLayers, setWLayers] = useState<WeatherLayersState>({ rain: true, wind: true });
 
   // progressIs1 gates map interactivity and pointer-events so mid-morph clicks
   // don't misfire. Tracked via a motion value event (no re-render on every frame).
@@ -58,6 +62,7 @@ export default function App() {
     setSelectedMode(null);
     setArmed(null);
     setHideMap(false);
+    setRadar(false);
     toHome();
   }
   function commitSearch() {
@@ -177,7 +182,17 @@ export default function App() {
           style={{ opacity: mapOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
         >
           <div className="px-6">
-            <FilterBar count={count} hideMap={hideMap} onToggleMap={() => setHideMap((v) => !v)} />
+            <FilterBar
+              count={count}
+              hideMap={hideMap}
+              onToggleMap={() => setHideMap((v) => !v)}
+              armed={armed}
+              onArm={armPick}
+              radar={radar}
+              wLayers={wLayers}
+              onToggleRadar={() => setRadar((r) => !r)}
+              onToggleLayer={(k) => setWLayers((s) => ({ ...s, [k]: !s[k] }))}
+            />
           </div>
           <main className="flex min-h-0 flex-1 gap-4 px-6 pb-6">
             <section className={hideMap ? "w-full overflow-y-auto" : "w-1/2 overflow-y-auto"}>
@@ -185,7 +200,11 @@ export default function App() {
             </section>
             {!hideMap && (
               <section className="relative w-1/2">
-                <MapPickToolbar armed={armed} onArm={armPick} />
+                {armed && (
+                  <div className="absolute left-3 top-3 z-[1000] rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow">
+                    Click the map to set the {armed}
+                  </div>
+                )}
                 <MapView
                   origin={view.origin}
                   destination={view.destination}
@@ -196,6 +215,8 @@ export default function App() {
                   onMovePoint={onMovePoint}
                   onContextPick={onContextPick}
                   interactive={progressIs1}
+                  radar={radar}
+                  wLayers={wLayers}
                 />
               </section>
             )}

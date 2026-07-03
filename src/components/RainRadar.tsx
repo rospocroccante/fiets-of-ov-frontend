@@ -2,17 +2,14 @@ import { useEffect, useState } from "react";
 import { TileLayer } from "react-leaflet";
 import { RADAR_TILE_OPTIONS } from "../hooks/useRainRadar";
 import type { RadarFrame } from "../hooks/useRainRadar";
+import { publishRadarFrame, useRadarFrame } from "../lib/radarFrame";
 
 // Animated precipitation overlay: all frames stay mounted (tiles cache, no flicker),
 // only the active one is visible; the loop pauses 3 beats on the newest frame so the
-// eye can settle on "now" before the history replays.
-export function RadarOverlay({
-  frames,
-  onFrameChange,
-}: {
-  frames: RadarFrame[];
-  onFrameChange?: (time: number) => void;
-}) {
+// eye can settle on "now" before the history replays. The active frame's time is
+// published to an external store so the on-map clock can show it without this 700ms
+// tick re-rendering the map.
+export function RadarOverlay({ frames }: { frames: RadarFrame[] }) {
   const [index, setIndex] = useState(0);
   useEffect(() => {
     setIndex(0);
@@ -33,8 +30,8 @@ export function RadarOverlay({
 
   const active = Math.min(index, Math.max(frames.length - 1, 0));
   useEffect(() => {
-    if (frames[active]) onFrameChange?.(frames[active].time);
-  }, [frames, active, onFrameChange]);
+    if (frames[active]) publishRadarFrame(frames[active].time);
+  }, [frames, active]);
 
   return (
     <>
@@ -62,76 +59,78 @@ const LAYER_LABEL: Record<keyof WeatherLayersState, string> = {
   wind: "Wind",
 };
 
-// Map-corner control: a master Radar toggle plus, when active, one chip per weather
-// layer and the radar frame clock so the user knows whether they are looking at the
-// past sweep or the nowcast.
-export function RadarControl({
+// The weather controls, meant to sit inline in the filter bar next to Filters: a master
+// Radar toggle plus, when active, one chip per weather layer. The frame clock and legend
+// live on the map itself (RadarReadout) since they read the imagery, not command it.
+export function RadarControls({
   active,
-  frameTime,
   layers,
   onToggle,
   onLayerToggle,
 }: {
   active: boolean;
-  frameTime: number | null;
   layers: WeatherLayersState;
   onToggle: () => void;
   onLayerToggle: (layer: keyof WeatherLayersState) => void;
 }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        aria-pressed={active}
+        onClick={onToggle}
+        className={`rounded-full px-4 py-1.5 text-sm transition ${
+          active ? "bg-brand text-white" : "border border-gray-200 hover:bg-gray-50"
+        }`}
+      >
+        Radar
+      </button>
+      {active &&
+        (Object.keys(LAYER_LABEL) as (keyof WeatherLayersState)[]).map((k) => (
+          <button
+            key={k}
+            type="button"
+            aria-pressed={layers[k]}
+            onClick={() => onLayerToggle(k)}
+            className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
+              layers[k] ? "bg-brand/90 text-white" : "border border-gray-200 text-gray-500 hover:bg-gray-50"
+            }`}
+          >
+            {LAYER_LABEL[k]}
+          </button>
+        ))}
+    </div>
+  );
+}
+
+// On-map readout for the rain layer: the frame clock (so the user knows whether they
+// are looking at the past sweep or the nowcast) and the intensity legend. The rain
+// layer only paints where precipitation is, so on a dry day the map stays clean — the
+// legend is the cue that the radar is live anyway. Subscribes to the frame store so the
+// 700ms clock update is isolated to this chip.
+export function RadarReadout() {
+  const frameTime = useRadarFrame();
   const label =
-    active && layers.rain && frameTime != null
+    frameTime != null
       ? new Date(frameTime * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       : null;
   return (
     <div className="absolute right-3 top-3 z-[1000] flex flex-col items-end gap-1.5">
-      <div className="flex items-center gap-2">
-        {label && (
-          <span className="rounded-full bg-white/90 px-2 py-1 text-xs font-semibold text-brand shadow">
-            {label}
-          </span>
-        )}
-        <button
-          type="button"
-          aria-pressed={active}
-          onClick={onToggle}
-          className={`rounded-full px-3 py-1.5 text-xs font-semibold shadow transition ${
-            active ? "bg-brand text-white" : "bg-white/90 text-brand hover:bg-white"
-          }`}
-        >
-          Radar
-        </button>
-      </div>
-      {active && (
-        <div className="flex items-center gap-1">
-          {(Object.keys(LAYER_LABEL) as (keyof WeatherLayersState)[]).map((k) => (
-            <button
-              key={k}
-              type="button"
-              aria-pressed={layers[k]}
-              onClick={() => onLayerToggle(k)}
-              className={`rounded-full px-2 py-1 text-[10px] font-semibold shadow transition ${
-                layers[k] ? "bg-brand/90 text-white" : "bg-white/90 text-gray-500 hover:bg-white"
-              }`}
-            >
-              {LAYER_LABEL[k]}
-            </button>
-          ))}
-        </div>
-      )}
-      {/* Legend: the rain layer only paints where precipitation is, so on a dry day the
-          map stays clean — this row is the cue that the radar is live anyway. */}
-      {active && layers.rain && (
-        <span className="flex items-center gap-1.5 rounded-full bg-white/90 px-2 py-1 text-[10px] font-medium text-gray-600 shadow">
-          <span>light</span>
-          <span
-            className="h-1.5 w-16 rounded-full"
-            style={{
-              background: "linear-gradient(90deg, #9be1ff, #2f80ed, #7b2ff7, #e63946)",
-            }}
-          />
-          <span>heavy</span>
+      {label && (
+        <span className="rounded-full bg-white/90 px-2 py-1 text-xs font-semibold text-brand shadow">
+          {label}
         </span>
       )}
+      <span className="flex items-center gap-1.5 rounded-full bg-white/90 px-2 py-1 text-[10px] font-medium text-gray-600 shadow">
+        <span>light</span>
+        <span
+          className="h-1.5 w-16 rounded-full"
+          style={{
+            background: "linear-gradient(90deg, #9be1ff, #2f80ed, #7b2ff7, #e63946)",
+          }}
+        />
+        <span>heavy</span>
+      </span>
     </div>
   );
 }
