@@ -4,3 +4,29 @@
 
 html, body, #root { height: 100%; margin: 0; }
 body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; color: #111; }
+
+/* Home background: soft blurred colour blobs drifting slowly (Fresha-style aurora).
+   Only transform/opacity animate, so it stays on the GPU compositor and off the main
+   thread. Each blob picks one of these paths with its own duration/delay for an
+   organic, non-repeating feel; `alternate` eases back so the loop never jumps. */
+.aurora-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(72px);
+  will-change: transform;
+}
+@keyframes aurora-a {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(10%, 8%) scale(1.2); }
+}
+@keyframes aurora-b {
+  from { transform: translate(0, 0) scale(1.1); }
+  to   { transform: translate(-12%, 6%) scale(0.92); }
+}
+@keyframes aurora-c {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(7%, -10%) scale(1.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aurora-blob { animation: none !important; }
+}

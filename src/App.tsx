@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { motion, useTransform, useMotionValueEvent } from "framer-motion";
 import { EndpointField } from "./components/EndpointField";
 import { FilterBar } from "./components/FilterBar";
+import { HomeAurora } from "./components/HomeAurora";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
 import { MapView } from "./components/MapView";
 import type { WeatherLayersState } from "./components/RainRadar";
@@ -228,7 +229,8 @@ export default function App() {
           className="absolute inset-0 z-10"
           style={{ opacity: homeOpacity, y: homeY, pointerEvents: progressIs1 ? "none" : "auto" }}
         >
-          <section className="mx-auto max-w-4xl px-6 pt-20 text-center">
+          <HomeAurora />
+          <section className="relative mx-auto max-w-4xl px-6 pt-20 text-center">
             <h1 className="text-5xl font-bold leading-tight text-gray-900">
               Bike or transit?
               <br />
