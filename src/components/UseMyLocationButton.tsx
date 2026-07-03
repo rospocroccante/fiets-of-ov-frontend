@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { getCurrentPosition, geoErrorMessage, accuracyWarning } from "../geolocate";
 import { reverseGeocode } from "../geocode";
+import { coordQuery } from "../trip";
 import type { Endpoint } from "../trip";
 
 interface Props {
@@ -22,7 +23,7 @@ export function UseMyLocationButton({ onLocated, className }: Props): JSX.Elemen
     setStatus(null);
     try {
       const fix = await getCurrentPosition();
-      const query = `${fix.lat.toFixed(6)},${fix.lon.toFixed(6)}`;
+      const query = coordQuery(fix.lat, fix.lon);
       const label = await reverseGeocode(fix.lat, fix.lon);
       onLocated({ label, query });
       const w = accuracyWarning(fix.accuracy);

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { motion, useTransform, useMotionValueEvent } from "framer-motion";
 import { EndpointField } from "./components/EndpointField";
 import { FilterBar } from "./components/FilterBar";
@@ -11,6 +11,7 @@ import { useTripPlan } from "./hooks/useTripPlan";
 import { isLive } from "./api/client";
 import { reverseGeocode } from "./geocode";
 import type { Mode, Place } from "./api/types";
+import { coordQuery } from "./trip";
 import type { Endpoint, Trip } from "./trip";
 
 type Armed = "start" | "end" | null;
@@ -87,12 +88,18 @@ export default function App() {
   function armPick(which: "start" | "end") {
     setArmed((a) => (a === which ? null : which));
   }
+  // Reverse-geocode responses can arrive out of order (two quick pin drags/picks);
+  // only the latest lookup per endpoint may write, or a slow older response would
+  // revert the endpoint to the stale location.
+  const geocodeSeq = useRef({ start: 0, end: 0 });
   async function setEndpointFromCoords(
     which: "start" | "end",
     c: { lat: number; lon: number }
   ) {
-    const query = `${c.lat.toFixed(6)},${c.lon.toFixed(6)}`;
+    const seq = ++geocodeSeq.current[which];
+    const query = coordQuery(c.lat, c.lon);
     const label = await reverseGeocode(c.lat, c.lon);
+    if (seq !== geocodeSeq.current[which]) return;
     if (which === "start") {
       setFromText(label);
       setOrigin({ label, query });
@@ -116,15 +123,13 @@ export default function App() {
   }
 
   function selectFrom(p: Place) {
-    const q = `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`;
     setFromText(p.name);
-    setOrigin({ label: p.name, query: q });
+    setOrigin({ label: p.name, query: coordQuery(p.lat, p.lon) });
     setSelectedMode(null);
   }
   function selectTo(p: Place) {
-    const q = `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`;
     setToText(p.name);
-    setDestination({ label: p.name, query: q });
+    setDestination({ label: p.name, query: coordQuery(p.lat, p.lon) });
     setSelectedMode(null);
   }
   function locateFrom(ep: Endpoint) {
