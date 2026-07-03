@@ -43,6 +43,10 @@ export function CloudOverlay({ times }: { times: string[] }) {
           version="1.3.0"
           opacity={i === active ? 0.75 : 0}
           zIndex={4}
+          // The MTG sensor resolves ~1 km; requesting sharper tiles just exposes hard
+          // data-pixel squares at city zoom. Cap requests at z7 (~750 m/px, at parity
+          // with the sensor) and let the browser upscale with its smooth filtering.
+          maxNativeZoom={7}
         />
       ))}
     </>
@@ -76,6 +80,13 @@ export function WindVelocityLayer({ data }: { data: VelocityRecord[] | null }) {
           colorScale: ["#94a3b8", "#64748b", "#2f80ed", "#d97706", "#dc2626"],
         });
         layer.addTo(map as L.Map);
+        // Soften the whole particle canvas via CSS. The plugin's own `opacity`
+        // option doubles as the per-frame trail fade factor (lowering it clips the
+        // trails short), and velocityLayer.setOpacity delegates to a method its
+        // canvas layer does not implement.
+        const canvas = (layer as unknown as { _canvasLayer?: { _canvas?: HTMLElement } })
+          ._canvasLayer?._canvas;
+        if (canvas) canvas.style.opacity = "0.55";
       })
       .catch(() => {
         // Wind stays off if the plugin cannot load; the rest of the map is unaffected.
