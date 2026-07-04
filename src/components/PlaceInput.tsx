@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { searchPlaces } from "../api/client";
 import type { Place } from "../api/types";
 
+export interface HistoryEntry {
+  label: string;
+  // The backend query for this endpoint (free text or "lat,lon").
+  query: string;
+}
+
 interface Props {
   value: string;
   placeholder?: string;
@@ -9,11 +15,23 @@ interface Props {
   onSelect: (place: Place) => void;
   // Locally saved places: matches rank above remote suggestions, marked with a star.
   savedPlaces?: Place[];
+  // Recently used endpoints, shown when the field is focused while (nearly) empty.
+  history?: HistoryEntry[];
+  onPickHistory?: (h: HistoryEntry) => void;
 }
 
-export function PlaceInput({ value, placeholder, onChange, onSelect, savedPlaces }: Props) {
+export function PlaceInput({
+  value,
+  placeholder,
+  onChange,
+  onSelect,
+  savedPlaces,
+  history,
+  onPickHistory,
+}: Props) {
   const [suggestions, setSuggestions] = useState<Place[]>([]);
   const [open, setOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
   const justSelected = useRef(false);
   // Suggestions may only open in response to typing in THIS input. A programmatic
   // value change (a suggested trip from the home, use-my-location) syncs the text
@@ -81,6 +99,17 @@ export function PlaceInput({ value, placeholder, onChange, onSelect, savedPlaces
     onChange(text);
   }
 
+  function pickHistory(h: HistoryEntry) {
+    justSelected.current = true;
+    setQuery(h.label);
+    onPickHistory?.(h);
+  }
+
+  // Maps-style recents: an (almost) empty focused field offers where you have been.
+  const showHistory =
+    focused && query.trim().length < 2 && onPickHistory != null && (history?.length ?? 0) > 0;
+  const showSuggestions = open && suggestions.length > 0 && !showHistory;
+
   return (
     <div className="relative w-full">
       <input
@@ -88,10 +117,41 @@ export function PlaceInput({ value, placeholder, onChange, onSelect, savedPlaces
         placeholder={placeholder}
         value={query}
         onChange={handleChange}
-        onFocus={() => suggestions.length > 0 && setOpen(true)}
-        onBlur={() => setOpen(false)}
+        onFocus={() => {
+          setFocused(true);
+          if (suggestions.length > 0) setOpen(true);
+        }}
+        onBlur={() => {
+          setFocused(false);
+          setOpen(false);
+        }}
       />
-      {open && (
+      {showHistory && (
+        <ul
+          role="listbox"
+          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-2xl border border-gray-100 bg-white shadow-lg"
+        >
+          {(history ?? []).map((h) => (
+            <li
+              key={`${h.label}-${h.query}`}
+              role="option"
+              aria-selected={false}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => pickHistory(h)}
+              className="cursor-pointer px-4 py-2 text-sm hover:bg-brand-light"
+            >
+              <span
+                aria-hidden="true"
+                className="material-symbols-rounded mr-1.5 align-[-3px] text-[15px] leading-none text-slate-400"
+              >
+                history
+              </span>
+              <span className="font-medium">{h.label}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {showSuggestions && (
         <ul
           role="listbox"
           className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-2xl border border-gray-100 bg-white shadow-lg"

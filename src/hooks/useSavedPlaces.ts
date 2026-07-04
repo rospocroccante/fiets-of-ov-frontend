@@ -50,5 +50,10 @@ export function useSavedPlaces(now: () => number = Date.now) {
     [now],
   );
 
-  return { places, isSaved, toggle };
+  const clearAll = useCallback(() => {
+    setPlaces([]);
+    saveJson(KEY, []);
+  }, []);
+
+  return { places, isSaved, toggle, clearAll };
 }

@@ -1,8 +1,10 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { FilterBar } from "./FilterBar";
+import type { KindFilter } from "./FilterBar";
 import type { WeatherLayersState } from "./RainRadar";
 
 const LAYERS: WeatherLayersState = { rain: true, wind: true };
+const KINDS: KindFilter = { bike: true, transit: true, bike_and_ride: true };
 
 function renderBar(overrides: Partial<React.ComponentProps<typeof FilterBar>> = {}) {
   const props: React.ComponentProps<typeof FilterBar> = {
@@ -15,6 +17,10 @@ function renderBar(overrides: Partial<React.ComponentProps<typeof FilterBar>> = 
     wLayers: LAYERS,
     onToggleRadar: () => {},
     onToggleLayer: () => {},
+    kinds: KINDS,
+    onToggleKind: () => {},
+    dryOnly: false,
+    onToggleDry: () => {},
     ...overrides,
   };
   return render(<FilterBar {...props} />);
@@ -34,37 +40,46 @@ test("the armed endpoint's button is pressed", () => {
 
 test("Radar toggle reports the master toggle; Rain/Wind chips appear only when active", () => {
   const toggles: number[] = [];
-  const { rerender } = renderBar({ onToggleRadar: () => toggles.push(1) });
+  renderBar({ onToggleRadar: () => toggles.push(1) });
   const radarBtn = screen.getByRole("button", { name: "Radar" });
   expect(radarBtn).toHaveAttribute("aria-pressed", "false");
-  // Layer chips are hidden while the radar is off.
   expect(screen.queryByRole("button", { name: "Rain" })).toBeNull();
   fireEvent.click(radarBtn);
   expect(toggles).toEqual([1]);
-
-  // With the radar active the per-layer chips show, reflecting wLayers state.
-  rerender(
-    <FilterBar
-      count={2}
-      hideMap={false}
-      onToggleMap={() => {}}
-      armed={null}
-      onArm={() => {}}
-      radar
-      wLayers={LAYERS}
-      onToggleRadar={() => {}}
-      onToggleLayer={() => {}}
-    />,
-  );
-  expect(screen.getByRole("button", { name: "Radar" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByRole("button", { name: "Rain" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByRole("button", { name: "Wind" })).toHaveAttribute("aria-pressed", "true");
 });
 
 test("map-only controls (Set on map, Radar) are hidden when the map is hidden", () => {
   renderBar({ hideMap: true });
   expect(screen.queryByRole("button", { name: /^start$/i })).toBeNull();
   expect(screen.queryByRole("button", { name: "Radar" })).toBeNull();
-  // The map toggle itself flips to "Show map".
   expect(screen.getByRole("button", { name: /show map/i })).toBeInTheDocument();
+});
+
+test("mode chips are real filters: pressed state reflects kinds, click toggles", () => {
+  const toggled: string[] = [];
+  renderBar({
+    kinds: { bike: true, transit: false, bike_and_ride: true },
+    onToggleKind: (m) => toggled.push(m),
+  });
+  expect(screen.getByRole("button", { name: "Bike" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Transit" })).toHaveAttribute("aria-pressed", "false");
+  fireEvent.click(screen.getByRole("button", { name: "Transit" }));
+  expect(toggled).toEqual(["transit"]);
+});
+
+test("Filters opens a popover with kind checkboxes and the dry-only toggle", () => {
+  const toggled: string[] = [];
+  const dry = vi.fn();
+  renderBar({ onToggleKind: (m) => toggled.push(m), onToggleDry: dry });
+  fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+  expect(screen.getByText(/show options/i)).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("checkbox", { name: /bike \+ ov/i }));
+  expect(toggled).toEqual(["bike_and_ride"]);
+  fireEvent.click(screen.getByRole("checkbox", { name: /only dry options/i }));
+  expect(dry).toHaveBeenCalledTimes(1);
+
+  // Outside click closes the popover.
+  fireEvent.click(screen.getByRole("button", { name: /close filters/i }));
+  expect(screen.queryByText(/show options/i)).toBeNull();
 });

@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, useTransform, useMotionValueEvent } from "framer-motion";
 import { EndpointField } from "./components/EndpointField";
+import type { HistoryEntry } from "./components/PlaceInput";
 import { FilterBar } from "./components/FilterBar";
+import type { KindFilter } from "./components/FilterBar";
+import { HeaderMenu } from "./components/HeaderMenu";
 import { HomeAurora } from "./components/HomeAurora";
 import { HomeShortcuts } from "./components/HomeShortcuts";
 import { PlaceInfoCard } from "./components/PlaceInfoCard";
@@ -72,8 +75,29 @@ export default function App() {
   // Maps-style local memory: search history and saved places, plus the place-info
   // card opened from the map's "What's here?".
   const { trips: recentTrips, record: recordTrip, clear: clearRecents } = useRecentTrips();
-  const { places: savedPlaces, isSaved, toggle: toggleSaved } = useSavedPlaces();
+  const { places: savedPlaces, isSaved, toggle: toggleSaved, clearAll: clearSaved } = useSavedPlaces();
   const [placeInfo, setPlaceInfo] = useState<PlaceInfo | null>(null);
+  // Real filters: which option kinds show, and whether rainy options are hidden.
+  const [kinds, setKinds] = useState<KindFilter>({ bike: true, transit: true, bike_and_ride: true });
+  const [dryOnly, setDryOnly] = useState(false);
+
+  // Every endpoint the user has planned with, newest first, for the focus dropdown
+  // (an endpoint used as origin is a fine future destination and vice versa).
+  const endpointHistory: HistoryEntry[] = useMemo(() => {
+    const seen = new Set<string>();
+    const out: HistoryEntry[] = [];
+    for (const t of recentTrips) {
+      for (const e of [
+        { label: t.fromLabel, query: t.fromQuery },
+        { label: t.toLabel, query: t.toQuery },
+      ]) {
+        if (seen.has(e.query)) continue;
+        seen.add(e.query);
+        out.push(e);
+      }
+    }
+    return out.slice(0, 6);
+  }, [recentTrips]);
 
   useEffect(() => {
     if (view.status === "ready" && origin && destination) {
@@ -194,6 +218,17 @@ export default function App() {
     setPlaceInfo(null);
   }
 
+  function pickHistoryFrom(h: HistoryEntry) {
+    setFromText(h.label);
+    setOrigin({ label: h.label, query: h.query });
+    setSelectedMode(null);
+  }
+  function pickHistoryTo(h: HistoryEntry) {
+    setToText(h.label);
+    setDestination({ label: h.label, query: h.query });
+    setSelectedMode(null);
+  }
+
   function selectFrom(p: Place) {
     setFromText(p.name);
     setOrigin({ label: p.name, query: coordQuery(p.lat, p.lon) });
@@ -223,20 +258,34 @@ export default function App() {
   }
 
   const planView = view.status === "ready" && view.view ? view.view : null;
-  const effectiveMode: Mode = selectedMode ?? planView?.recommendation ?? "bike";
-  const selectedOption =
-    planView?.options.find((o) => o.mode === effectiveMode) ?? planView?.options[0];
+  // Apply the user's filters to the ranked options; the selection falls back to the
+  // first visible option when the current pick is filtered away.
+  const filteredView = useMemo(() => {
+    if (!planView) return null;
+    const options = planView.options.filter(
+      (o) => kinds[o.mode] && (!dryOnly || o.rainMinutes === 0),
+    );
+    return { ...planView, options };
+  }, [planView, kinds, dryOnly]);
+  const visible = filteredView?.options ?? [];
+  const effectiveMode: Mode =
+    selectedMode && visible.some((o) => o.mode === selectedMode)
+      ? selectedMode
+      : visible.some((o) => o.mode === filteredView?.recommendation)
+        ? (filteredView as NonNullable<typeof filteredView>).recommendation
+        : (visible[0]?.mode ?? "bike");
+  const selectedOption = visible.find((o) => o.mode === effectiveMode) ?? visible[0];
   const route = selectedOption?.itinerary ?? null;
 
-  const panel: PanelState = planView
-    ? { status: "ready", view: planView, selectedMode: effectiveMode, onSelect: setSelectedMode }
+  const panel: PanelState = filteredView
+    ? { status: "ready", view: filteredView, selectedMode: effectiveMode, onSelect: setSelectedMode }
     : view.status === "error"
       ? { status: "error", message: view.message ?? "error" }
       : view.status === "loading"
         ? { status: "loading" }
         : { status: "idle" };
 
-  const count = planView ? planView.options.length : 0;
+  const count = visible.length;
 
   // Morph transforms (progress 0 = home, 1 = map). jsdom has no layout, so these
   // only affect visuals at runtime; they are inert in unit tests. The search pill is a
@@ -270,6 +319,10 @@ export default function App() {
               wLayers={wLayers}
               onToggleRadar={() => setRadar((r) => !r)}
               onToggleLayer={(k) => setWLayers((s) => ({ ...s, [k]: !s[k] }))}
+              kinds={kinds}
+              onToggleKind={(m) => setKinds((s) => ({ ...s, [m]: !s[m] }))}
+              dryOnly={dryOnly}
+              onToggleDry={() => setDryOnly((v) => !v)}
             />
           </div>
           <main className="flex min-h-0 flex-1 gap-4 px-6 pb-6">
@@ -399,9 +452,7 @@ export default function App() {
           <button onClick={goHome} className="text-xl font-bold text-brand">
             Fiets of OV
           </button>
-          <button className="rounded-full border border-gray-200 px-4 py-1.5 text-sm font-medium">
-            Menu &#9776;
-          </button>
+          <HeaderMenu onClearRecents={clearRecents} onClearSaved={clearSaved} />
         </motion.header>
 
         {/* Shared morphing search pill: usable in both stages, flies center -> top bar. */}
@@ -417,6 +468,8 @@ export default function App() {
               onSelect={selectFrom}
               onLocate={locateFrom}
               savedPlaces={savedPlaces}
+              history={endpointHistory}
+              onPickHistory={pickHistoryFrom}
             />
           </div>
           <button
@@ -435,6 +488,8 @@ export default function App() {
               onSelect={selectTo}
               onLocate={locateTo}
               savedPlaces={savedPlaces}
+              history={endpointHistory}
+              onPickHistory={pickHistoryTo}
             />
           </div>
           <span className="h-7 w-px bg-gray-200" />

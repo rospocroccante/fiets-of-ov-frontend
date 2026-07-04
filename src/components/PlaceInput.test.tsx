@@ -44,6 +44,43 @@ test("no suggestion box for empty input", () => {
   expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
 });
 
+test("focusing an empty field shows recent endpoints; picking one fires onPickHistory", () => {
+  const picked: string[] = [];
+  render(
+    <PlaceInput
+      value=""
+      placeholder="From"
+      onChange={() => {}}
+      onSelect={() => {}}
+      history={[{ label: "NDSM", query: "52.401,4.8935" }]}
+      onPickHistory={(h) => picked.push(h.query)}
+    />,
+  );
+  fireEvent.focus(screen.getByPlaceholderText("From"));
+  expect(screen.getByRole("listbox")).toBeInTheDocument();
+  fireEvent.click(screen.getByText("NDSM"));
+  expect(picked).toEqual(["52.401,4.8935"]);
+});
+
+test("history hides as soon as the user types enough for live suggestions", async () => {
+  render(
+    <PlaceInput
+      value=""
+      placeholder="From"
+      onChange={() => {}}
+      onSelect={() => {}}
+      history={[{ label: "NDSM", query: "52.401,4.8935" }]}
+      onPickHistory={() => {}}
+    />,
+  );
+  const input = screen.getByPlaceholderText("From");
+  fireEvent.focus(input);
+  expect(screen.getByText("NDSM")).toBeInTheDocument();
+  fireEvent.change(input, { target: { value: "vondel" } });
+  expect(screen.queryByText("NDSM")).toBeNull();
+  expect(await screen.findByText(/Vondelpark/)).toBeInTheDocument();
+});
+
 test("programmatic value change (e.g. a suggested trip) does not open suggestions", async () => {
   const { rerender } = render(
     <PlaceInput value="" placeholder="From" onChange={() => {}} onSelect={() => {}} />,

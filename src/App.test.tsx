@@ -138,6 +138,34 @@ test("a successful search is recorded in recents (persisted locally)", async () 
   });
 });
 
+test("mode filter chips hide options for real: Transit off removes the transit card", async () => {
+  renderApp();
+  startTrip();
+  await waitFor(() => {
+    if ((screen.getByText(/routes in area/i).textContent ?? "").startsWith("0")) {
+      throw new Error("plan still loading");
+    }
+  });
+  expect(screen.getByText("Public transport")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Transit" }));
+  expect(screen.queryByText("Public transport")).toBeNull();
+  expect(screen.getByText(/1 routes in area/i)).toBeInTheDocument();
+});
+
+test("menu clears recent searches", async () => {
+  window.localStorage.clear();
+  renderApp();
+  startTrip();
+  await waitFor(() => {
+    const trips = JSON.parse(window.localStorage.getItem("fov.recentTrips.v1") ?? "[]");
+    if (trips.length === 0) throw new Error("not recorded yet");
+  });
+  fireEvent.click(screen.getByRole("button", { name: /menu/i }));
+  fireEvent.click(screen.getByRole("button", { name: /clear recent searches/i }));
+  expect(JSON.parse(window.localStorage.getItem("fov.recentTrips.v1") ?? "[]")).toEqual([]);
+});
+
 test("swap exchanges the From and To fields", () => {
   renderApp();
   startTrip();
