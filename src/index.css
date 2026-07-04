@@ -5,6 +5,34 @@
 html, body, #root { height: 100%; margin: 0; }
 body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; color: #111; }
 
+/* Maps-style POI labels: a coloured dot with the place name beside it, white halo so
+   the text stays readable over any basemap. Rendered as Leaflet divIcons. */
+.poi-marker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.poi-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 9999px;
+  border: 2px solid #fff;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
+}
+.poi-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+  text-shadow:
+    0 1px 2px #fff,
+    0 -1px 2px #fff,
+    1px 0 2px #fff,
+    -1px 0 2px #fff;
+}
+
 /* When picking a point on the map, the crosshair must beat Leaflet's own grab cursor
    (set on the container by .leaflet-grab). The class sits on MapView's wrapper because
    react-leaflet freezes the container's className at mount. */

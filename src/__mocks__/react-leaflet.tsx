@@ -75,7 +75,10 @@ type MapHandlers = {
 let _handlers: MapHandlers = {};
 
 export function useMapEvents(handlers: MapHandlers) {
-  _handlers = handlers;
+  // Merge instead of replace: MapView mounts several subscribers (map events,
+  // viewport tracker) and the test helpers must keep firing the click/contextmenu
+  // handlers regardless of mount order.
+  _handlers = { ..._handlers, ...handlers };
   return {};
 }
 

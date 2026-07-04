@@ -12,6 +12,8 @@ import {
 import L from "leaflet";
 import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
 import type { Itinerary, PlanLeg, Stop } from "../api/types";
+import { usePois, POI_MIN_ZOOM } from "../hooks/usePois";
+import type { Poi, Viewport } from "../hooks/usePois";
 import { useRainRadar } from "../hooks/useRainRadar";
 import { useWindField } from "../hooks/useWindField";
 import { modeColor } from "../lib/modeColors";
@@ -36,6 +38,67 @@ function legCoords(leg: PlanLeg): [number, number][] {
   if (leg.from.lat != null && leg.from.lon != null) pts.push([leg.from.lat, leg.from.lon]);
   if (leg.to.lat != null && leg.to.lon != null) pts.push([leg.to.lat, leg.to.lon]);
   return pts;
+}
+
+// Reports the visible bounds+zoom after every pan/zoom so the POI layer knows what
+// to fetch. Inert on the test mock, whose map object has no getBounds.
+function ViewportTracker({ onChange }: { onChange: (v: Viewport) => void }) {
+  const map = useMap();
+  const report = () => {
+    const m = map as L.Map;
+    if (typeof m.getBounds !== "function") return;
+    const b = m.getBounds();
+    onChange({
+      south: b.getSouth(),
+      west: b.getWest(),
+      north: b.getNorth(),
+      east: b.getEast(),
+      zoom: m.getZoom(),
+    });
+  };
+  useMapEvents({ moveend: report, zoomend: report });
+  useEffect(() => {
+    report();
+    // Initial snapshot only: afterwards the map events drive updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+const POI_COLOR: Record<Poi["kind"], string> = {
+  food: "#ea580c",
+  drink: "#7c3aed",
+  culture: "#4f46e5",
+  other: "#d97706",
+};
+
+// Maps-style labelled POI dots. Names come from OSM, so they are escaped before
+// being embedded in the divIcon HTML.
+function PoiMarkers({ pois, onPick }: { pois: Poi[]; onPick?: (p: Poi) => void }) {
+  return (
+    <>
+      {pois.map((p) => (
+        <Marker
+          key={p.id}
+          position={[p.lat, p.lon]}
+          title={p.name}
+          icon={L.divIcon({
+            className: "poi-marker",
+            html:
+              `<span class="poi-dot" style="background:${POI_COLOR[p.kind]}"></span>` +
+              `<span class="poi-name">${escapeHtml(p.name)}</span>`,
+            iconSize: [0, 0],
+            iconAnchor: [4, 4],
+          })}
+          eventHandlers={{ click: () => onPick?.(p) }}
+        />
+      ))}
+    </>
+  );
 }
 
 // react-leaflet v4 freezes MapContainer options at creation, so a changing
@@ -150,6 +213,7 @@ export function MapView({
   onMovePoint,
   onContextPick,
   onWhatsHere,
+  onPoiPick,
   interactive = true,
   radar = false,
   wLayers = { rain: true, wind: true },
@@ -163,6 +227,7 @@ export function MapView({
   onMovePoint?: (which: "start" | "end", c: LatLon) => void;
   onContextPick?: (which: "start" | "end", c: LatLon) => void;
   onWhatsHere?: (c: LatLon) => void;
+  onPoiPick?: (p: Poi) => void;
   interactive?: boolean;
   // Mixed mode: live precipitation radar and wind particles layered between basemap
   // and route. State is owned by the app (the toggles live in the filter bar); the
@@ -182,6 +247,10 @@ export function MapView({
   const showWeather = radar && interactive;
   const rain = useRainRadar(showWeather && wLayers.rain);
   const wind = useWindField(showWeather && wLayers.wind);
+  // Maps-style POI labels: fetched for the visible area once the user is zoomed in
+  // enough for names to be useful (the hook gates on POI_MIN_ZOOM).
+  const [viewport, setViewport] = useState<Viewport | null>(null);
+  const pois = usePois(interactive ? viewport : null);
 
   const handleMenu = (m: MenuState) => {
     if (m.x < 0) setMenu(null);
@@ -200,6 +269,7 @@ export function MapView({
         attributionControl={false}
       >
         <MapInteraction interactive={interactive} />
+        <ViewportTracker onChange={setViewport} />
         <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
         {showWeather && wLayers.rain && <RadarOverlay frames={rain.frames} />}
         {showWeather && wLayers.wind && <WindVelocityLayer data={wind.data} />}
@@ -269,6 +339,10 @@ export function MapView({
           <Popup>{s.name}</Popup>
         </CircleMarker>
       ))}
+
+      {viewport != null && viewport.zoom >= POI_MIN_ZOOM && (
+        <PoiMarkers pois={pois} onPick={onPoiPick} />
+      )}
       </MapContainer>
       {showWeather && (
         <RadarReadout

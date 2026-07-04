@@ -297,6 +297,9 @@ export default function App() {
                   onMovePoint={onMovePoint}
                   onContextPick={onContextPick}
                   onWhatsHere={whatsHere}
+                  onPoiPick={(p) =>
+                    setPlaceInfo({ name: p.name, address: p.kindLabel, lat: p.lat, lon: p.lon })
+                  }
                   interactive={progressIs1}
                   radar={radar}
                   wLayers={wLayers}
