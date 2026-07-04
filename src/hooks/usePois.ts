@@ -4,7 +4,7 @@ import { isLive } from "../api/client";
 // Named points of interest (bars, restaurants, museums...) for the Maps-style POI
 // layer. Only fetched at neighbourhood zoom, where names are readable and the
 // Overpass payload stays small.
-export const POI_MIN_ZOOM = 16;
+export const POI_MIN_ZOOM = 15;
 const MAX_POIS = 60;
 
 export type PoiKind = "food" | "drink" | "culture" | "other";

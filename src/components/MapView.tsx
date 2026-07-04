@@ -344,6 +344,12 @@ export function MapView({
         <PoiMarkers pois={pois} onPick={onPoiPick} />
       )}
       </MapContainer>
+      {/* Discoverability: the POI layer only exists at street zoom, so say so. */}
+      {interactive && viewport != null && viewport.zoom < POI_MIN_ZOOM && (
+        <span className="absolute bottom-3 right-3 z-[1000] rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-500 shadow">
+          Zoom in to see bars and places
+        </span>
+      )}
       {showWeather && (
         <RadarReadout
           showRain={wLayers.rain}
