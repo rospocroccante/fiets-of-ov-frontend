@@ -30,20 +30,40 @@ function mockReverse(lat: number, lon: number): string | null {
   return bestDist < 0.005 ? best : null; // ~0.005 deg ~ 500 m
 }
 
-// Reverse-geocode a coordinate to a human label for display. Never throws: on any
-// failure or miss it returns the coordinates as a string, so callers always get text.
-export async function reverseGeocode(lat: number, lon: number): Promise<string> {
-  if (!isLive()) return mockReverse(lat, lon) ?? coordLabel(lat, lon);
+export interface ReverseDetail {
+  name: string;
+  // Human-readable address line (Nominatim display_name without the leading name),
+  // null when nothing better than coordinates is known.
+  address: string | null;
+}
+
+// Reverse-geocode a coordinate to a name plus address detail. Never throws: on any
+// failure it falls back to the coordinates as the name, so callers always get text.
+export async function reverseGeocodeDetail(lat: number, lon: number): Promise<ReverseDetail> {
+  if (!isLive()) {
+    const known = mockReverse(lat, lon);
+    return known
+      ? { name: known, address: "Amsterdam" }
+      : { name: coordLabel(lat, lon), address: null };
+  }
   try {
     const url =
       "https://nominatim.openstreetmap.org/reverse?format=json&zoom=16" +
       `&lat=${lat}&lon=${lon}`;
     const res = await fetch(url, { headers: { Accept: "application/json" } });
-    if (!res.ok) return coordLabel(lat, lon);
+    if (!res.ok) return { name: coordLabel(lat, lon), address: null };
     const data = (await res.json()) as { name?: string; display_name?: string };
-    const name = (data.name && data.name.trim()) || data.display_name?.split(",")[0]?.trim();
-    return name && name.length > 0 ? name : coordLabel(lat, lon);
+    const display = data.display_name?.trim() || null;
+    const name = (data.name && data.name.trim()) || display?.split(",")[0]?.trim();
+    if (!name || name.length === 0) return { name: coordLabel(lat, lon), address: null };
+    const address = display && display !== name ? display.replace(`${name}, `, "") : null;
+    return { name, address };
   } catch {
-    return coordLabel(lat, lon);
+    return { name: coordLabel(lat, lon), address: null };
   }
+}
+
+// Name-only variant used by pin drags and map picks.
+export async function reverseGeocode(lat: number, lon: number): Promise<string> {
+  return (await reverseGeocodeDetail(lat, lon)).name;
 }

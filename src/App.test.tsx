@@ -107,6 +107,37 @@ test("right-click 'Directions to here' sets the To field", async () => {
   expect(toField).toBeInTheDocument();
 });
 
+test("What's here shows the place card; saving adds a home chip; From here fills the field", async () => {
+  window.localStorage.clear();
+  renderApp();
+  startTrip();
+
+  // Right-click near Vondelpark (a KNOWN mock place) and ask what's there.
+  act(() => __fireMapContextMenu(52.3581, 4.8687));
+  fireEvent.click(await screen.findByRole("button", { name: /what's here/i }));
+
+  // The card resolves the place and can save it.
+  const saveBtn = await screen.findByRole("button", { name: /save this place/i });
+  fireEvent.click(saveBtn);
+  expect(screen.getByRole("button", { name: /remove from saved/i })).toBeInTheDocument();
+
+  // Directions from the card fill the From field with the place name.
+  fireEvent.click(screen.getByRole("button", { name: /^from here$/i }));
+  expect(await screen.findByDisplayValue(/vondelpark/i)).toBeInTheDocument();
+});
+
+test("a successful search is recorded in recents (persisted locally)", async () => {
+  window.localStorage.clear();
+  renderApp();
+  startTrip();
+  await waitFor(() => {
+    const raw = window.localStorage.getItem("fov.recentTrips.v1") ?? "[]";
+    const trips = JSON.parse(raw) as Array<{ fromLabel: string }>;
+    if (trips.length === 0) throw new Error("not recorded yet");
+    expect(trips[0].fromLabel).toBe("Centraal");
+  });
+});
+
 test("swap exchanges the From and To fields", () => {
   renderApp();
   startTrip();

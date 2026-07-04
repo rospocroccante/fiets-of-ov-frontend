@@ -149,6 +149,7 @@ export function MapView({
   picking,
   onMovePoint,
   onContextPick,
+  onWhatsHere,
   interactive = true,
   radar = false,
   wLayers = { rain: true, wind: true },
@@ -161,6 +162,7 @@ export function MapView({
   picking?: boolean;
   onMovePoint?: (which: "start" | "end", c: LatLon) => void;
   onContextPick?: (which: "start" | "end", c: LatLon) => void;
+  onWhatsHere?: (c: LatLon) => void;
   interactive?: boolean;
   // Mixed mode: live precipitation radar and wind particles layered between basemap
   // and route. State is owned by the app (the toggles live in the filter bar); the
@@ -300,6 +302,16 @@ export function MapView({
             }}
           >
             Directions to here
+          </button>
+          <button
+            type="button"
+            className="block w-full border-t border-slate-100 px-4 py-2 text-left hover:bg-slate-100"
+            onClick={() => {
+              onWhatsHere?.({ lat: menu.lat, lon: menu.lon });
+              setMenu(null);
+            }}
+          >
+            What&apos;s here?
           </button>
         </div>
       )}

@@ -7,9 +7,11 @@ interface Props {
   placeholder?: string;
   onChange: (text: string) => void;
   onSelect: (place: Place) => void;
+  // Locally saved places: matches rank above remote suggestions, marked with a star.
+  savedPlaces?: Place[];
 }
 
-export function PlaceInput({ value, placeholder, onChange, onSelect }: Props) {
+export function PlaceInput({ value, placeholder, onChange, onSelect, savedPlaces }: Props) {
   const [suggestions, setSuggestions] = useState<Place[]>([]);
   const [open, setOpen] = useState(false);
   const justSelected = useRef(false);
@@ -19,6 +21,10 @@ export function PlaceInput({ value, placeholder, onChange, onSelect }: Props) {
   const typedHere = useRef(false);
   const [query, setQuery] = useState(value);
   const lastValue = useRef(value);
+  // Read through a ref inside the debounced fetch: the list must not be an effect
+  // dependency, or every parent render would restart the debounce.
+  const savedPlacesRef = useRef(savedPlaces);
+  savedPlacesRef.current = savedPlaces;
 
   useEffect(() => {
     if (value === lastValue.current) return;
@@ -44,8 +50,17 @@ export function PlaceInput({ value, placeholder, onChange, onSelect }: Props) {
     }
     const handle = setTimeout(async () => {
       const results = await searchPlaces(q);
-      setSuggestions(results);
-      setOpen(results.length > 0);
+      const needle = q.toLowerCase();
+      const saved = (savedPlacesRef.current ?? []).filter((p) =>
+        p.name.toLowerCase().includes(needle),
+      );
+      // Saved matches first, then remote results not already covered by them.
+      const merged = [
+        ...saved,
+        ...results.filter((r) => !saved.some((s) => s.id === r.id || s.name === r.name)),
+      ];
+      setSuggestions(merged);
+      setOpen(merged.length > 0);
     }, 150);
     return () => clearTimeout(handle);
   }, [query]);
@@ -90,6 +105,15 @@ export function PlaceInput({ value, placeholder, onChange, onSelect }: Props) {
               onClick={() => pick(p)}
               className="cursor-pointer px-4 py-2 text-sm hover:bg-brand-light"
             >
+              {savedPlaces?.some((s) => s.id === p.id) && (
+                <span
+                  aria-hidden="true"
+                  className="material-symbols-rounded mr-1 align-[-3px] text-[15px] leading-none text-amber-500"
+                  style={{ fontVariationSettings: "'FILL' 1" }}
+                >
+                  star
+                </span>
+              )}
               <span className="font-medium">{p.name}</span>
               {p.label !== p.name && (
                 <span className="text-gray-500">

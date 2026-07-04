@@ -9,6 +9,7 @@ interface Props {
   onText: (text: string) => void;
   onSelect: (place: Place) => void;
   onLocate: (ep: Endpoint) => void;
+  savedPlaces?: Place[];
   className?: string;
 }
 
@@ -18,6 +19,7 @@ export function EndpointField({
   onText,
   onSelect,
   onLocate,
+  savedPlaces,
   className,
 }: Props): JSX.Element {
   return (
@@ -27,6 +29,7 @@ export function EndpointField({
         placeholder={placeholder}
         onChange={onText}
         onSelect={onSelect}
+        savedPlaces={savedPlaces}
       />
       <UseMyLocationButton onLocated={onLocate} />
     </div>

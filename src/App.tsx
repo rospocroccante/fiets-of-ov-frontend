@@ -1,19 +1,30 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, useTransform, useMotionValueEvent } from "framer-motion";
 import { EndpointField } from "./components/EndpointField";
 import { FilterBar } from "./components/FilterBar";
 import { HomeAurora } from "./components/HomeAurora";
+import { HomeShortcuts } from "./components/HomeShortcuts";
+import { PlaceInfoCard } from "./components/PlaceInfoCard";
+import type { PlaceInfo } from "./components/PlaceInfoCard";
+import { WeatherStrip } from "./components/WeatherStrip";
 import { CARD_ACCENTS, PRIMARY_GRADIENT, TEXT_GRADIENT } from "./lib/gradients";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
 import { MapView } from "./components/MapView";
 import type { WeatherLayersState } from "./components/RainRadar";
 import { useMorphProgress } from "./hooks/useMorphProgress";
+import { useRecentTrips } from "./hooks/useRecentTrips";
+import type { RecentTrip } from "./hooks/useRecentTrips";
+import { useSavedPlaces } from "./hooks/useSavedPlaces";
+import type { SavedPlace } from "./hooks/useSavedPlaces";
 import { useTripPlan } from "./hooks/useTripPlan";
 import { isLive } from "./api/client";
-import { reverseGeocode } from "./geocode";
+import { reverseGeocode, reverseGeocodeDetail } from "./geocode";
 import type { Mode, Place } from "./api/types";
 import { coordQuery } from "./trip";
 import type { Endpoint, Trip } from "./trip";
+
+// Weather fallback when no trip origin is set yet: Amsterdam centre.
+const AMS_CENTER = { lat: 52.3728, lon: 4.8936 };
 
 type Armed = "start" | "end" | null;
 
@@ -58,6 +69,23 @@ export default function App() {
   );
   const view = useTripPlan(trip);
 
+  // Maps-style local memory: search history and saved places, plus the place-info
+  // card opened from the map's "What's here?".
+  const { trips: recentTrips, record: recordTrip, clear: clearRecents } = useRecentTrips();
+  const { places: savedPlaces, isSaved, toggle: toggleSaved } = useSavedPlaces();
+  const [placeInfo, setPlaceInfo] = useState<PlaceInfo | null>(null);
+
+  useEffect(() => {
+    if (view.status === "ready" && origin && destination) {
+      recordTrip({
+        fromLabel: origin.label,
+        fromQuery: origin.query,
+        toLabel: destination.label,
+        toQuery: destination.query,
+      });
+    }
+  }, [view.status, origin, destination, recordTrip]);
+
   function goHome() {
     setFromText("");
     setToText("");
@@ -67,6 +95,7 @@ export default function App() {
     setArmed(null);
     setHideMap(false);
     setRadar(false);
+    setPlaceInfo(null);
     toHome();
   }
   function commitSearch() {
@@ -122,6 +151,47 @@ export default function App() {
   function onContextPick(which: "start" | "end", c: { lat: number; lon: number }) {
     setArmed(null);
     void setEndpointFromCoords(which, c);
+  }
+
+  // A saved chip means "directions to this place": set it as the destination, jump to
+  // the map and open its card (star + from/to shortcuts).
+  function pickSaved(p: SavedPlace) {
+    setToText(p.name);
+    setDestination({ label: p.name, query: coordQuery(p.lat, p.lon) });
+    setSelectedMode(null);
+    setPlaceInfo({ name: p.name, address: p.label !== p.name ? p.label : null, lat: p.lat, lon: p.lon });
+    toMap();
+  }
+
+  function pickRecent(t: RecentTrip) {
+    setFromText(t.fromLabel);
+    setToText(t.toLabel);
+    setOrigin({ label: t.fromLabel, query: t.fromQuery });
+    setDestination({ label: t.toLabel, query: t.toQuery });
+    setSelectedMode(null);
+    toMap();
+  }
+
+  async function whatsHere(c: { lat: number; lon: number }) {
+    const detail = await reverseGeocodeDetail(c.lat, c.lon);
+    setPlaceInfo({ name: detail.name, address: detail.address, lat: c.lat, lon: c.lon });
+  }
+
+  // Directions from the place card: the name is already known, so write the endpoint
+  // directly and invalidate any in-flight reverse-geocode for that slot.
+  function infoDirections(which: "start" | "end") {
+    if (!placeInfo) return;
+    geocodeSeq.current[which]++;
+    const ep = { label: placeInfo.name, query: coordQuery(placeInfo.lat, placeInfo.lon) };
+    if (which === "start") {
+      setFromText(placeInfo.name);
+      setOrigin(ep);
+    } else {
+      setToText(placeInfo.name);
+      setDestination(ep);
+    }
+    setSelectedMode(null);
+    setPlaceInfo(null);
   }
 
   function selectFrom(p: Place) {
@@ -204,6 +274,10 @@ export default function App() {
           </div>
           <main className="flex min-h-0 flex-1 gap-4 px-6 pb-6">
             <section className={hideMap ? "w-full overflow-y-auto" : "w-1/2 overflow-y-auto"}>
+              <WeatherStrip
+                lat={view.origin?.lat ?? AMS_CENTER.lat}
+                lon={view.origin?.lon ?? AMS_CENTER.lon}
+              />
               <ResultsPanel state={panel} />
             </section>
             {!hideMap && (
@@ -222,10 +296,27 @@ export default function App() {
                   picking={armed !== null}
                   onMovePoint={onMovePoint}
                   onContextPick={onContextPick}
+                  onWhatsHere={whatsHere}
                   interactive={progressIs1}
                   radar={radar}
                   wLayers={wLayers}
                 />
+                {placeInfo && (
+                  <PlaceInfoCard
+                    place={placeInfo}
+                    saved={isSaved(placeInfo.lat, placeInfo.lon)}
+                    onToggleSave={() =>
+                      toggleSaved({
+                        name: placeInfo.name,
+                        label: placeInfo.address ?? placeInfo.name,
+                        lat: placeInfo.lat,
+                        lon: placeInfo.lon,
+                      })
+                    }
+                    onDirections={infoDirections}
+                    onClose={() => setPlaceInfo(null)}
+                  />
+                )}
               </section>
             )}
           </main>
@@ -288,6 +379,13 @@ export default function App() {
               })}
             </div>
           </section>
+          <HomeShortcuts
+            saved={savedPlaces}
+            recents={recentTrips}
+            onPickSaved={pickSaved}
+            onPickRecent={pickRecent}
+            onClearRecents={clearRecents}
+          />
         </motion.div>
 
         {/* Top bar chrome (progress -> 1): wordmark (Home) + Menu, behind the search pill. */}
@@ -315,6 +413,7 @@ export default function App() {
               onText={setFromText}
               onSelect={selectFrom}
               onLocate={locateFrom}
+              savedPlaces={savedPlaces}
             />
           </div>
           <button
@@ -332,6 +431,7 @@ export default function App() {
               onText={setToText}
               onSelect={selectTo}
               onLocate={locateTo}
+              savedPlaces={savedPlaces}
             />
           </div>
           <span className="h-7 w-px bg-gray-200" />
