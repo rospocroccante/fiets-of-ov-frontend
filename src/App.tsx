@@ -138,8 +138,11 @@ export default function App() {
     const f = fromText.trim();
     const t = toText.trim();
     if (!f || !t) return;
-    setOrigin({ label: f, query: f });
-    setDestination({ label: t, query: t });
+    // Keep the endpoint's coordinates when the visible text is still that endpoint's
+    // label (map picks, history entries, "Current location" after a nav replan):
+    // rebuilding from raw text would send labels the geocoder cannot resolve.
+    setOrigin(origin && origin.label === f ? origin : { label: f, query: f });
+    setDestination(destination && destination.label === t ? destination : { label: t, query: t });
     setSelectedMode(null);
     toMap();
   }
@@ -322,7 +325,11 @@ export default function App() {
       offRouteFixes.current = 0;
       return;
     }
-    offRouteFixes.current = navProgress.offRouteM > 40 ? offRouteFixes.current + 1 : 0;
+    // A fix kilometres away is not a missed turn: it is a desktop wifi position or a
+    // GPS glitch, and replanning from there tears the route away (often to "no route
+    // found" outside the graph). Those fixes get the far-from-route hint instead.
+    const off = navProgress.offRouteM;
+    offRouteFixes.current = off > 40 && off <= 2000 ? offRouteFixes.current + 1 : 0;
     if (offRouteFixes.current < 3 || Date.now() - lastReplanAt.current < 20_000) return;
     offRouteFixes.current = 0;
     lastReplanAt.current = Date.now();
@@ -332,6 +339,13 @@ export default function App() {
     setFromText("Current location");
     setOrigin({ label: "Current location", query: coordQuery(fix.lat, fix.lon) });
   }, [navigating, navProgress, fix]);
+  const farFromRoute = navigating && navProgress != null && navProgress.offRouteM > 2000;
+
+  // A replan that fails (position outside the routing graph) must not leave a dead
+  // nav session running: drop back to the plain error card.
+  useEffect(() => {
+    if (navigating && view.status === "error") setNavigating(false);
+  }, [navigating, view.status]);
 
   const panel: PanelState = filteredView
     ? { status: "ready", view: filteredView, selectedMode: effectiveMode, onSelect: setSelectedMode }
@@ -438,6 +452,11 @@ export default function App() {
                     etaMinutes={etaMinutes}
                     onExit={() => setNavigating(false)}
                   />
+                )}
+                {farFromRoute && (
+                  <div className="absolute left-3 top-24 z-[1000] rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-amber-700 shadow dark:bg-slate-800/95 dark:text-amber-300">
+                    You are far from this route. Navigation resumes when you get closer.
+                  </div>
                 )}
                 {placeInfo && (
                   <PlaceInfoCard

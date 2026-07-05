@@ -192,6 +192,30 @@ test("Start begins navigation with the overlay up, recents untouched; Exit ends 
   expect(screen.queryByRole("button", { name: /exit navigation/i })).toBeNull();
 });
 
+test("Search keeps coordinates for endpoints set via the map (no free-text downgrade)", async () => {
+  window.localStorage.clear();
+  renderApp();
+  startTrip();
+
+  // Set the start from the map: the origin is now a coordinate endpoint whose label
+  // fills the From field.
+  act(() => __fireMapContextMenu(52.3581, 4.8687));
+  fireEvent.click(await screen.findByRole("button", { name: /directions from here/i }));
+  await screen.findByDisplayValue(/vondelpark/i);
+
+  // Re-submitting must keep those coordinates; rebuilding the endpoint from the
+  // visible text would hand the geocoder a label it cannot resolve ("Current
+  // location" after a nav replan hits the same path).
+  fireEvent.click(screen.getByRole("button", { name: /search/i }));
+  await waitFor(() => {
+    const trips = JSON.parse(window.localStorage.getItem("fov.recentTrips.v1") ?? "[]") as Array<{
+      fromQuery: string;
+    }>;
+    if (trips.length === 0) throw new Error("not recorded yet");
+    expect(trips[0].fromQuery).toMatch(/^52\.\d+,4\.\d+$/);
+  });
+});
+
 test("swap exchanges the From and To fields", () => {
   renderApp();
   startTrip();
