@@ -307,7 +307,7 @@ export default function App() {
           <div aria-hidden="true" className="absolute top-[100vh] h-px w-px snap-start" />
         </>
       )}
-      <div className="sticky top-0 h-screen overflow-hidden bg-gradient-to-b from-brand-light to-white">
+      <div className="sticky top-0 h-screen overflow-hidden bg-white">
         {/* Map stage (progress -> 1): fills the screen below the top bar. */}
         <motion.div
           className="absolute inset-0 z-0 flex flex-col bg-white pt-20"
