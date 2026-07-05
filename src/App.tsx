@@ -7,6 +7,7 @@ import type { KindFilter } from "./components/FilterBar";
 import { HeaderMenu } from "./components/HeaderMenu";
 import { HomeAurora } from "./components/HomeAurora";
 import { HomeShortcuts } from "./components/HomeShortcuts";
+import { NavigationOverlay } from "./components/NavigationOverlay";
 import { PlaceInfoCard } from "./components/PlaceInfoCard";
 import type { PlaceInfo } from "./components/PlaceInfoCard";
 import { WeatherStrip } from "./components/WeatherStrip";
@@ -14,6 +15,7 @@ import { CARD_ACCENTS, PRIMARY_GRADIENT, TEXT_GRADIENT } from "./lib/gradients";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
 import { MapView } from "./components/MapView";
 import type { WeatherLayersState } from "./components/RainRadar";
+import { useLiveLocation } from "./hooks/useLiveLocation";
 import { useMorphProgress } from "./hooks/useMorphProgress";
 import { useRecentTrips } from "./hooks/useRecentTrips";
 import type { RecentTrip } from "./hooks/useRecentTrips";
@@ -21,6 +23,8 @@ import { useSavedPlaces } from "./hooks/useSavedPlaces";
 import type { SavedPlace } from "./hooks/useSavedPlaces";
 import { useTheme } from "./hooks/useTheme";
 import { useTripPlan } from "./hooks/useTripPlan";
+import { useWakeLock } from "./hooks/useWakeLock";
+import { buildNavRoute, progressAlong } from "./lib/routeProgress";
 import { isLive } from "./api/client";
 import { reverseGeocode, reverseGeocodeDetail } from "./geocode";
 import type { Mode, Place } from "./api/types";
@@ -60,6 +64,9 @@ export default function App() {
   // filter bar alongside Filters, a sibling of the map.
   const [radar, setRadar] = useState(false);
   const [wLayers, setWLayers] = useState<WeatherLayersState>({ rain: true, wind: true });
+  // Turn-by-turn mode: drives the live-location watch, the wake lock, the maneuver
+  // overlay and the follow camera. The whole nav chain derives from this one flag.
+  const [navigating, setNavigating] = useState(false);
 
   // progressIs1 gates map interactivity and pointer-events so mid-morph clicks
   // don't misfire. Tracked via a motion value event (no re-render on every frame).
@@ -101,6 +108,9 @@ export default function App() {
   }, [recentTrips]);
 
   useEffect(() => {
+    // Off-route replans rewrite the origin to "Current location"; recording those
+    // would pollute the history, so recents only record outside navigation.
+    if (navigating) return;
     if (view.status === "ready" && origin && destination) {
       recordTrip({
         fromLabel: origin.label,
@@ -109,7 +119,7 @@ export default function App() {
         toQuery: destination.query,
       });
     }
-  }, [view.status, origin, destination, recordTrip]);
+  }, [view.status, origin, destination, recordTrip, navigating]);
 
   function goHome() {
     setFromText("");
@@ -121,6 +131,7 @@ export default function App() {
     setHideMap(false);
     setRadar(false);
     setPlaceInfo(null);
+    setNavigating(false);
     toHome();
   }
   function commitSearch() {
@@ -276,6 +287,52 @@ export default function App() {
   const selectedOption = visible.find((o) => o.mode === effectiveMode) ?? visible[0];
   const route = selectedOption?.itinerary ?? null;
 
+  // Navigation chain: route -> nav plan -> live (or simulated) fix -> progress.
+  // Everything derives from `navigating`, so Start/Exit builds or drops it whole,
+  // and a replan (new route identity) rebuilds it without leaving nav mode.
+  const navRoute = useMemo(
+    () => (navigating && route ? buildNavRoute(route) : null),
+    [navigating, route]
+  );
+  // Mock mode has no GPS: replay the route itself instead of watching the device.
+  const simulation = useMemo(
+    () => (!isLive() && navRoute ? { points: navRoute.points } : undefined),
+    [navRoute]
+  );
+  const { fix } = useLiveLocation(navigating, simulation);
+  // navProgress, not progress: that name is taken by the home<->map morph value.
+  const navProgress = useMemo(
+    () => (navRoute && fix ? progressAlong(navRoute, fix.lat, fix.lon) : null),
+    [navRoute, fix]
+  );
+  useWakeLock(navigating);
+  // Proportional ETA: the remaining share of the route times the itinerary's minutes.
+  const etaMinutes =
+    navRoute && navProgress
+      ? Math.max(1, Math.round((navProgress.remaining / navRoute.total) * (route?.minutes ?? 0)))
+      : 0;
+
+  // Off-route replan: 40 m of drift for 3 consecutive fixes means a genuinely missed
+  // turn, not GPS noise; the 20 s floor keeps a slow rejoin from thrashing the
+  // planner. Replanning swaps the origin for the live position and stays in nav mode.
+  const offRouteFixes = useRef(0);
+  const lastReplanAt = useRef(0);
+  useEffect(() => {
+    if (!navigating || !navProgress || !fix) {
+      offRouteFixes.current = 0;
+      return;
+    }
+    offRouteFixes.current = navProgress.offRouteM > 40 ? offRouteFixes.current + 1 : 0;
+    if (offRouteFixes.current < 3 || Date.now() - lastReplanAt.current < 20_000) return;
+    offRouteFixes.current = 0;
+    lastReplanAt.current = Date.now();
+    // Bump the sequence so an in-flight reverse-geocode for the start slot cannot
+    // overwrite the live-position origin (same rule as pin drags).
+    geocodeSeq.current.start++;
+    setFromText("Current location");
+    setOrigin({ label: "Current location", query: coordQuery(fix.lat, fix.lon) });
+  }, [navigating, navProgress, fix]);
+
   const panel: PanelState = filteredView
     ? { status: "ready", view: filteredView, selectedMode: effectiveMode, onSelect: setSelectedMode }
     : view.status === "error"
@@ -340,7 +397,10 @@ export default function App() {
                 lat={view.origin?.lat ?? AMS_CENTER.lat}
                 lon={view.origin?.lon ?? AMS_CENTER.lon}
               />
-              <ResultsPanel state={panel} />
+              <ResultsPanel
+                state={panel}
+                onStartNav={route ? () => setNavigating(true) : undefined}
+              />
             </section>
             {!hideMap && (
               <section className="relative order-1 h-[40vh] shrink-0 md:order-2 md:h-auto md:w-1/2">
@@ -367,7 +427,18 @@ export default function App() {
                   wLayers={wLayers}
                   onLayerToggle={(k) => setWLayers((s) => ({ ...s, [k]: !s[k] }))}
                   dark={dark}
+                  liveFix={fix}
+                  navigating={navigating}
                 />
+                {navigating && navProgress && (
+                  <NavigationOverlay
+                    next={navProgress.next}
+                    toNext={navProgress.toNext}
+                    remaining={navProgress.remaining}
+                    etaMinutes={etaMinutes}
+                    onExit={() => setNavigating(false)}
+                  />
+                )}
                 {placeInfo && (
                   <PlaceInfoCard
                     place={placeInfo}

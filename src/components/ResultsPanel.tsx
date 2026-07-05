@@ -32,7 +32,15 @@ function WeatherBanner({ view }: { view: PlanView }) {
   );
 }
 
-export function ResultsPanel({ state }: { state: PanelState }) {
+export function ResultsPanel({
+  state,
+  onStartNav,
+}: {
+  state: PanelState;
+  // Starts turn-by-turn navigation for the selected option; the button only renders
+  // when the app can actually navigate (a route exists), so the prop is optional.
+  onStartNav?: () => void;
+}) {
   if (state.status === "idle") {
     return (
       <div className="p-6 text-gray-500 dark:text-slate-400">
@@ -83,13 +91,25 @@ export function ResultsPanel({ state }: { state: PanelState }) {
           />
         ))}
       </div>
-      <p className="px-1 text-sm text-gray-500 dark:text-slate-400">
-        {selected.summary}
-        <span className="px-1.5 text-gray-300 dark:text-slate-600">&middot;</span>
-        <span className="font-medium text-gray-600 dark:text-slate-300">
-          {departureLabel(selected.itinerary, Date.now())}
-        </span>
-      </p>
+      <div className="flex items-center gap-2 px-1">
+        <p className="min-w-0 flex-1 text-sm text-gray-500 dark:text-slate-400">
+          {selected.summary}
+          <span className="px-1.5 text-gray-300 dark:text-slate-600">&middot;</span>
+          <span className="font-medium text-gray-600 dark:text-slate-300">
+            {departureLabel(selected.itinerary, Date.now())}
+          </span>
+        </p>
+        {onStartNav && (
+          <button
+            type="button"
+            aria-label="Start navigation"
+            onClick={onStartNav}
+            className="shrink-0 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:brightness-110 dark:bg-emerald-600"
+          >
+            Start
+          </button>
+        )}
+      </div>
       <ItineraryDetails itinerary={selected.itinerary} />
     </div>
   );

@@ -166,6 +166,32 @@ test("menu clears recent searches", async () => {
   expect(JSON.parse(window.localStorage.getItem("fov.recentTrips.v1") ?? "[]")).toEqual([]);
 });
 
+test("Start begins navigation with the overlay up, recents untouched; Exit ends it", async () => {
+  window.localStorage.clear();
+  renderApp();
+  startTrip();
+
+  // Recording implies the plan is ready (the effect only fires on ready), so the
+  // Start button is in the DOM and recents hold exactly the searched trip.
+  await waitFor(() => {
+    const trips = JSON.parse(window.localStorage.getItem("fov.recentTrips.v1") ?? "[]");
+    if (trips.length === 0) throw new Error("not recorded yet");
+  });
+  const recentsBefore = window.localStorage.getItem("fov.recentTrips.v1");
+
+  fireEvent.click(screen.getByRole("button", { name: /start navigation/i }));
+
+  // The first simulated fix is synchronous, so the banner is up without any timer
+  // advancement. At the route start the proportional ETA is the full itinerary time.
+  expect(screen.getByRole("button", { name: /exit navigation/i })).toBeInTheDocument();
+  expect(screen.getByText(/~24 min/)).toBeInTheDocument();
+  // Starting navigation must not touch the persisted recents.
+  expect(window.localStorage.getItem("fov.recentTrips.v1")).toBe(recentsBefore);
+
+  fireEvent.click(screen.getByRole("button", { name: /exit navigation/i }));
+  expect(screen.queryByRole("button", { name: /exit navigation/i })).toBeNull();
+});
+
 test("swap exchanges the From and To fields", () => {
   renderApp();
   startTrip();

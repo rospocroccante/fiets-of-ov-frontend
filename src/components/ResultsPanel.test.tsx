@@ -43,3 +43,16 @@ test("clicking an option calls onSelect", () => {
   fireEvent.click(screen.getByText("By bike"));
   expect(onSelect).toHaveBeenCalledWith("bike");
 });
+
+test("onStartNav renders a Start button beside the departure line and fires on click", () => {
+  const view = buildPlanView(mockPlanFor("A", "Bijlmer rain"));
+  const onStartNav = vi.fn();
+  render(
+    <ResultsPanel
+      state={{ status: "ready", view, selectedMode: "transit", onSelect: () => {} }}
+      onStartNav={onStartNav}
+    />
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Start navigation" }));
+  expect(onStartNav).toHaveBeenCalledTimes(1);
+});
