@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Circle,
   CircleMarker,
   MapContainer,
   Marker,
@@ -118,15 +119,48 @@ function MapInteraction({ interactive }: { interactive: boolean }) {
   return null;
 }
 
-function FitRoute({ coords, fallback }: { coords: [number, number][]; fallback: LatLon | null }) {
+function FitRoute({
+  coords,
+  fallback,
+  active,
+}: {
+  coords: [number, number][];
+  fallback: LatLon | null;
+  active: boolean;
+}) {
   const map = useMap();
   useEffect(() => {
+    // Navigation owns the camera: a refit on every replan would snap it off the fix.
+    if (!active) return;
     if (coords.length >= 2) {
       map.fitBounds(coords as LatLngBoundsExpression, { padding: [50, 50] });
     } else if (fallback) {
       map.setView([fallback.lat, fallback.lon], 14);
     }
-  }, [map, coords, fallback]);
+  }, [map, coords, fallback, active]);
+  return null;
+}
+
+// Keeps the camera on the live fix: one hard setView to street zoom on activation,
+// then panTo per fix so the user's own zoom tweaks survive while riding.
+function FollowCamera({ target, active }: { target: LatLon | null; active: boolean }) {
+  const map = useMap();
+  const started = useRef(false);
+  const lat = target?.lat;
+  const lon = target?.lon;
+  useEffect(() => {
+    if (!active || lat == null || lon == null) {
+      started.current = false;
+      return;
+    }
+    if (!started.current) {
+      started.current = true;
+      map.setView([lat, lon], 17);
+      return;
+    }
+    // Guarded: the test mock's map may not implement panTo.
+    if (typeof map.panTo === "function") map.panTo([lat, lon]);
+  }, [map, active, lat, lon]);
   return null;
 }
 
@@ -222,6 +256,8 @@ export function MapView({
   wLayers = { rain: true, wind: true },
   onLayerToggle,
   dark = false,
+  liveFix = null,
+  navigating = false,
 }: {
   origin: LatLon | null;
   destination: LatLon | null;
@@ -242,6 +278,10 @@ export function MapView({
   wLayers?: WeatherLayersState;
   onLayerToggle?: (layer: keyof WeatherLayersState) => void;
   dark?: boolean;
+  // Turn-by-turn state: the fix to draw as the live dot, and whether navigation owns
+  // the camera (follow the fix, suppress route refits).
+  liveFix?: { lat: number; lon: number; accuracy: number } | null;
+  navigating?: boolean;
 }) {
   const legs = route?.legs ?? [];
   // Fresh array per render would re-fire FitRoute's fitBounds on every render (snapping
@@ -286,7 +326,8 @@ export function MapView({
         {showWeather && wLayers.rain && <RadarOverlay frames={rain.frames} />}
         {showWeather && wLayers.wind && <WindVelocityLayer data={wind.data} />}
         <MapEvents onPick={onPick} onContextMenu={handleMenu} />
-        <FitRoute coords={allCoords} fallback={origin ?? destination} />
+        <FitRoute coords={allCoords} fallback={origin ?? destination} active={!navigating} />
+        <FollowCamera target={liveFix} active={navigating} />
 
       {/* White casing under the route for contrast on the light basemap. */}
       {legs.map((leg, i) => {
@@ -354,6 +395,29 @@ export function MapView({
 
       {viewport != null && viewport.zoom >= POI_MIN_ZOOM && (
         <PoiMarkers pois={pois} onPick={onPoiPick} />
+      )}
+
+      {/* Live position: GPS-accuracy halo under a Google-blue dot; rendered last so
+          it draws above the route and stop markers. */}
+      {liveFix && (
+        <>
+          <Circle
+            center={[liveFix.lat, liveFix.lon]}
+            radius={liveFix.accuracy}
+            pathOptions={{
+              color: "#1A73E8",
+              opacity: 0.25,
+              fillColor: "#1A73E8",
+              fillOpacity: 0.1,
+              weight: 1,
+            }}
+          />
+          <CircleMarker
+            center={[liveFix.lat, liveFix.lon]}
+            radius={7}
+            pathOptions={{ color: "#ffffff", weight: 2, fillColor: "#1A73E8", fillOpacity: 1 }}
+          />
+        </>
       )}
       </MapContainer>
       {/* Discoverability: the POI layer only exists at street zoom — say so, and let

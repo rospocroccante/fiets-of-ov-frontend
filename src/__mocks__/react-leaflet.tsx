@@ -13,8 +13,14 @@ export function TileLayer() {
   return null;
 }
 
+// Circle markers render an identifiable span so tests can assert presence (the live
+// position dot, stop dots); Circle mirrors it for the accuracy halo.
 export function CircleMarker({ children }: { children?: React.ReactNode }) {
-  return <>{children}</>;
+  return <span className="leaflet-circle-marker">{children}</span>;
+}
+
+export function Circle({ children }: { children?: React.ReactNode }) {
+  return <span className="leaflet-circle">{children}</span>;
 }
 
 export function Polyline({ children }: { children?: React.ReactNode }) {
@@ -54,19 +60,34 @@ export function Tooltip({ children }: { children?: React.ReactNode }) {
 // Test spy: records the last scrollWheelZoom enable/disable driven through useMap.
 export const __wheelZoom = { enabled: null as boolean | null };
 
-export function useMap() {
-  return {
-    fitBounds: () => {},
-    setView: () => {},
-    scrollWheelZoom: {
-      enable: () => {
-        __wheelZoom.enabled = true;
-      },
-      disable: () => {
-        __wheelZoom.enabled = false;
-      },
+// Test spy: counts imperative camera calls (FitRoute vs FollowCamera assertions).
+// Tests should compare before/after deltas; counters are never reset.
+export const __mapCalls = { fitBounds: 0, setView: 0, panTo: 0 };
+
+// A single stable map object, like the real useMap: effects keyed on map identity
+// must not re-fire every render.
+const _map = {
+  fitBounds: () => {
+    __mapCalls.fitBounds += 1;
+  },
+  setView: () => {
+    __mapCalls.setView += 1;
+  },
+  panTo: () => {
+    __mapCalls.panTo += 1;
+  },
+  scrollWheelZoom: {
+    enable: () => {
+      __wheelZoom.enabled = true;
     },
-  };
+    disable: () => {
+      __wheelZoom.enabled = false;
+    },
+  },
+};
+
+export function useMap() {
+  return _map;
 }
 
 type MapHandlers = {

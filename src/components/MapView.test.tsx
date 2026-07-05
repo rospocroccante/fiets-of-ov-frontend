@@ -6,6 +6,7 @@ import {
   __fireMapClick,
   __fireMapContextMenu,
   __fireMarkerDragEnd,
+  __mapCalls,
   __wheelZoom,
 } from "../__mocks__/react-leaflet";
 import type { Itinerary } from "../api/types";
@@ -217,4 +218,54 @@ test("weather layers pause while the map is not interactive (hidden behind the h
   // No readout on screen and no weather fetches while invisible.
   expect(screen.queryByText("light")).toBeNull();
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test("liveFix renders the position dot and its accuracy circle", () => {
+  const { container, unmount } = renderMap(
+    <MapView
+      origin={null}
+      destination={null}
+      stops={[]}
+      route={null}
+      liveFix={{ lat: 52.37, lon: 4.89, accuracy: 25 }}
+    />,
+  );
+  expect(container.querySelector(".leaflet-circle-marker")).toBeTruthy();
+  expect(container.querySelector(".leaflet-circle")).toBeTruthy();
+  unmount();
+
+  // No fix: no dot (stops are empty, so no other circle markers can mask this).
+  const { container: bare } = renderMap(
+    <MapView origin={null} destination={null} stops={[]} route={null} />,
+  );
+  expect(bare.querySelector(".leaflet-circle-marker")).toBeNull();
+  expect(bare.querySelector(".leaflet-circle")).toBeNull();
+});
+
+test("while navigating, the route refit is suppressed and the camera follows the fix", () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const view = (fix: { lat: number; lon: number; accuracy: number }) => (
+    <QueryClientProvider client={client}>
+      <MapView
+        origin={{ lat: 52.379, lon: 4.9 }}
+        destination={{ lat: 52.358, lon: 4.868 }}
+        stops={[]}
+        route={route}
+        navigating
+        liveFix={fix}
+      />
+    </QueryClientProvider>
+  );
+  const fitBefore = __mapCalls.fitBounds;
+  const setViewBefore = __mapCalls.setView;
+  const panBefore = __mapCalls.panTo;
+  const { rerender } = render(view({ lat: 52.379, lon: 4.9, accuracy: 10 }));
+  // FitRoute is inactive while navigating (a replan must not snap the camera away);
+  // FollowCamera did the one activation setView instead.
+  expect(__mapCalls.fitBounds).toBe(fitBefore);
+  expect(__mapCalls.setView).toBe(setViewBefore + 1);
+  // Each new fix pans; it does not re-run the zooming setView.
+  rerender(view({ lat: 52.3785, lon: 4.899, accuracy: 10 }));
+  expect(__mapCalls.panTo).toBe(panBefore + 1);
+  expect(__mapCalls.setView).toBe(setViewBefore + 1);
 });
