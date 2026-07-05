@@ -118,8 +118,8 @@ const STRINGS = {
   weatherRain: { en: "Rain", nl: "Regen" },
   weatherSnow: { en: "Snow", nl: "Sneeuw" },
   weatherThunderstorm: { en: "Thunderstorm", nl: "Onweer" },
-  // No vetted Dutch line for the generic fallback; it stays English in both languages.
-  weatherClouds: { en: "Clouds", nl: "Clouds" },
+  weatherClouds: { en: "Clouds", nl: "Bewolking" },
+  bikeRoute: { en: "Bike route", nl: "Fietsroute" },
 } as const;
 
 export type StringKey = keyof typeof STRINGS;

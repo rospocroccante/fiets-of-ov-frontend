@@ -83,8 +83,7 @@ function hasFerry(it: Itinerary): boolean {
 function summarise(kind: Mode, it: Itinerary, lang: Lang): string {
   if (kind === "bike") {
     const d = km(bikeDistanceM(it));
-    // "Bike route" has no vetted Dutch line, so it stays English in both languages.
-    const base = d != null ? translate(lang, "kmByBike", { d }) : "Bike route";
+    const base = d != null ? translate(lang, "kmByBike", { d }) : translate(lang, "bikeRoute");
     return hasFerry(it) ? `${base} ${translate(lang, "plusFerry")}` : base;
   }
   if (kind === "transit") return transitSummary(it, lang);
