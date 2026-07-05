@@ -23,6 +23,12 @@ const MOCK_FORECAST: ShortForecast = {
     { time: "15:00", tempC: 19, code: 3, precipProb: 25 },
     { time: "16:00", tempC: 17, code: 61, precipProb: 70 },
     { time: "17:00", tempC: 16, code: 61, precipProb: 60 },
+    { time: "18:00", tempC: 16, code: 80, precipProb: 45 },
+    { time: "19:00", tempC: 15, code: 3, precipProb: 30 },
+    { time: "20:00", tempC: 15, code: 2, precipProb: 15 },
+    { time: "21:00", tempC: 14, code: 2, precipProb: 10 },
+    { time: "22:00", tempC: 14, code: 1, precipProb: 5 },
+    { time: "23:00", tempC: 13, code: 1, precipProb: 5 },
   ],
 };
 
@@ -42,7 +48,7 @@ function buildUrl(lat: number, lon: number): string {
     `?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}` +
     "&current=temperature_2m,weather_code,is_day" +
     "&hourly=temperature_2m,weather_code,precipitation_probability" +
-    "&forecast_hours=6&timezone=Europe%2FAmsterdam"
+    "&forecast_hours=12&timezone=Europe%2FAmsterdam"
   );
 }
 
@@ -55,9 +61,10 @@ export function parseShortForecast(data: OpenMeteoShort, nowIso: string): ShortF
       code: data.hourly.weather_code[i],
       precipProb: data.hourly.precipitation_probability[i] ?? 0,
     }))
-    // Keep only slots after "now" so the strip always shows what is coming.
+    // Keep only slots after "now" so the strip always shows what is coming; ten
+    // slots fill the strip's full width (it scrolls on narrow screens).
     .filter((h) => h.iso > nowIso)
-    .slice(0, 4)
+    .slice(0, 10)
     .map(({ iso: _iso, ...h }) => h);
   return {
     current: {

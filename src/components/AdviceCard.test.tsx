@@ -21,19 +21,23 @@ const recommended: OptionView = {
   itinerary,
 };
 
-test("shows Recommended badge, title, minutes and summary", () => {
+test("shows the Best tag, title and minutes", () => {
   render(<AdviceCard option={recommended} selected onSelect={() => {}} />);
-  expect(screen.getByText("Recommended")).toBeInTheDocument();
+  expect(screen.getByText("Best")).toBeInTheDocument();
   expect(screen.getByText("By bike")).toBeInTheDocument();
   expect(screen.getByText("24 min")).toBeInTheDocument();
-  expect(screen.getByText("4.8 km by bike")).toBeInTheDocument();
 });
 
-test("no badge when not recommended", () => {
+test("no tag when not recommended", () => {
   render(
     <AdviceCard option={{ ...recommended, recommended: false }} selected={false} onSelect={() => {}} />
   );
-  expect(screen.queryByText("Recommended")).not.toBeInTheDocument();
+  expect(screen.queryByText("Best")).not.toBeInTheDocument();
+});
+
+test("the selected toggle is pressed", () => {
+  render(<AdviceCard option={recommended} selected onSelect={() => {}} />);
+  expect(screen.getByRole("button")).toHaveAttribute("aria-pressed", "true");
 });
 
 test("calls onSelect when clicked", () => {
@@ -41,9 +45,4 @@ test("calls onSelect when clicked", () => {
   render(<AdviceCard option={recommended} selected={false} onSelect={onSelect} />);
   fireEvent.click(screen.getByRole("button"));
   expect(onSelect).toHaveBeenCalledTimes(1);
-});
-
-test("shows when the trip leaves", () => {
-  render(<AdviceCard option={recommended} selected={false} onSelect={() => {}} />);
-  expect(screen.getByText(/^Leave (now|at)/)).toBeInTheDocument();
 });

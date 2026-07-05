@@ -1,4 +1,5 @@
 import type { Mode } from "../api/types";
+import { departureLabel } from "../lib/planView";
 import type { PlanView } from "../lib/planView";
 import { AdviceCard } from "./AdviceCard";
 import { ItineraryDetails } from "./ItineraryDetails";
@@ -23,7 +24,7 @@ function WeatherBanner({ view }: { view: PlanView }) {
       <div className="flex items-center gap-2">
         <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs font-semibold">{tag}</span>
         {view.maxRain != null && view.maxRain > 0 && (
-          <span className="text-xs">peak ~{view.maxRain} mm/h</span>
+          <span className="text-xs">up to {view.maxRain} mm/h</span>
         )}
       </div>
       <p className="mt-2 text-sm font-medium">{view.reason}</p>
@@ -59,10 +60,20 @@ export function ResultsPanel({ state }: { state: PanelState }) {
   const { view, selectedMode, onSelect } = state;
   const selected = view.options.find((o) => o.mode === selectedMode) ?? view.options[0];
 
+  // All options can be filtered away by the mode chips; say so instead of crashing.
+  if (!selected) {
+    return (
+      <div className="m-2 rounded-card border border-gray-100 bg-white p-4 text-sm text-gray-500">
+        No options match the current filters.
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-4 p-2">
+    <div className="space-y-3 p-2">
       <WeatherBanner view={view} />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {/* Compact mode toggles in one row; the itinerary below is the main content. */}
+      <div className="flex gap-2 overflow-x-auto">
         {view.options.map((option) => (
           <AdviceCard
             key={option.mode}
@@ -72,6 +83,13 @@ export function ResultsPanel({ state }: { state: PanelState }) {
           />
         ))}
       </div>
+      <p className="px-1 text-sm text-gray-500">
+        {selected.summary}
+        <span className="px-1.5 text-gray-300">&middot;</span>
+        <span className="font-medium text-gray-600">
+          {departureLabel(selected.itinerary, Date.now())}
+        </span>
+      </p>
       <ItineraryDetails itinerary={selected.itinerary} />
     </div>
   );

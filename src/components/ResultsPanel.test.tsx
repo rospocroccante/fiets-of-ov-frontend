@@ -26,6 +26,14 @@ test("ready shows the weather reason, both options, and step-by-step", () => {
   // step-by-step for the selected (transit) itinerary
   expect(screen.getByText(/Step by step/)).toBeInTheDocument();
   expect(screen.getByText("Metro 52")).toBeInTheDocument();
+  // the selected option's departure line sits between the toggles and the steps
+  expect(screen.getByText(/Leave (now|at)/)).toBeInTheDocument();
+});
+
+test("all options filtered away shows a friendly empty state", () => {
+  const view = { ...buildPlanView(mockPlanFor("A", "Bijlmer rain")), options: [] };
+  render(<ResultsPanel state={{ status: "ready", view, selectedMode: "bike", onSelect: () => {} }} />);
+  expect(screen.getByText(/no options match/i)).toBeInTheDocument();
 });
 
 test("clicking an option calls onSelect", () => {

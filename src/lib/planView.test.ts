@@ -1,4 +1,4 @@
-import { buildPlanView, departureLabel } from "./planView";
+import { buildPlanView, departureLabel, friendlyReason } from "./planView";
 import { mockPlanFor } from "../api/mock";
 import type { Plan, PlanLeg } from "../api/types";
 
@@ -73,6 +73,26 @@ test("bike km counts only bicycle legs and the ferry crossing is called out", ()
 test("carries the rain fields through", () => {
   const v = buildPlanView(mockPlanFor("A", "Unknown spot"));
   expect(v.rainExpected).toBeNull();
+});
+
+test("backend reasons become plain sentences", () => {
+  expect(friendlyReason("dry during your 16-min ride -> bike")).toBe(
+    "It should stay dry for your 16-minute ride. Take the bike.",
+  );
+  expect(friendlyReason("dry during your 24-min ride (rain only from 15:40) -> bike")).toBe(
+    "It should stay dry for your 24-minute ride (rain starts around 15:40). Take the bike.",
+  );
+  expect(friendlyReason("rain around 15:10 (~1.2 mm/h) -> take tram 1 (29 min)")).toBe(
+    "Rain is expected around 15:10 (up to 1.2 mm/h). Take tram 1 (29 min).",
+  );
+  expect(friendlyReason("rain forecast unavailable -> fastest is bike (24 min)")).toBe(
+    "The rain forecast is unavailable right now. The fastest option is the bike (24 min).",
+  );
+  expect(friendlyReason("rain expected but no transit found -> bike (24 min), bring a raincoat")).toBe(
+    "Rain is on the way and there is no good transit alternative. Bike it in 24 minutes and bring a raincoat.",
+  );
+  // Unknown phrasings pass through untouched rather than getting mangled.
+  expect(friendlyReason("some new backend reason")).toBe("some new backend reason");
 });
 
 test("departureLabel: leave now when imminent, clock time when the trip departs later", () => {

@@ -106,12 +106,55 @@ function toOptionView(option: Option): OptionView {
   };
 }
 
+function cap(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// Backend reasons are compact machine strings ("rain around 15:10 (~1.2 mm/h) ->
+// take tram 1 (29 min)"); rewrite them as plain sentences before they reach the
+// advice banner. Pattern-matched on the backend's known phrasings, with a safe
+// capitalise-and-punctuate fallback for anything new.
+export function friendlyReason(reason: string): string {
+  const parts = reason.split(" -> ");
+  if (parts.length !== 2) return reason;
+  const [why, what] = parts;
+
+  let m: RegExpMatchArray | null;
+  let whyOut: string;
+  if ((m = why.match(/^dry during your (\d+)-min ride(?: \(rain only from (\d+:\d+)\))?$/))) {
+    whyOut = m[2]
+      ? `It should stay dry for your ${m[1]}-minute ride (rain starts around ${m[2]}).`
+      : `It should stay dry for your ${m[1]}-minute ride.`;
+  } else if ((m = why.match(/^rain around (\d+:\d+) \(~([\d.]+) mm\/h\)$/))) {
+    whyOut = `Rain is expected around ${m[1]} (up to ${m[2]} mm/h).`;
+  } else if (why === "rain expected but no transit found") {
+    whyOut = "Rain is on the way and there is no good transit alternative.";
+  } else if (why === "rain forecast unavailable") {
+    whyOut = "The rain forecast is unavailable right now.";
+  } else {
+    whyOut = `${cap(why)}.`;
+  }
+
+  let whatOut: string;
+  if (what === "bike") {
+    whatOut = "Take the bike.";
+  } else if ((m = what.match(/^fastest is bike \((\d+) min\)$/))) {
+    whatOut = `The fastest option is the bike (${m[1]} min).`;
+  } else if ((m = what.match(/^bike \((\d+) min\), bring a raincoat$/))) {
+    whatOut = `Bike it in ${m[1]} minutes and bring a raincoat.`;
+  } else {
+    whatOut = `${cap(what)}.`;
+  }
+
+  return `${whyOut} ${whatOut}`;
+}
+
 export function buildPlanView(plan: Plan): PlanView {
   // Backend returns options ranked, recommended first; preserve that order.
   const options = plan.options.map(toOptionView);
   return {
     recommendation: plan.recommendation,
-    reason: plan.reason,
+    reason: friendlyReason(plan.reason),
     rainExpected: plan.rain_expected,
     maxRain: plan.max_rain_mm_per_h,
     options,

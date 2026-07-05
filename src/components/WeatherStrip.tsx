@@ -30,7 +30,7 @@ export function WeatherStrip({ lat, lon }: { lat: number; lon: number }) {
         </div>
       </div>
       <span className="h-8 w-px shrink-0 bg-slate-100" />
-      <ol className="flex items-center gap-4">
+      <ol className="flex flex-1 items-center justify-between gap-3">
         {forecast.hours.map((h) => {
           const look = weatherLook(h.code, true);
           return (

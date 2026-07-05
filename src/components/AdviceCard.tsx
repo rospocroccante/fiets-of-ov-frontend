@@ -1,20 +1,16 @@
-import { modeColor, modeSoftBg } from "../lib/modeColors";
-import { departureLabel } from "../lib/planView";
+import { modeColor } from "../lib/modeColors";
 import type { OptionView } from "../lib/planView";
 
-const ICON: Record<OptionView["mode"], string> = {
-  bike: "Bike",
-  transit: "Transit",
-  bike_and_ride: "Bike + OV",
-};
-
-// The advice option maps to a transport mode for its soft banner tint.
+// The advice option maps to a transport mode for its accent dot.
 const OPTION_MODE: Record<OptionView["mode"], string> = {
   bike: "BICYCLE",
   transit: "SUBWAY",
   bike_and_ride: "FERRY",
 };
 
+// Compact mode toggle: the itinerary below is the star of the results panel, these
+// only switch which one it shows. One line of identity (dot + name), one line of
+// the number that matters (minutes), and a small Best tag on the recommendation.
 export function AdviceCard({
   option,
   selected,
@@ -28,37 +24,33 @@ export function AdviceCard({
     <button
       onClick={onSelect}
       aria-pressed={selected}
-      className={`w-full rounded-card border bg-white p-4 text-left shadow-sm transition ${
-        selected ? "border-brand ring-2 ring-brand/30" : "border-gray-100 hover:shadow-md"
+      className={`min-w-[7.5rem] flex-1 basis-0 rounded-card border p-3 text-left transition ${
+        selected
+          ? "border-brand bg-brand text-white shadow-md"
+          : "border-gray-200 bg-white text-slate-600 hover:border-gray-300 hover:shadow-sm"
       }`}
     >
-      {/* Mode banner: a soft tint of the mode colour, label in that colour. Clean, not
-          loud — colour weight lives in the animated home background, not here. */}
-      <div
-        className="relative mb-3 flex h-24 items-center justify-center rounded-card border border-slate-100"
-        style={{ backgroundImage: modeSoftBg(OPTION_MODE[option.mode]) }}
-      >
+      <span className="flex items-center gap-1.5">
+        <span
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: modeColor(OPTION_MODE[option.mode]) }}
+        />
+        <h3 className="truncate text-[13px] font-semibold">{option.title}</h3>
+      </span>
+      <span className="mt-1 flex items-baseline justify-between gap-2">
+        <span className={`text-lg font-bold ${selected ? "text-white" : "text-slate-900"}`}>
+          {option.minutes} min
+        </span>
         {option.recommended && (
-          <span className="absolute left-3 top-3 rounded-full bg-brand px-3 py-1 text-xs font-semibold text-white">
-            Recommended
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+              selected ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-700"
+            }`}
+          >
+            Best
           </span>
         )}
-        <span
-          className="text-2xl font-bold"
-          style={{ color: modeColor(OPTION_MODE[option.mode]) }}
-        >
-          {ICON[option.mode]}
-        </span>
-      </div>
-
-      <div className="flex items-start justify-between">
-        <h3 className="text-lg font-semibold">{option.title}</h3>
-        <span className="shrink-0 text-sm font-semibold text-brand">{option.minutes} min</span>
-      </div>
-      <p className="mt-1 text-sm text-gray-500">{option.summary}</p>
-      <p className="mt-1 text-xs font-medium text-gray-400">
-        {departureLabel(option.itinerary, Date.now())}
-      </p>
+      </span>
     </button>
   );
 }
