@@ -23,7 +23,7 @@ export function WeatherStrip({ lat, lon }: { lat: number; lon: number }) {
   return (
     <div className="mb-3 flex items-center gap-4 overflow-x-auto rounded-card border border-slate-100 bg-white/80 px-4 py-3 shadow-sm backdrop-blur">
       <div className="flex shrink-0 items-center gap-2" title={now.label}>
-        <Glyph icon={now.icon} className="text-[28px] text-brand" />
+        <Glyph icon={now.icon} className="text-[28px] text-ams-sky" />
         <div>
           <p className="text-lg font-semibold leading-tight">{forecast.current.tempC}&deg;</p>
           <p className="text-[11px] leading-tight text-gray-500">{now.label}</p>
@@ -36,7 +36,7 @@ export function WeatherStrip({ lat, lon }: { lat: number; lon: number }) {
           return (
             <li key={h.time} className="flex shrink-0 flex-col items-center" title={look.label}>
               <span className="text-[10px] font-medium text-gray-400">{h.time}</span>
-              <Glyph icon={look.icon} className="my-0.5 text-[20px] text-brand" />
+              <Glyph icon={look.icon} className="my-0.5 text-[20px] text-ams-sky" />
               <span className="text-[11px] font-semibold text-gray-700">{h.tempC}&deg;</span>
               {h.precipProb >= 20 && (
                 <span className="text-[10px] font-medium text-sky-600">{h.precipProb}%</span>

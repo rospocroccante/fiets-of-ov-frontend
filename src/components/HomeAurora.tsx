@@ -16,13 +16,15 @@ interface Blob {
   pos: Pick<CSSProperties, "top" | "left" | "right" | "bottom">;
 }
 
+// The palette is Amsterdam's: Mondrian's primaries (flag red, NS yellow, GVB blue)
+// with the canal navy, the open sky, and the bike-route green drifting between them.
 const BLOBS: Blob[] = [
-  { color: "#7c3aed", size: "40rem", opacity: 0.7, anim: "aurora-a", duration: "24s", delay: "0s", pos: { top: "-10rem", left: "-10rem" } },
-  { color: "#ec4899", size: "34rem", opacity: 0.65, anim: "aurora-b", duration: "28s", delay: "-6s", pos: { top: "-6rem", right: "-8rem" } },
-  { color: "#06b6d4", size: "36rem", opacity: 0.6, anim: "aurora-c", duration: "32s", delay: "-3s", pos: { bottom: "-10rem", right: "2rem" } },
-  { color: "#f59e0b", size: "28rem", opacity: 0.5, anim: "aurora-b", duration: "26s", delay: "-12s", pos: { bottom: "-8rem", left: "0rem" } },
-  { color: "#3b82f6", size: "30rem", opacity: 0.6, anim: "aurora-a", duration: "30s", delay: "-16s", pos: { top: "26%", left: "30%" } },
-  { color: "#8b5cf6", size: "26rem", opacity: 0.5, anim: "aurora-c", duration: "22s", delay: "-9s", pos: { top: "38%", right: "22%" } },
+  { color: "#0077C8", size: "40rem", opacity: 0.6, anim: "aurora-a", duration: "24s", delay: "0s", pos: { top: "-10rem", left: "-10rem" } },
+  { color: "#DA291C", size: "34rem", opacity: 0.5, anim: "aurora-b", duration: "28s", delay: "-6s", pos: { top: "-6rem", right: "-8rem" } },
+  { color: "#38BDF8", size: "36rem", opacity: 0.6, anim: "aurora-c", duration: "32s", delay: "-3s", pos: { bottom: "-10rem", right: "2rem" } },
+  { color: "#FFC917", size: "28rem", opacity: 0.55, anim: "aurora-b", duration: "26s", delay: "-12s", pos: { bottom: "-8rem", left: "0rem" } },
+  { color: "#0D4A73", size: "30rem", opacity: 0.5, anim: "aurora-a", duration: "30s", delay: "-16s", pos: { top: "26%", left: "30%" } },
+  { color: "#10B981", size: "26rem", opacity: 0.45, anim: "aurora-c", duration: "22s", delay: "-9s", pos: { top: "38%", right: "22%" } },
 ];
 
 export function HomeAurora() {

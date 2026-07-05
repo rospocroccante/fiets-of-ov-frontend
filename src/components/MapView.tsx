@@ -25,7 +25,10 @@ import { WindVelocityLayer } from "./WeatherLive";
 type LatLon = { lat: number; lon: number };
 
 const AMS: [number, number] = [52.3728, 4.8936];
-const BRAND = "#13386E";
+// Position is Amsterdam-flag red (the "you start here" pin); transit stop dots stay
+// canal navy; the finish flag is near-black so it reads as ink, not as a mode colour.
+const POSITION = "#DA291C";
+const STOP = "#0D4A73";
 const FLAG = "#0B2147";
 
 // A leg's drawable path: its real geometry when present, else a straight line endpoints.
@@ -314,7 +317,7 @@ export function MapView({
         <Pin
           at={origin}
           icon="location_on"
-          color={BRAND}
+          color={POSITION}
           which="start"
           anchor="tip"
           onMovePoint={onMovePoint}
@@ -336,7 +339,7 @@ export function MapView({
           key={s.stop_id}
           center={[s.lat, s.lon]}
           radius={4}
-          pathOptions={{ color: BRAND, weight: 1, fillColor: "#ffffff", fillOpacity: 1 }}
+          pathOptions={{ color: STOP, weight: 1, fillColor: "#ffffff", fillOpacity: 1 }}
         >
           <Popup>{s.name}</Popup>
         </CircleMarker>
