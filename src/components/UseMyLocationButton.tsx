@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getCurrentPosition, geoErrorMessage, accuracyWarning } from "../geolocate";
+import { useI18n } from "../lib/i18n";
 import { reverseGeocode } from "../geocode";
 import { coordQuery } from "../trip";
 import type { Endpoint } from "../trip";
@@ -15,6 +16,7 @@ type StatusState =
   | null;
 
 export function UseMyLocationButton({ onLocated, className }: Props): JSX.Element {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<StatusState>(null);
 
@@ -41,7 +43,7 @@ export function UseMyLocationButton({ onLocated, className }: Props): JSX.Elemen
     <div className={className}>
       <button
         type="button"
-        aria-label="Use my location"
+        aria-label={t("useMyLocation")}
         disabled={busy}
         onClick={handleClick}
         className="flex items-center justify-center rounded-full p-2 text-brand hover:bg-brand-light disabled:opacity-50"

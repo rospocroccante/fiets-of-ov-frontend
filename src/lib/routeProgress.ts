@@ -1,4 +1,6 @@
 import type { Itinerary, PlanLeg } from "../api/types";
+import { translate } from "./i18n";
+import type { Lang } from "./i18n";
 import { decodePolyline } from "./polyline";
 import { transitLabel } from "./planView";
 
@@ -48,7 +50,7 @@ function legCoords(leg: PlanLeg): [number, number][] {
   return pts;
 }
 
-export function buildNavRoute(itinerary: Itinerary): NavRoute {
+export function buildNavRoute(itinerary: Itinerary, lang: Lang = "en"): NavRoute {
   const points: [number, number][] = [];
   const cum: number[] = [];
   const maneuvers: NavManeuver[] = [];
@@ -89,17 +91,20 @@ export function buildNavRoute(itinerary: Itinerary): NavRoute {
         offset += s.distance_m ?? 0;
       }
     } else if (leg.route != null) {
-      const line = `${transitLabel(leg.mode)} ${leg.route}`;
+      const line = `${transitLabel(leg.mode, lang)} ${leg.route}`;
       maneuvers.push({
         at: legStart,
         direction: "BOARD",
-        street: leg.headsign != null ? `${line} towards ${leg.headsign}` : line,
+        street:
+          leg.headsign != null
+            ? `${line} ${translate(lang, "towardsX", { x: leg.headsign })}`
+            : line,
         legIndex,
       });
       maneuvers.push({
         at: legEnd,
         direction: "ALIGHT",
-        street: leg.to.name ?? "your stop",
+        street: leg.to.name ?? translate(lang, "yourStop"),
         legIndex,
       });
     }

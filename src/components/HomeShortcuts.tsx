@@ -1,12 +1,14 @@
 import type { RecentTrip } from "../hooks/useRecentTrips";
 import type { SavedPlace } from "../hooks/useSavedPlaces";
+import { useI18n } from "../lib/i18n";
+import type { Translator } from "../lib/i18n";
 
-function timeAgo(at: number, now: number): string {
+function timeAgo(at: number, now: number, t: Translator): string {
   const min = Math.max(1, Math.round((now - at) / 60000));
-  if (min < 60) return `${min}m ago`;
+  if (min < 60) return t("minutesAgo", { n: min });
   const h = Math.round(min / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
+  if (h < 24) return t("hoursAgo", { n: h });
+  return t("daysAgo", { n: Math.round(h / 24) });
 }
 
 // Maps-style shortcuts on the home: saved places as chips, recent searches as rows.
@@ -26,6 +28,7 @@ export function HomeShortcuts({
   onClearRecents: () => void;
   now?: number;
 }) {
+  const { t } = useI18n();
   if (saved.length === 0 && recents.length === 0) return null;
   return (
     <section className="mx-auto mt-8 w-full max-w-4xl px-6 text-left">
@@ -35,7 +38,7 @@ export function HomeShortcuts({
             <button
               key={p.id}
               onClick={() => onPickSaved(p)}
-              title={`Directions to ${p.name}`}
+              title={t("directionsToX", { x: p.name })}
               className="flex items-center gap-1.5 rounded-full border border-white/60 bg-white/70 px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm backdrop-blur-md transition hover:bg-white/90 hover:shadow dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
             >
               <span
@@ -54,20 +57,20 @@ export function HomeShortcuts({
         <div className="rounded-card border border-white/60 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-white/10">
           <div className="flex items-center justify-between px-4 pt-2.5">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Recent
+              {t("recent")}
             </span>
             <button
               onClick={onClearRecents}
               className="text-[11px] font-medium text-slate-400 transition hover:text-slate-600"
             >
-              Clear
+              {t("clear")}
             </button>
           </div>
           <ul>
-            {recents.slice(0, 3).map((t) => (
-              <li key={`${t.fromQuery}-${t.toQuery}`}>
+            {recents.slice(0, 3).map((trip) => (
+              <li key={`${trip.fromQuery}-${trip.toQuery}`}>
                 <button
-                  onClick={() => onPickRecent(t)}
+                  onClick={() => onPickRecent(trip)}
                   className="flex w-full items-center gap-2.5 px-4 py-2 text-left transition hover:bg-white/80 dark:hover:bg-white/10"
                 >
                   <span
@@ -77,9 +80,9 @@ export function HomeShortcuts({
                     history
                   </span>
                   <span className="min-w-0 flex-1 truncate text-sm text-slate-800 dark:text-slate-200">
-                    {t.fromLabel} <span className="text-slate-400">{"→"}</span> {t.toLabel}
+                    {trip.fromLabel} <span className="text-slate-400">{"→"}</span> {trip.toLabel}
                   </span>
-                  <span className="shrink-0 text-[11px] text-slate-400">{timeAgo(t.at, now)}</span>
+                  <span className="shrink-0 text-[11px] text-slate-400">{timeAgo(trip.at, now, t)}</span>
                 </button>
               </li>
             ))}

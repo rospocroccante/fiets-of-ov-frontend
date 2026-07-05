@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { useI18n } from "../lib/i18n";
 
-// The header's real menu: theme switch and local-data actions plus the
-// about/attribution block (the map's attribution control is hidden, so credits
+// The header's real menu: theme switch, language switch and local-data actions plus
+// the about/attribution block (the map's attribution control is hidden, so credits
 // live here).
 export function HeaderMenu({
   onClearRecents,
@@ -14,6 +15,7 @@ export function HeaderMenu({
   dark: boolean;
   onToggleTheme: () => void;
 }) {
+  const { t, toggle: toggleLang } = useI18n();
   const [open, setOpen] = useState(false);
   const item =
     "block w-full px-4 py-2 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-white/10";
@@ -25,13 +27,13 @@ export function HeaderMenu({
         onClick={() => setOpen((v) => !v)}
         className="rounded-full border border-gray-200 px-4 py-1.5 text-sm font-medium transition hover:bg-gray-50 dark:border-white/15 dark:hover:bg-white/10"
       >
-        Menu &#9776;
+        {t("menu")} &#9776;
       </button>
       {open && (
         <>
           <button
             type="button"
-            aria-label="Close menu"
+            aria-label={t("closeMenu")}
             className="fixed inset-0 z-40 cursor-default"
             onClick={() => setOpen(false)}
           />
@@ -43,9 +45,14 @@ export function HeaderMenu({
               >
                 {dark ? "light_mode" : "dark_mode"}
               </span>
-              {dark ? "Light mode" : "Dark mode"}
+              {dark ? t("lightMode") : t("darkMode")}
             </button>
             <div className="my-2 h-px bg-gray-100 dark:bg-white/10" />
+            {/* Named in the language it switches TO; the menu stays open so the flip
+                of every label is immediately visible. */}
+            <button type="button" className={item} onClick={toggleLang}>
+              {t("otherLanguage")}
+            </button>
             <button
               type="button"
               className={item}
@@ -54,7 +61,7 @@ export function HeaderMenu({
                 setOpen(false);
               }}
             >
-              Clear recent searches
+              {t("clearRecentSearches")}
             </button>
             <button
               type="button"
@@ -64,16 +71,12 @@ export function HeaderMenu({
                 setOpen(false);
               }}
             >
-              Clear saved places
+              {t("clearSavedPlaces")}
             </button>
             <div className="my-2 h-px bg-gray-100 dark:bg-white/10" />
             <div className="px-4 py-1">
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Fiets of OV</p>
-              <p className="mt-0.5 text-[11px] leading-snug text-slate-400">
-                Rain-aware bike vs transit advice for Amsterdam. Routing by OpenTripPlanner.
-                Map data &copy; OpenStreetMap contributors, tiles &copy; CARTO. Rain radar by
-                RainViewer, weather by Open-Meteo, places via Overpass.
-              </p>
+              <p className="mt-0.5 text-[11px] leading-snug text-slate-400">{t("aboutText")}</p>
             </div>
           </div>
         </>

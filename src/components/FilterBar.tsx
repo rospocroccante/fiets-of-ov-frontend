@@ -1,13 +1,15 @@
 import type { Mode } from "../api/types";
+import { useI18n } from "../lib/i18n";
+import type { StringKey } from "../lib/i18n";
 
 type Armed = "start" | "end" | null;
 
 export type KindFilter = Record<Mode, boolean>;
 
-const KIND_LABEL: Record<Mode, string> = {
-  bike: "Bike",
-  transit: "Transit",
-  bike_and_ride: "Bike + OV",
+const KIND_KEY: Record<Mode, StringKey> = {
+  bike: "bike",
+  transit: "transit",
+  bike_and_ride: "bikeAndRide",
 };
 
 export function FilterBar({
@@ -31,6 +33,7 @@ export function FilterBar({
   kinds: KindFilter;
   onToggleKind: (m: Mode) => void;
 }) {
+  const { t } = useI18n();
   // Two button treatments, both with a constant box so toggling never resizes the bar:
   // standalone chips keep a border in every state (transparent when filled), segments
   // inside the map-tools group are borderless (the group carries the border).
@@ -65,7 +68,7 @@ export function FilterBar({
       {/* Left cluster: the filters themselves — one chip per option kind — plus the
           live count. The count lives here so changes on the right never push it. */}
       <div className="flex shrink-0 items-center gap-2">
-        {(Object.keys(KIND_LABEL) as Mode[]).map((m) => (
+        {(Object.keys(KIND_KEY) as Mode[]).map((m) => (
           <button
             key={m}
             type="button"
@@ -73,10 +76,12 @@ export function FilterBar({
             onClick={() => onToggleKind(m)}
             className={chip(kinds[m])}
           >
-            {KIND_LABEL[m]}
+            {t(KIND_KEY[m])}
           </button>
         ))}
-        <span className="hidden pl-1 text-sm text-gray-500 dark:text-slate-400 sm:inline">{count} routes in area</span>
+        <span className="hidden pl-1 text-sm text-gray-500 dark:text-slate-400 sm:inline">
+          {t("routesInArea", { n: count })}
+        </span>
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
@@ -87,10 +92,10 @@ export function FilterBar({
         {!hideMap && (
           <div className="flex items-center gap-1 rounded-full border border-gray-200 bg-white p-1 dark:border-white/15 dark:bg-[#2A2F34]">
             <span className="hidden pl-2.5 pr-1 text-xs font-medium text-gray-500 dark:text-slate-400 sm:inline">
-              Set on map
+              {t("setOnMap")}
             </span>
-            {pickBtn("start", "Start")}
-            {pickBtn("end", "End")}
+            {pickBtn("start", t("start"))}
+            {pickBtn("end", t("end"))}
             <span className="mx-0.5 h-4 w-px bg-gray-200 dark:bg-white/15" />
             <button
               type="button"
@@ -98,7 +103,7 @@ export function FilterBar({
               onClick={onToggleRadar}
               className={segment(radar)}
             >
-              Radar
+              {t("radar")}
             </button>
           </div>
         )}
@@ -108,7 +113,7 @@ export function FilterBar({
           onClick={onToggleMap}
           className="min-w-[6.5rem] rounded-full border border-gray-200 px-4 py-1.5 text-center text-sm dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
         >
-          {hideMap ? "Show map" : "Hide map"}
+          {hideMap ? t("showMap") : t("hideMap")}
         </button>
       </div>
     </div>

@@ -17,6 +17,7 @@ import { declutterPois, usePois, POI_MIN_ZOOM } from "../hooks/usePois";
 import type { Poi, Viewport } from "../hooks/usePois";
 import { useRainRadar } from "../hooks/useRainRadar";
 import { useWindField } from "../hooks/useWindField";
+import { useI18n } from "../lib/i18n";
 import { modeColor } from "../lib/modeColors";
 import { decodePolyline } from "../lib/polyline";
 import { RadarOverlay, RadarReadout } from "./RainRadar";
@@ -283,6 +284,7 @@ export function MapView({
   liveFix?: { lat: number; lon: number; accuracy: number } | null;
   navigating?: boolean;
 }) {
+  const { t } = useI18n();
   const legs = route?.legs ?? [];
   // Fresh array per render would re-fire FitRoute's fitBounds on every render (snapping
   // the viewport back mid-pan); tie it to route identity instead.
@@ -437,13 +439,13 @@ export function MapView({
           }}
           className="absolute bottom-3 right-3 z-[1000] rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 shadow transition hover:bg-white dark:bg-slate-800/90 dark:text-slate-200 dark:hover:bg-slate-800"
         >
-          Zoom in to see bars and places
+          {t("zoomInForPlaces")}
         </button>
       )}
       {/* A dead POI feed must say so, or an Overpass outage reads as "no places". */}
       {interactive && poisError && (
         <span className="absolute bottom-3 right-3 z-[1000] rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-red-600 shadow dark:bg-slate-800/90">
-          Places unavailable right now
+          {t("placesUnavailable")}
         </span>
       )}
       {showWeather && (
@@ -468,7 +470,7 @@ export function MapView({
               setMenu(null);
             }}
           >
-            Directions from here
+            {t("directionsFromHere")}
           </button>
           <button
             type="button"
@@ -478,7 +480,7 @@ export function MapView({
               setMenu(null);
             }}
           >
-            Directions to here
+            {t("directionsToHere")}
           </button>
           <button
             type="button"
@@ -488,7 +490,7 @@ export function MapView({
               setMenu(null);
             }}
           >
-            What&apos;s here?
+            {t("whatsHere")}
           </button>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { FilterBar } from "./FilterBar";
 import type { KindFilter } from "./FilterBar";
+import { I18nProvider } from "../lib/i18n";
 
 const KINDS: KindFilter = { bike: true, transit: true, bike_and_ride: true };
 
@@ -56,6 +57,33 @@ test("one filter chip per option kind, including Bike + OV", () => {
   expect(screen.getByRole("button", { name: "Bike" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Transit" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Bike + OV" })).toBeInTheDocument();
+});
+
+test("inside I18nProvider with Dutch preset the chips render in Dutch", () => {
+  window.localStorage.setItem("fov.lang.v1", "nl");
+  try {
+    render(
+      <I18nProvider>
+        <FilterBar
+          count={2}
+          hideMap={false}
+          onToggleMap={() => {}}
+          armed={null}
+          onArm={() => {}}
+          radar={false}
+          onToggleRadar={() => {}}
+          kinds={KINDS}
+          onToggleKind={() => {}}
+        />
+      </I18nProvider>,
+    );
+    expect(screen.getByRole("button", { name: "Fiets" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Fiets + OV" })).toBeInTheDocument();
+    expect(screen.getByText("2 routes in beeld")).toBeInTheDocument();
+  } finally {
+    // Shared jsdom storage: leave nothing behind for the English-default tests.
+    window.localStorage.removeItem("fov.lang.v1");
+  }
 });
 
 test("mode chips are real filters: pressed state reflects kinds, click toggles", () => {

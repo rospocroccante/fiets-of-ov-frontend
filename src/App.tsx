@@ -24,6 +24,7 @@ import type { SavedPlace } from "./hooks/useSavedPlaces";
 import { useTheme } from "./hooks/useTheme";
 import { useTripPlan } from "./hooks/useTripPlan";
 import { useWakeLock } from "./hooks/useWakeLock";
+import { translate, useI18n } from "./lib/i18n";
 import { buildNavRoute, progressAlong } from "./lib/routeProgress";
 import { isLive } from "./api/client";
 import { reverseGeocode, reverseGeocodeDetail } from "./geocode";
@@ -52,6 +53,7 @@ const POPULAR: PopularTrip[] = [
 export default function App() {
   const { progress, containerRef, toMap, toHome, reduced } = useMorphProgress();
   const { dark, toggle: toggleTheme } = useTheme();
+  const { lang, t, toggle: toggleLang } = useI18n();
 
   const [fromText, setFromText] = useState("");
   const [toText, setToText] = useState("");
@@ -136,13 +138,13 @@ export default function App() {
   }
   function commitSearch() {
     const f = fromText.trim();
-    const t = toText.trim();
-    if (!f || !t) return;
+    const to = toText.trim();
+    if (!f || !to) return;
     // Keep the endpoint's coordinates when the visible text is still that endpoint's
     // label (map picks, history entries, "Current location" after a nav replan):
     // rebuilding from raw text would send labels the geocoder cannot resolve.
     setOrigin(origin && origin.label === f ? origin : { label: f, query: f });
-    setDestination(destination && destination.label === t ? destination : { label: t, query: t });
+    setDestination(destination && destination.label === to ? destination : { label: to, query: to });
     setSelectedMode(null);
     toMap();
   }
@@ -294,8 +296,8 @@ export default function App() {
   // Everything derives from `navigating`, so Start/Exit builds or drops it whole,
   // and a replan (new route identity) rebuilds it without leaving nav mode.
   const navRoute = useMemo(
-    () => (navigating && route ? buildNavRoute(route) : null),
-    [navigating, route]
+    () => (navigating && route ? buildNavRoute(route, lang) : null),
+    [navigating, route, lang]
   );
   // Mock mode has no GPS: replay the route itself instead of watching the device.
   const simulation = useMemo(
@@ -336,9 +338,10 @@ export default function App() {
     // Bump the sequence so an in-flight reverse-geocode for the start slot cannot
     // overwrite the live-position origin (same rule as pin drags).
     geocodeSeq.current.start++;
-    setFromText("Current location");
-    setOrigin({ label: "Current location", query: coordQuery(fix.lat, fix.lon) });
-  }, [navigating, navProgress, fix]);
+    const here = translate(lang, "currentLocation");
+    setFromText(here);
+    setOrigin({ label: here, query: coordQuery(fix.lat, fix.lon) });
+  }, [navigating, navProgress, fix, lang]);
   const farFromRoute = navigating && navProgress != null && navProgress.offRouteM > 2000;
 
   // A replan that fails (position outside the routing graph) must not leave a dead
@@ -422,7 +425,7 @@ export default function App() {
               <section className="relative order-1 h-[40vh] shrink-0 md:order-2 md:h-auto md:w-1/2">
                 {armed && (
                   <div className="absolute left-3 top-3 z-[1000] rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow dark:bg-emerald-600">
-                    Click the map to set the {armed}
+                    {armed === "start" ? t("clickMapSetStart") : t("clickMapSetEnd")}
                   </div>
                 )}
                 <MapView
@@ -457,7 +460,7 @@ export default function App() {
                 )}
                 {farFromRoute && (
                   <div className="absolute left-3 top-24 z-[1000] rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-amber-700 shadow dark:bg-slate-800/95 dark:text-amber-300">
-                    You are far from this route. Navigation resumes when you get closer.
+                    {t("farFromRoute")}
                   </div>
                 )}
                 {placeInfo && (
@@ -487,42 +490,52 @@ export default function App() {
           style={{ opacity: homeOpacity, y: homeY, pointerEvents: progressIs1 ? "none" : "auto" }}
         >
           <HomeAurora dark={dark} />
-          {/* Theme switch reachable from the home too (the header only exists on the
-              map stage). */}
-          <button
-            type="button"
-            aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
-            aria-pressed={dark}
-            onClick={toggleTheme}
-            className="absolute right-4 top-4 rounded-full border border-white/60 bg-white/70 p-2 text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-emerald-300 dark:hover:bg-white/20"
-          >
-            <span aria-hidden="true" className="material-symbols-rounded block text-[20px] leading-none">
-              {dark ? "light_mode" : "dark_mode"}
-            </span>
-          </button>
+          {/* Theme and language switches reachable from the home too (the header only
+              exists on the map stage). */}
+          <div className="absolute right-4 top-4 flex items-center gap-2">
+            <button
+              type="button"
+              aria-label={t("switchLanguage")}
+              onClick={toggleLang}
+              className="rounded-full border border-white/60 bg-white/70 px-3 py-2 text-xs font-semibold leading-[20px] text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-emerald-300 dark:hover:bg-white/20"
+            >
+              {lang === "en" ? "NL" : "EN"}
+            </button>
+            <button
+              type="button"
+              aria-label={dark ? t("switchToLight") : t("switchToDark")}
+              aria-pressed={dark}
+              onClick={toggleTheme}
+              className="rounded-full border border-white/60 bg-white/70 p-2 text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-emerald-300 dark:hover:bg-white/20"
+            >
+              <span aria-hidden="true" className="material-symbols-rounded block text-[20px] leading-none">
+                {dark ? "light_mode" : "dark_mode"}
+              </span>
+            </button>
+          </div>
           <section className="relative mx-auto max-w-4xl px-6 pt-20 text-center">
             <h1 className="text-4xl font-bold leading-tight text-gray-900 dark:text-slate-100 sm:text-5xl">
-              Bike or transit?
+              {t("headlineTop")}
               <br />
-              <span className={TEXT_GRADIENT}>Let the weather decide.</span>
+              <span className={TEXT_GRADIENT}>{t("headlineBottom")}</span>
             </h1>
             <p className="mx-auto mt-5 max-w-2xl text-base text-gray-600 dark:text-slate-300 sm:text-lg">
-              Plan any trip across Amsterdam and get a rain-aware answer in one tap.
+              {t("subtitle")}
             </p>
           </section>
           <section className="mx-auto mt-[7.5rem] w-full max-w-4xl px-6 text-left">
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">Popular trips</h2>
+            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">{t("popularTrips")}</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {POPULAR.map((t, i) => {
+              {POPULAR.map((trip, i) => {
                 // Clean frosted card. Colour is confined to one small accent (the
                 // origin dot and the connector line) so the grid stays calm and the
                 // vivid background does the talking.
                 const accent = CARD_ACCENTS[i % CARD_ACCENTS.length];
                 return (
                   <button
-                    key={`${t.from}-${t.to}`}
-                    onClick={() => pickPopular(t)}
-                    aria-label={`${t.from} → ${t.to}`}
+                    key={`${trip.from}-${trip.to}`}
+                    onClick={() => pickPopular(trip)}
+                    aria-label={`${trip.from} → ${trip.to}`}
                     className="group flex flex-col gap-3 rounded-card border border-white/60 bg-white/70 p-5 text-left shadow-sm ring-1 ring-slate-900/5 backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-white/90 hover:shadow-lg dark:border-white/10 dark:bg-white/10 dark:ring-white/5 dark:hover:bg-white/15"
                   >
                     {/* Mini route: origin dot, connector, destination flag. */}
@@ -543,8 +556,8 @@ export default function App() {
                       </span>
                     </span>
                     <div>
-                      <p className="truncate text-[15px] font-semibold text-slate-900 dark:text-slate-100">{t.from}</p>
-                      <p className="truncate text-sm text-slate-500 dark:text-slate-400">to {t.to}</p>
+                      <p className="truncate text-[15px] font-semibold text-slate-900 dark:text-slate-100">{trip.from}</p>
+                      <p className="truncate text-sm text-slate-500 dark:text-slate-400">{t("toX", { x: trip.to })}</p>
                     </div>
                   </button>
                 );
@@ -586,7 +599,7 @@ export default function App() {
           <div className="flex min-w-0 flex-1 items-center px-2 sm:px-3">
             <EndpointField
               value={fromText}
-              placeholder="From"
+              placeholder={t("from")}
               onText={setFromText}
               onSelect={selectFrom}
               onLocate={locateFrom}
@@ -597,7 +610,7 @@ export default function App() {
           </div>
           <button
             type="button"
-            aria-label="Swap start and end"
+            aria-label={t("swapStartEnd")}
             onClick={swap}
             className="flex-shrink-0 px-1 text-gray-400 hover:text-brand sm:px-2"
           >
@@ -606,7 +619,7 @@ export default function App() {
           <div className="flex min-w-0 flex-1 items-center px-2 sm:px-3">
             <EndpointField
               value={toText}
-              placeholder="To"
+              placeholder={t("to")}
               onText={setToText}
               onSelect={selectTo}
               onLocate={locateTo}
@@ -616,13 +629,13 @@ export default function App() {
             />
           </div>
           <span className="hidden h-7 w-px bg-gray-200 dark:bg-white/15 sm:block" />
-          <span className="hidden px-3 text-sm text-gray-500 dark:text-slate-400 sm:inline">Now</span>
+          <span className="hidden px-3 text-sm text-gray-500 dark:text-slate-400 sm:inline">{t("now")}</span>
           <button
-            aria-label="Search"
+            aria-label={t("search")}
             onClick={commitSearch}
             className={`rounded-full px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-110 sm:px-6 sm:py-3 ${PRIMARY_GRADIENT}`}
           >
-            Search
+            {t("search")}
           </button>
         </motion.div>
       </div>

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { TileLayer } from "react-leaflet";
 import { RADAR_TILE_OPTIONS } from "../hooks/useRainRadar";
 import type { RadarFrame } from "../hooks/useRainRadar";
+import { useI18n } from "../lib/i18n";
+import type { StringKey } from "../lib/i18n";
 import { publishRadarFrame, useRadarFrame } from "../lib/radarFrame";
 
 // Animated precipitation overlay: all frames stay mounted (tiles cache, no flicker),
@@ -54,9 +56,9 @@ export interface WeatherLayersState {
   wind: boolean;
 }
 
-const LAYER_LABEL: Record<keyof WeatherLayersState, string> = {
-  rain: "Rain",
-  wind: "Wind",
+const LAYER_KEY: Record<keyof WeatherLayersState, StringKey> = {
+  rain: "rain",
+  wind: "wind",
 };
 
 // On-map readout and controls for the weather layers: the Rain/Wind layer picker
@@ -78,6 +80,7 @@ export function RadarReadout({
   rainError: boolean;
   windError: boolean;
 }) {
+  const { t } = useI18n();
   const frameTime = useRadarFrame();
   const rainLive = layers.rain && !rainError;
   const label =
@@ -88,7 +91,7 @@ export function RadarReadout({
     <div className="absolute right-3 top-3 z-[1000] flex flex-col items-end gap-1.5">
       {onLayerToggle && (
         <div className="flex items-center gap-1 rounded-full bg-white/90 p-1 shadow dark:bg-slate-800/90">
-          {(Object.keys(LAYER_LABEL) as (keyof WeatherLayersState)[]).map((k) => (
+          {(Object.keys(LAYER_KEY) as (keyof WeatherLayersState)[]).map((k) => (
             <button
               key={k}
               type="button"
@@ -100,7 +103,7 @@ export function RadarReadout({
                   : "text-gray-500 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-white/10"
               }`}
             >
-              {LAYER_LABEL[k]}
+              {t(LAYER_KEY[k])}
             </button>
           ))}
         </div>
@@ -112,24 +115,24 @@ export function RadarReadout({
       )}
       {rainError && (
         <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-red-600 shadow dark:bg-slate-800/90 dark:text-red-400">
-          Rain radar unavailable
+          {t("rainRadarUnavailable")}
         </span>
       )}
       {windError && (
         <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-red-600 shadow dark:bg-slate-800/90 dark:text-red-400">
-          Wind data unavailable
+          {t("windDataUnavailable")}
         </span>
       )}
       {rainLive && (
         <span className="flex items-center gap-1.5 rounded-full bg-white/90 px-2 py-1 text-[10px] font-medium text-gray-600 shadow dark:bg-slate-800/90 dark:text-slate-300">
-          <span>light</span>
+          <span>{t("legendLight")}</span>
           <span
             className="h-1.5 w-16 rounded-full"
             style={{
               background: "linear-gradient(90deg, #9be1ff, #2f80ed, #7b2ff7, #e63946)",
             }}
           />
-          <span>heavy</span>
+          <span>{t("legendHeavy")}</span>
         </span>
       )}
     </div>

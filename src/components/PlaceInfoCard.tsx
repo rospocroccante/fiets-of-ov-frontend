@@ -1,3 +1,5 @@
+import { useI18n } from "../lib/i18n";
+
 export interface PlaceInfo {
   name: string;
   address: string | null;
@@ -20,6 +22,7 @@ export function PlaceInfoCard({
   onDirections: (which: "start" | "end") => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="absolute bottom-3 left-3 z-[1000] w-72 rounded-card border border-slate-100 bg-white/95 p-4 shadow-lg backdrop-blur dark:border-white/10 dark:bg-[#2A2F34]/95">
       <div className="flex items-start justify-between gap-2">
@@ -33,7 +36,7 @@ export function PlaceInfoCard({
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
-            aria-label={saved ? "Remove from saved places" : "Save this place"}
+            aria-label={saved ? t("removeSavedPlace") : t("savePlace")}
             aria-pressed={saved}
             onClick={onToggleSave}
             className="rounded-full p-1.5 transition hover:bg-amber-50 dark:hover:bg-white/10"
@@ -50,7 +53,7 @@ export function PlaceInfoCard({
           </button>
           <button
             type="button"
-            aria-label="Close place info"
+            aria-label={t("closePlaceInfo")}
             onClick={onClose}
             className="rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 dark:hover:bg-white/10"
           >
@@ -66,14 +69,14 @@ export function PlaceInfoCard({
           onClick={() => onDirections("start")}
           className="flex-1 rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-dark dark:bg-emerald-600 dark:hover:bg-emerald-500"
         >
-          From here
+          {t("fromHere")}
         </button>
         <button
           type="button"
           onClick={() => onDirections("end")}
           className="flex-1 rounded-full border border-brand px-3 py-1.5 text-xs font-semibold text-brand transition hover:bg-brand-light dark:border-emerald-400 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
         >
-          To here
+          {t("toHere")}
         </button>
       </div>
     </div>

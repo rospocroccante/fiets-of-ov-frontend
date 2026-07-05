@@ -1,3 +1,4 @@
+import { useI18n } from "../lib/i18n";
 import { modeColor } from "../lib/modeColors";
 import type { OptionView } from "../lib/planView";
 
@@ -20,6 +21,7 @@ export function AdviceCard({
   selected: boolean;
   onSelect: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <button
       onClick={onSelect}
@@ -49,7 +51,7 @@ export function AdviceCard({
                 : "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
             }`}
           >
-            Best
+            {t("best")}
           </span>
         )}
       </span>

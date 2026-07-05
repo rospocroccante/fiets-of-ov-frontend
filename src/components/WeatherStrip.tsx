@@ -1,4 +1,5 @@
 import { useShortForecast } from "../hooks/useShortForecast";
+import { useI18n } from "../lib/i18n";
 import { weatherLook } from "../lib/weatherIcons";
 
 function Glyph({ icon, className }: { icon: string; className?: string }) {
@@ -17,9 +18,10 @@ function Glyph({ icon, className }: { icon: string; className?: string }) {
 // banner says WHAT to do, this shows the sky it was decided on. Hidden entirely
 // while loading or when the feed fails (the advice text still carries the answer).
 export function WeatherStrip({ lat, lon }: { lat: number; lon: number }) {
+  const { lang } = useI18n();
   const { forecast } = useShortForecast(lat, lon);
   if (!forecast) return null;
-  const now = weatherLook(forecast.current.code, forecast.current.isDay);
+  const now = weatherLook(forecast.current.code, forecast.current.isDay, lang);
   return (
     <div className="mb-3 flex items-center gap-4 overflow-x-auto rounded-card border border-slate-100 bg-white/80 px-4 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-[#2A2F34]/80">
       <div className="flex shrink-0 items-center gap-2" title={now.label}>
@@ -32,7 +34,7 @@ export function WeatherStrip({ lat, lon }: { lat: number; lon: number }) {
       <span className="h-8 w-px shrink-0 bg-slate-100 dark:bg-white/10" />
       <ol className="flex flex-1 items-center justify-between gap-3">
         {forecast.hours.map((h) => {
-          const look = weatherLook(h.code, true);
+          const look = weatherLook(h.code, true, lang);
           return (
             <li key={h.time} className="flex shrink-0 flex-col items-center" title={look.label}>
               <span className="text-[10px] font-medium text-gray-400 dark:text-slate-500">{h.time}</span>

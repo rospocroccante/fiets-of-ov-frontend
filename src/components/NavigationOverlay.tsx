@@ -1,3 +1,4 @@
+import { useI18n } from "../lib/i18n";
 import type { NavManeuver } from "../lib/routeProgress";
 
 // Maneuver banner shown over the map while navigating: next-turn glyph + distance,
@@ -42,6 +43,7 @@ export function NavigationOverlay({
   etaMinutes: number;
   onExit: () => void;
 }) {
+  const { t } = useI18n();
   // next === null only past the final ARRIVE maneuver: the trip is done.
   const arrived = next === null;
   const glyph = arrived ? "sports_score" : (GLYPH[next.direction] ?? "straight");
@@ -56,7 +58,7 @@ export function NavigationOverlay({
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-lg font-semibold leading-tight text-slate-900 dark:text-slate-100">
-            {arrived ? "You have arrived" : formatM(toNext)}
+            {arrived ? t("youHaveArrived") : formatM(toNext)}
           </p>
           {!arrived && next.street && (
             <p className="truncate text-sm text-slate-500 dark:text-slate-400">{next.street}</p>
@@ -64,7 +66,7 @@ export function NavigationOverlay({
         </div>
         <button
           type="button"
-          aria-label="Exit navigation"
+          aria-label={t("exitNavigation")}
           onClick={onExit}
           className="shrink-0 rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 dark:hover:bg-white/10"
         >

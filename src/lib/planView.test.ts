@@ -95,6 +95,53 @@ test("backend reasons become plain sentences", () => {
   expect(friendlyReason("some new backend reason")).toBe("some new backend reason");
 });
 
+test("friendlyReason: the fastest-option variants read as sentences in English", () => {
+  expect(friendlyReason("rain around 15:10 (~1.2 mm/h) -> fastest is transit (29 min)")).toBe(
+    "Rain is expected around 15:10 (up to 1.2 mm/h). The fastest option is transit (29 min).",
+  );
+  expect(friendlyReason("dry during your 16-min ride -> fastest is bike and ride (21 min)")).toBe(
+    "It should stay dry for your 16-minute ride. The fastest option is bike and ride (21 min).",
+  );
+});
+
+test("friendlyReason renders the vetted Dutch sentences", () => {
+  expect(friendlyReason("dry during your 16-min ride -> bike", "nl")).toBe(
+    "Het blijft naar verwachting droog tijdens je rit van 16 minuten. Pak de fiets.",
+  );
+  expect(friendlyReason("dry during your 24-min ride (rain only from 15:40) -> bike", "nl")).toBe(
+    "Het blijft naar verwachting droog tijdens je rit van 24 minuten (regen begint rond 15:40). Pak de fiets.",
+  );
+  expect(friendlyReason("rain around 15:10 (~1.2 mm/h) -> take tram 1 (29 min)", "nl")).toBe(
+    "Rond 15:10 wordt regen verwacht (tot 1.2 mm/u). Neem tram 1 (29 min).",
+  );
+  expect(friendlyReason("rain forecast unavailable -> fastest is bike (24 min)", "nl")).toBe(
+    "De regenverwachting is momenteel niet beschikbaar. De snelste optie is de fiets (24 min).",
+  );
+  expect(
+    friendlyReason("rain expected but no transit found -> bike (24 min), bring a raincoat", "nl"),
+  ).toBe("Er komt regen aan en er is geen goed OV-alternatief. Pak de fiets (24 min) en neem een regenjas mee.");
+  expect(friendlyReason("dry -> bike to Amstelstation, then take metro 51 (18 min)", "nl")).toBe(
+    "Het blijft droog. Fiets naar Amstelstation, daarna take metro 51 (18 min).",
+  );
+  // Unknown phrasings pass through untouched in Dutch too, never half-translated.
+  expect(friendlyReason("some new backend reason", "nl")).toBe("some new backend reason");
+});
+
+test("buildPlanView in Dutch translates titles and summary pieces", () => {
+  const v = buildPlanView(bikeWithFerryPlan(), "nl");
+  expect(v.options[0].title).toBe("Met de fiets");
+  expect(v.options[0].summary).toBe("6.2 km fietsen + pont");
+});
+
+test("departureLabel in Dutch: Vertrek nu / Vertrek om", () => {
+  const it = bikeWithFerryPlan().options[0].itinerary;
+  const now = Date.UTC(2026, 6, 2, 12, 0);
+  expect(departureLabel({ ...it, start_time: now + 90_000 }, now, "nl")).toBe("Vertrek nu");
+  expect(departureLabel({ ...it, start_time: now + 34 * 60_000 }, now, "nl")).toMatch(
+    /^Vertrek om \d{1,2}[:.]\d{2}/,
+  );
+});
+
 test("departureLabel: leave now when imminent, clock time when the trip departs later", () => {
   const it = bikeWithFerryPlan().options[0].itinerary;
   const now = Date.UTC(2026, 6, 2, 12, 0);
