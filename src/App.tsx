@@ -364,7 +364,9 @@ export default function App() {
   const homeY = useTransform(progress, [0, 1], [0, -30]);
   const chromeOpacity = useTransform(progress, [0.5, 1], [0, 1]);
   const mapOpacity = useTransform(progress, [0.35, 1], [0, 1]);
-  const searchY = useTransform(progress, [0, 1], [260, 14]);
+  // 9px lands the ~62px pill vertically centred in the 80px (h-20) header, so its
+  // outline never straddles the header's bottom border.
+  const searchY = useTransform(progress, [0, 1], [260, 9]);
 
   return (
     <div
@@ -383,7 +385,7 @@ export default function App() {
       <div className="sticky top-0 h-screen overflow-hidden bg-white dark:bg-[#23272B]">
         {/* Map stage (progress -> 1): fills the screen below the top bar. */}
         <motion.div
-          className="absolute inset-0 z-0 flex flex-col bg-white pt-20 dark:bg-[#23272B]"
+          className="absolute inset-0 z-0 flex flex-col bg-white pt-24 dark:bg-[#23272B]"
           style={{ opacity: mapOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
         >
           <div className="px-4 md:px-6">
@@ -560,7 +562,7 @@ export default function App() {
 
         {/* Top bar chrome (progress -> 1): wordmark (Home) + Menu, behind the search pill. */}
         <motion.header
-          className="absolute inset-x-0 top-0 z-20 flex h-16 items-center justify-between border-b border-gray-100 bg-white/95 px-4 dark:border-white/10 dark:bg-[#23272B]/95 sm:px-6"
+          className="absolute inset-x-0 top-0 z-20 flex h-20 items-center justify-between border-b border-gray-100 bg-white/95 px-4 dark:border-white/10 dark:bg-[#23272B]/95 sm:px-6"
           style={{ opacity: chromeOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
         >
           <button onClick={goHome} className="text-xl font-bold text-brand dark:text-emerald-300">

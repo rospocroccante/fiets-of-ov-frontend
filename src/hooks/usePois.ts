@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 import { isLive } from "../api/client";
 
 // Named points of interest (bars, restaurants, museums...) for the Maps-style POI
@@ -90,7 +90,14 @@ const MOCK_POIS: Poi[] = [
   { id: "m4", name: "Museum Het Schip", kind: "culture", kindLabel: "Museum", lat: 52.385, lon: 4.877 },
 ];
 
-function overpassQuery(v: Viewport): string {
+interface Bbox {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+}
+
+function overpassQuery(v: Bbox): string {
   const bbox = `${v.south.toFixed(4)},${v.west.toFixed(4)},${v.north.toFixed(4)},${v.east.toFixed(4)}`;
   return (
     "[out:json][timeout:10];(" +
@@ -100,9 +107,37 @@ function overpassQuery(v: Viewport): string {
   );
 }
 
-// Cache key cell: bbox rounded so tiny pans reuse the same entry.
-function cellKey(v: Viewport): string {
-  return [v.south, v.west, v.north, v.east].map((x) => x.toFixed(3)).join(",");
+// POIs are fetched and cached per ~1 km grid cell: panning only loads the cells
+// entering the view, while every cell already visited renders instantly from the
+// react-query cache (the session's in-memory database of places). Cell borders are
+// grid-aligned, so their keys are identical across pans.
+const CELL_LAT = 0.01; // ~1.1 km
+const CELL_LON = 0.015; // ~1.0 km at Amsterdam's latitude
+const MAX_CELLS = 12;
+
+interface Cell extends Bbox {
+  key: string;
+}
+
+function cellsFor(v: Bbox): Cell[] {
+  const s0 = Math.floor(v.south / CELL_LAT);
+  const s1 = Math.floor(v.north / CELL_LAT);
+  const w0 = Math.floor(v.west / CELL_LON);
+  const w1 = Math.floor(v.east / CELL_LON);
+  const cells: Cell[] = [];
+  for (let i = s0; i <= s1; i++) {
+    for (let j = w0; j <= w1; j++) {
+      if (cells.length >= MAX_CELLS) return cells;
+      cells.push({
+        south: i * CELL_LAT,
+        west: j * CELL_LON,
+        north: (i + 1) * CELL_LAT,
+        east: (j + 1) * CELL_LON,
+        key: `${i}:${j}`,
+      });
+    }
+  }
+  return cells;
 }
 
 // Each attempt gets its own timeout so a hanging mirror cannot eat the whole retry
@@ -116,7 +151,7 @@ function attemptSignal(outer: AbortSignal | undefined, ms: number): AbortSignal 
   return typeof AbortSignal.any === "function" ? AbortSignal.any([outer, t]) : t;
 }
 
-async function fetchPois(v: Viewport, signal: AbortSignal | undefined): Promise<Poi[]> {
+async function fetchPois(v: Bbox, signal: AbortSignal | undefined): Promise<Poi[]> {
   let lastError: unknown = new Error("overpass unavailable");
   for (const endpoint of OVERPASS_ENDPOINTS) {
     try {
@@ -170,21 +205,35 @@ export function declutterPois(pois: Poi[], zoom: number): Poi[] {
 }
 
 export function usePois(viewport: Viewport | null): { pois: Poi[]; error: boolean } {
-  const enabled = viewport != null && viewport.zoom >= POI_MIN_ZOOM;
-  const query = useQuery<Poi[]>({
-    queryKey: ["pois", viewport ? cellKey(viewport) : "off"],
-    enabled,
-    staleTime: 10 * 60 * 1000,
-    retry: 1,
-    queryFn: async ({ signal }) => {
-      const v = viewport as Viewport;
-      if (!isLive()) {
-        return MOCK_POIS.filter(
-          (p) => p.lat >= v.south && p.lat <= v.north && p.lon >= v.west && p.lon <= v.east,
-        );
-      }
-      return fetchPois(v, signal);
-    },
+  const active = viewport != null && viewport.zoom >= POI_MIN_ZOOM;
+  const cells = active ? cellsFor(viewport as Viewport) : [];
+  const results = useQueries({
+    queries: cells.map((c) => ({
+      queryKey: ["pois", c.key],
+      staleTime: 30 * 60 * 1000,
+      retry: 1,
+      queryFn: async ({ signal }: { signal: AbortSignal }): Promise<Poi[]> => {
+        if (!isLive()) {
+          return MOCK_POIS.filter(
+            (p) => p.lat >= c.south && p.lat < c.north && p.lon >= c.west && p.lon < c.east,
+          );
+        }
+        return fetchPois(c, signal);
+      },
+    })),
   });
-  return { pois: query.data ?? [], error: enabled && query.isError };
+  // Union of every loaded cell (dedupe on OSM id): the already-visited area keeps
+  // rendering while newly entered cells stream in, so a pan never blanks the layer.
+  const seen = new Set<string>();
+  const pois: Poi[] = [];
+  for (const r of results) {
+    for (const p of r.data ?? []) {
+      if (!seen.has(p.id)) {
+        seen.add(p.id);
+        pois.push(p);
+      }
+    }
+  }
+  const error = active && results.length > 0 && pois.length === 0 && results.some((r) => r.isError);
+  return { pois, error };
 }
