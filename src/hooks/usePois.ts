@@ -139,6 +139,36 @@ async function fetchPois(v: Viewport, signal: AbortSignal | undefined): Promise<
   throw lastError;
 }
 
+// Label decluttering, Maps-style: at each zoom keep only POIs a minimum distance
+// apart, so names never pile into an unreadable heap; zooming in reveals more.
+// Museums win over bars, bars over snack corners, when they compete for a spot.
+const KIND_PRIORITY: Record<PoiKind, number> = { culture: 0, drink: 1, food: 2, other: 3 };
+
+function minSeparationM(zoom: number): number {
+  if (zoom >= 17) return 0;
+  if (zoom >= 16) return 40;
+  if (zoom >= 15) return 80;
+  return 150;
+}
+
+function poiDistM(a: Poi, b: Poi): number {
+  const mLon = 111_320 * Math.cos((a.lat * Math.PI) / 180);
+  const dx = (a.lon - b.lon) * mLon;
+  const dy = (a.lat - b.lat) * 110_574;
+  return Math.hypot(dx, dy);
+}
+
+export function declutterPois(pois: Poi[], zoom: number): Poi[] {
+  const sep = minSeparationM(zoom);
+  if (sep === 0) return pois;
+  const ranked = [...pois].sort((a, b) => KIND_PRIORITY[a.kind] - KIND_PRIORITY[b.kind]);
+  const kept: Poi[] = [];
+  for (const p of ranked) {
+    if (kept.every((k) => poiDistM(k, p) >= sep)) kept.push(p);
+  }
+  return kept;
+}
+
 export function usePois(viewport: Viewport | null): { pois: Poi[]; error: boolean } {
   const enabled = viewport != null && viewport.zoom >= POI_MIN_ZOOM;
   const query = useQuery<Poi[]>({

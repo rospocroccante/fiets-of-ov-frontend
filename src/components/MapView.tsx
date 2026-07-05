@@ -13,7 +13,7 @@ import {
 import L from "leaflet";
 import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
 import type { Itinerary, PlanLeg, Stop } from "../api/types";
-import { usePois, POI_MIN_ZOOM } from "../hooks/usePois";
+import { declutterPois, usePois, POI_MIN_ZOOM } from "../hooks/usePois";
 import type { Poi, Viewport } from "../hooks/usePois";
 import { useRainRadar } from "../hooks/useRainRadar";
 import { useWindField } from "../hooks/useWindField";
@@ -298,6 +298,12 @@ export function MapView({
   // enough for names to be useful (the hook gates on POI_MIN_ZOOM).
   const [viewport, setViewport] = useState<Viewport | null>(null);
   const { pois, error: poisError } = usePois(interactive ? viewport : null);
+  // Zoom-dependent label thinning: the raw fetch can drop 60 names in one dense
+  // corner; only the ones that keep their distance get drawn.
+  const visiblePois = useMemo(
+    () => declutterPois(pois, viewport?.zoom ?? 0),
+    [pois, viewport],
+  );
   const mapRef = useRef<L.Map | null>(null);
 
   const handleMenu = (m: MenuState) => {
@@ -394,7 +400,7 @@ export function MapView({
       ))}
 
       {viewport != null && viewport.zoom >= POI_MIN_ZOOM && (
-        <PoiMarkers pois={pois} onPick={onPoiPick} />
+        <PoiMarkers pois={visiblePois} onPick={onPoiPick} />
       )}
 
       {/* Live position: GPS-accuracy halo under a Google-blue dot; rendered last so

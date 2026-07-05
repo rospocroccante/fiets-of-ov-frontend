@@ -1,8 +1,8 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { toPoi, usePois } from "./usePois";
-import type { Viewport } from "./usePois";
+import { declutterPois, toPoi, usePois } from "./usePois";
+import type { Poi, Viewport } from "./usePois";
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -21,6 +21,30 @@ test("returns fixture POIs inside the viewport (mock mode), none below the zoom 
 
   const { result: low } = renderHook(() => usePois({ ...CENTRE, zoom: 13 }), { wrapper });
   expect(low.current.pois).toEqual([]);
+});
+
+test("declutterPois thins crowded labels by zoom and lets culture win the spot", () => {
+  const at = (name: string, kind: Poi["kind"], lat: number, lon: number): Poi => ({
+    id: name,
+    name,
+    kind,
+    kindLabel: kind,
+    lat,
+    lon,
+  });
+  // Three POIs within ~30 m of each other, one 300 m away.
+  const cluster = [
+    at("bar", "drink", 52.37, 4.89),
+    at("museum", "culture", 52.3701, 4.89),
+    at("snack", "food", 52.3702, 4.89),
+    at("faraway", "food", 52.373, 4.89),
+  ];
+  // At zoom 14 (150 m separation) only one of the cluster survives - the museum
+  // (culture outranks drink and food) - plus the distant one.
+  const thin = declutterPois(cluster, 14);
+  expect(thin.map((p) => p.name).sort()).toEqual(["faraway", "museum"]);
+  // At street zoom everything shows.
+  expect(declutterPois(cluster, 17)).toHaveLength(4);
 });
 
 test("toPoi maps OSM tags to kinds and drops unnamed elements", () => {
