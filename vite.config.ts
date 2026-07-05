@@ -20,7 +20,11 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: process.env.VITE_PROXY_TARGET || "http://localhost:8000",
+        // 8008, not 8000: the backend's `make run PORT=8008` convention on this
+        // machine (8000 is held by an unrelated project whose FastAPI answers every
+        // route with a bare "Not Found" — a confusing failure when the proxy points
+        // there). VITE_PROXY_TARGET still overrides for other setups.
+        target: process.env.VITE_PROXY_TARGET || "http://localhost:8008",
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api/, ""),
       },
