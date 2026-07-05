@@ -87,7 +87,7 @@ export function RadarReadout({
   return (
     <div className="absolute right-3 top-3 z-[1000] flex flex-col items-end gap-1.5">
       {onLayerToggle && (
-        <div className="flex items-center gap-1 rounded-full bg-white/90 p-1 shadow">
+        <div className="flex items-center gap-1 rounded-full bg-white/90 p-1 shadow dark:bg-slate-800/90">
           {(Object.keys(LAYER_LABEL) as (keyof WeatherLayersState)[]).map((k) => (
             <button
               key={k}
@@ -95,7 +95,9 @@ export function RadarReadout({
               aria-pressed={layers[k]}
               onClick={() => onLayerToggle(k)}
               className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
-                layers[k] ? "bg-brand text-white" : "text-gray-500 hover:bg-gray-100"
+                layers[k]
+                  ? "bg-brand text-white dark:bg-emerald-600"
+                  : "text-gray-500 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-white/10"
               }`}
             >
               {LAYER_LABEL[k]}
@@ -104,22 +106,22 @@ export function RadarReadout({
         </div>
       )}
       {label && (
-        <span className="rounded-full bg-white/90 px-2 py-1 text-xs font-semibold text-brand shadow">
+        <span className="rounded-full bg-white/90 px-2 py-1 text-xs font-semibold text-brand shadow dark:bg-slate-800/90 dark:text-emerald-300">
           {label}
         </span>
       )}
       {rainError && (
-        <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-red-600 shadow">
+        <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-red-600 shadow dark:bg-slate-800/90 dark:text-red-400">
           Rain radar unavailable
         </span>
       )}
       {windError && (
-        <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-red-600 shadow">
+        <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-red-600 shadow dark:bg-slate-800/90 dark:text-red-400">
           Wind data unavailable
         </span>
       )}
       {rainLive && (
-        <span className="flex items-center gap-1.5 rounded-full bg-white/90 px-2 py-1 text-[10px] font-medium text-gray-600 shadow">
+        <span className="flex items-center gap-1.5 rounded-full bg-white/90 px-2 py-1 text-[10px] font-medium text-gray-600 shadow dark:bg-slate-800/90 dark:text-slate-300">
           <span>light</span>
           <span
             className="h-1.5 w-16 rounded-full"

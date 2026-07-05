@@ -21,23 +21,23 @@ export function WeatherStrip({ lat, lon }: { lat: number; lon: number }) {
   if (!forecast) return null;
   const now = weatherLook(forecast.current.code, forecast.current.isDay);
   return (
-    <div className="mb-3 flex items-center gap-4 overflow-x-auto rounded-card border border-slate-100 bg-white/80 px-4 py-3 shadow-sm backdrop-blur">
+    <div className="mb-3 flex items-center gap-4 overflow-x-auto rounded-card border border-slate-100 bg-white/80 px-4 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-[#2A2F34]/80">
       <div className="flex shrink-0 items-center gap-2" title={now.label}>
-        <Glyph icon={now.icon} className="text-[28px] text-ams-sky" />
+        <Glyph icon={now.icon} className="text-[28px] text-ams-sky dark:text-emerald-300" />
         <div>
-          <p className="text-lg font-semibold leading-tight">{forecast.current.tempC}&deg;</p>
-          <p className="text-[11px] leading-tight text-gray-500">{now.label}</p>
+          <p className="text-lg font-semibold leading-tight dark:text-slate-100">{forecast.current.tempC}&deg;</p>
+          <p className="text-[11px] leading-tight text-gray-500 dark:text-slate-400">{now.label}</p>
         </div>
       </div>
-      <span className="h-8 w-px shrink-0 bg-slate-100" />
+      <span className="h-8 w-px shrink-0 bg-slate-100 dark:bg-white/10" />
       <ol className="flex flex-1 items-center justify-between gap-3">
         {forecast.hours.map((h) => {
           const look = weatherLook(h.code, true);
           return (
             <li key={h.time} className="flex shrink-0 flex-col items-center" title={look.label}>
-              <span className="text-[10px] font-medium text-gray-400">{h.time}</span>
-              <Glyph icon={look.icon} className="my-0.5 text-[20px] text-ams-sky" />
-              <span className="text-[11px] font-semibold text-gray-700">{h.tempC}&deg;</span>
+              <span className="text-[10px] font-medium text-gray-400 dark:text-slate-500">{h.time}</span>
+              <Glyph icon={look.icon} className="my-0.5 text-[20px] text-ams-sky dark:text-emerald-300" />
+              <span className="text-[11px] font-semibold text-gray-700 dark:text-slate-200">{h.tempC}&deg;</span>
               {h.precipProb >= 20 && (
                 <span className="text-[10px] font-medium text-sky-600">{h.precipProb}%</span>
               )}

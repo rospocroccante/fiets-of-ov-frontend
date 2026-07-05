@@ -3,9 +3,20 @@ import { isLive } from "../api/client";
 
 // Named points of interest (bars, restaurants, museums...) for the Maps-style POI
 // layer. Only fetched at neighbourhood zoom, where names are readable and the
-// Overpass payload stays small.
-export const POI_MIN_ZOOM = 15;
+// Overpass payload stays small. 14 covers the typical fitBounds zoom of a cross-town
+// route, so places appear without hunting for the zoom control.
+export const POI_MIN_ZOOM = 14;
 const MAX_POIS = 60;
+
+// Overpass instances, tried in order: the canonical host first, then public mirrors.
+// Networks (and rate limits) routinely block one instance while another works, and a
+// dead first host must not mean "no places" (observed live: overpass-api.de refusing
+// connections while overpass.openstreetmap.fr answered in ~1 s).
+const OVERPASS_ENDPOINTS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.openstreetmap.fr/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+];
 
 export type PoiKind = "food" | "drink" | "culture" | "other";
 
@@ -93,23 +104,25 @@ function cellKey(v: Viewport): string {
   return [v.south, v.west, v.north, v.east].map((x) => x.toFixed(3)).join(",");
 }
 
-export function usePois(viewport: Viewport | null): Poi[] {
-  const enabled = viewport != null && viewport.zoom >= POI_MIN_ZOOM;
-  const query = useQuery<Poi[]>({
-    queryKey: ["pois", viewport ? cellKey(viewport) : "off"],
-    enabled,
-    staleTime: 10 * 60 * 1000,
-    queryFn: async ({ signal }) => {
-      const v = viewport as Viewport;
-      if (!isLive()) {
-        return MOCK_POIS.filter(
-          (p) => p.lat >= v.south && p.lat <= v.north && p.lon >= v.west && p.lon <= v.east,
-        );
-      }
-      const res = await fetch("https://overpass-api.de/api/interpreter", {
+// Each attempt gets its own timeout so a hanging mirror cannot eat the whole retry
+// chain; the react-query signal still aborts everything when the viewport moves on.
+function attemptSignal(outer: AbortSignal | undefined, ms: number): AbortSignal | undefined {
+  if (typeof AbortSignal === "undefined" || typeof AbortSignal.timeout !== "function") {
+    return outer;
+  }
+  const t = AbortSignal.timeout(ms);
+  if (!outer) return t;
+  return typeof AbortSignal.any === "function" ? AbortSignal.any([outer, t]) : t;
+}
+
+async function fetchPois(v: Viewport, signal: AbortSignal | undefined): Promise<Poi[]> {
+  let lastError: unknown = new Error("overpass unavailable");
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    try {
+      const res = await fetch(endpoint, {
         method: "POST",
         body: overpassQuery(v),
-        signal,
+        signal: attemptSignal(signal, 6000),
       });
       if (!res.ok) throw new Error(`overpass failed: ${res.status}`);
       const data = (await res.json()) as { elements?: OverpassElement[] };
@@ -117,7 +130,30 @@ export function usePois(viewport: Viewport | null): Poi[] {
         .map(toPoi)
         .filter((p): p is Poi => p !== null)
         .slice(0, MAX_POIS);
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      lastError = e;
+    }
+  }
+  throw lastError;
+}
+
+export function usePois(viewport: Viewport | null): { pois: Poi[]; error: boolean } {
+  const enabled = viewport != null && viewport.zoom >= POI_MIN_ZOOM;
+  const query = useQuery<Poi[]>({
+    queryKey: ["pois", viewport ? cellKey(viewport) : "off"],
+    enabled,
+    staleTime: 10 * 60 * 1000,
+    retry: 1,
+    queryFn: async ({ signal }) => {
+      const v = viewport as Viewport;
+      if (!isLive()) {
+        return MOCK_POIS.filter(
+          (p) => p.lat >= v.south && p.lat <= v.north && p.lon >= v.west && p.lon <= v.east,
+        );
+      }
+      return fetchPois(v, signal);
     },
   });
-  return query.data ?? [];
+  return { pois: query.data ?? [], error: enabled && query.isError };
 }

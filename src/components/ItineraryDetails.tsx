@@ -18,10 +18,10 @@ function legTitle(leg: PlanLeg): string {
 
 export function ItineraryDetails({ itinerary }: { itinerary: Itinerary }) {
   return (
-    <div className="rounded-card border border-gray-100 bg-white p-4 shadow-sm">
+    <div className="rounded-card border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#2A2F34]">
       <div className="mb-3 flex items-baseline justify-between">
-        <h4 className="font-semibold">Step by step</h4>
-        <span className="text-sm text-gray-500">
+        <h4 className="font-semibold dark:text-slate-100">Step by step</h4>
+        <span className="text-sm text-gray-500 dark:text-slate-400">
           {hhmm(itinerary.start_time)} – {hhmm(itinerary.end_time)} · {itinerary.minutes} min
         </span>
       </div>
@@ -36,14 +36,16 @@ export function ItineraryDetails({ itinerary }: { itinerary: Itinerary }) {
               >
                 {legTitle(leg)}
               </span>
-              {i < itinerary.legs.length - 1 && <span className="my-1 w-px flex-1 bg-gray-200" />}
+              {i < itinerary.legs.length - 1 && (
+                <span className="my-1 w-px flex-1 bg-gray-200 dark:bg-white/15" />
+              )}
             </div>
             <div className="pb-1">
-              <p className="text-sm font-medium">
-                {leg.from.name || "Start"} <span className="text-gray-400">→</span>{" "}
+              <p className="text-sm font-medium dark:text-slate-200">
+                {leg.from.name || "Start"} <span className="text-gray-400 dark:text-slate-500">→</span>{" "}
                 {leg.to.name || "Destination"}
               </p>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 dark:text-slate-400">
                 {hhmm(leg.start_time)}–{hhmm(leg.end_time)} · {leg.minutes} min
                 {leg.distance_m != null && ` · ${Math.round(leg.distance_m)} m`}
                 {leg.headsign && ` · towards ${leg.headsign}`}

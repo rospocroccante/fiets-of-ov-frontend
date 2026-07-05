@@ -113,7 +113,7 @@ export function PlaceInput({
   return (
     <div className="relative w-full">
       <input
-        className="w-full bg-transparent px-2 py-2 text-sm outline-none"
+        className="w-full bg-transparent px-2 py-2 text-sm outline-none dark:text-slate-100 dark:placeholder:text-slate-500"
         placeholder={placeholder}
         value={query}
         onChange={handleChange}
@@ -129,7 +129,7 @@ export function PlaceInput({
       {showHistory && (
         <ul
           role="listbox"
-          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-2xl border border-gray-100 bg-white shadow-lg"
+          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-2xl border border-gray-100 bg-white shadow-lg dark:border-white/10 dark:bg-[#2A2F34]"
         >
           {(history ?? []).map((h) => (
             <li
@@ -138,7 +138,7 @@ export function PlaceInput({
               aria-selected={false}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => pickHistory(h)}
-              className="cursor-pointer px-4 py-2 text-sm hover:bg-brand-light"
+              className="cursor-pointer px-4 py-2 text-sm hover:bg-brand-light dark:hover:bg-white/10"
             >
               <span
                 aria-hidden="true"
@@ -154,7 +154,7 @@ export function PlaceInput({
       {showSuggestions && (
         <ul
           role="listbox"
-          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-2xl border border-gray-100 bg-white shadow-lg"
+          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-2xl border border-gray-100 bg-white shadow-lg dark:border-white/10 dark:bg-[#2A2F34]"
         >
           {suggestions.map((p) => (
             <li
@@ -163,7 +163,7 @@ export function PlaceInput({
               aria-selected={false}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => pick(p)}
-              className="cursor-pointer px-4 py-2 text-sm hover:bg-brand-light"
+              className="cursor-pointer px-4 py-2 text-sm hover:bg-brand-light dark:hover:bg-white/10"
             >
               {savedPlaces?.some((s) => s.id === p.id) && (
                 <span
@@ -176,7 +176,7 @@ export function PlaceInput({
               )}
               <span className="font-medium">{p.name}</span>
               {p.label !== p.name && (
-                <span className="text-gray-500">
+                <span className="text-gray-500 dark:text-slate-400">
                   {" — "}
                   {p.label.startsWith(p.name) ? p.label.slice(p.name.length).replace(/^,\s*/, "") : p.label}
                 </span>

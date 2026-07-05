@@ -14,15 +14,15 @@ function WeatherBanner({ view }: { view: PlanView }) {
   const wet = view.rainExpected === true;
   const unknown = view.rainExpected === null;
   const tone = wet
-    ? "bg-amber-50 text-amber-800 border-amber-200"
+    ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-900/25 dark:text-amber-200 dark:border-amber-800/40"
     : unknown
-      ? "bg-gray-50 text-gray-600 border-gray-200"
-      : "bg-emerald-50 text-emerald-800 border-emerald-200";
+      ? "bg-gray-50 text-gray-600 border-gray-200 dark:bg-white/5 dark:text-slate-300 dark:border-white/10"
+      : "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-900/25 dark:text-emerald-200 dark:border-emerald-800/40";
   const tag = wet ? "Rain expected" : unknown ? "Forecast unavailable" : "Dry";
   return (
     <div className={`rounded-card border p-4 ${tone}`}>
       <div className="flex items-center gap-2">
-        <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs font-semibold">{tag}</span>
+        <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs font-semibold dark:bg-white/10">{tag}</span>
         {view.maxRain != null && view.maxRain > 0 && (
           <span className="text-xs">up to {view.maxRain} mm/h</span>
         )}
@@ -35,7 +35,7 @@ function WeatherBanner({ view }: { view: PlanView }) {
 export function ResultsPanel({ state }: { state: PanelState }) {
   if (state.status === "idle") {
     return (
-      <div className="p-6 text-gray-500">
+      <div className="p-6 text-gray-500 dark:text-slate-400">
         Enter origin and destination to see the bike-or-transit advice.
       </div>
     );
@@ -43,15 +43,15 @@ export function ResultsPanel({ state }: { state: PanelState }) {
   if (state.status === "loading") {
     return (
       <div className="space-y-4 p-2">
-        <div className="h-20 animate-pulse rounded-card bg-gray-100" />
-        <div className="h-40 animate-pulse rounded-card bg-gray-100" />
-        <div className="h-56 animate-pulse rounded-card bg-gray-100" />
+        <div className="h-20 animate-pulse rounded-card bg-gray-100 dark:bg-white/10" />
+        <div className="h-40 animate-pulse rounded-card bg-gray-100 dark:bg-white/10" />
+        <div className="h-56 animate-pulse rounded-card bg-gray-100 dark:bg-white/10" />
       </div>
     );
   }
   if (state.status === "error") {
     return (
-      <div className="m-2 rounded-card border border-red-200 bg-red-50 p-4 text-red-700">
+      <div className="m-2 rounded-card border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
         {state.message}
       </div>
     );
@@ -63,7 +63,7 @@ export function ResultsPanel({ state }: { state: PanelState }) {
   // All options can be filtered away by the mode chips; say so instead of crashing.
   if (!selected) {
     return (
-      <div className="m-2 rounded-card border border-gray-100 bg-white p-4 text-sm text-gray-500">
+      <div className="m-2 rounded-card border border-gray-100 bg-white p-4 text-sm text-gray-500 dark:border-white/10 dark:bg-[#2A2F34] dark:text-slate-400">
         No options match the current filters.
       </div>
     );
@@ -83,10 +83,10 @@ export function ResultsPanel({ state }: { state: PanelState }) {
           />
         ))}
       </div>
-      <p className="px-1 text-sm text-gray-500">
+      <p className="px-1 text-sm text-gray-500 dark:text-slate-400">
         {selected.summary}
-        <span className="px-1.5 text-gray-300">&middot;</span>
-        <span className="font-medium text-gray-600">
+        <span className="px-1.5 text-gray-300 dark:text-slate-600">&middot;</span>
+        <span className="font-medium text-gray-600 dark:text-slate-300">
           {departureLabel(selected.itinerary, Date.now())}
         </span>
       </p>

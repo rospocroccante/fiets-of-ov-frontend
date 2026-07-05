@@ -5,6 +5,12 @@
 html, body, #root { height: 100%; margin: 0; }
 body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; color: #111; }
 
+/* Dark theme base: anthracite backdrop, off-white text. Components refine on top
+   with dark: variants; this catches everything else (and native form controls via
+   color-scheme). */
+.dark { color-scheme: dark; }
+.dark body { background: #23272B; color: #ECEAE6; }
+
 /* Home<->map morph: the page scroll drives the transition, and resting between the
    two ends leaves a half-faded, half-interactive UI. Proximity snap (with the two
    sentinels App renders at 0 and 100vh) settles the scroll on whichever stage is
@@ -37,6 +43,15 @@ html { scroll-snap-type: y proximity; }
     0 -1px 2px #fff,
     1px 0 2px #fff,
     -1px 0 2px #fff;
+}
+/* On the dark basemap the halo flips: light text, dark glow. */
+.dark .poi-name {
+  color: #E2E8F0;
+  text-shadow:
+    0 1px 2px #0f172a,
+    0 -1px 2px #0f172a,
+    1px 0 2px #0f172a,
+    -1px 0 2px #0f172a;
 }
 
 /* When picking a point on the map, the crosshair must beat Leaflet's own grab cursor

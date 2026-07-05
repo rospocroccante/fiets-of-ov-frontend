@@ -13,13 +13,14 @@ const CENTRE: Viewport = { south: 52.36, west: 4.88, north: 52.39, east: 4.91, z
 
 test("returns fixture POIs inside the viewport (mock mode), none below the zoom gate", async () => {
   const { result } = renderHook(() => usePois(CENTRE), { wrapper });
-  await waitFor(() => expect(result.current.length).toBeGreaterThan(0));
+  await waitFor(() => expect(result.current.pois.length).toBeGreaterThan(0));
   // Cafe de Sluis (52.374, 4.892) is inside; Bar Noord (52.40) is outside.
-  expect(result.current.map((p) => p.name)).toContain("Cafe de Sluis");
-  expect(result.current.map((p) => p.name)).not.toContain("Bar Noord");
+  expect(result.current.pois.map((p) => p.name)).toContain("Cafe de Sluis");
+  expect(result.current.pois.map((p) => p.name)).not.toContain("Bar Noord");
+  expect(result.current.error).toBe(false);
 
   const { result: low } = renderHook(() => usePois({ ...CENTRE, zoom: 13 }), { wrapper });
-  expect(low.current).toEqual([]);
+  expect(low.current.pois).toEqual([]);
 });
 
 test("toPoi maps OSM tags to kinds and drops unnamed elements", () => {

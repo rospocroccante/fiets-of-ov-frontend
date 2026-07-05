@@ -19,6 +19,7 @@ import { useRecentTrips } from "./hooks/useRecentTrips";
 import type { RecentTrip } from "./hooks/useRecentTrips";
 import { useSavedPlaces } from "./hooks/useSavedPlaces";
 import type { SavedPlace } from "./hooks/useSavedPlaces";
+import { useTheme } from "./hooks/useTheme";
 import { useTripPlan } from "./hooks/useTripPlan";
 import { isLive } from "./api/client";
 import { reverseGeocode, reverseGeocodeDetail } from "./geocode";
@@ -46,6 +47,7 @@ const POPULAR: PopularTrip[] = [
 
 export default function App() {
   const { progress, containerRef, toMap, toHome, reduced } = useMorphProgress();
+  const { dark, toggle: toggleTheme } = useTheme();
 
   const [fromText, setFromText] = useState("");
   const [toText, setToText] = useState("");
@@ -307,10 +309,10 @@ export default function App() {
           <div aria-hidden="true" className="absolute top-[100vh] h-px w-px snap-start" />
         </>
       )}
-      <div className="sticky top-0 h-screen overflow-hidden bg-white">
+      <div className="sticky top-0 h-screen overflow-hidden bg-white dark:bg-[#23272B]">
         {/* Map stage (progress -> 1): fills the screen below the top bar. */}
         <motion.div
-          className="absolute inset-0 z-0 flex flex-col bg-white pt-20"
+          className="absolute inset-0 z-0 flex flex-col bg-white pt-20 dark:bg-[#23272B]"
           style={{ opacity: mapOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
         >
           <div className="px-4 md:px-6">
@@ -343,7 +345,7 @@ export default function App() {
             {!hideMap && (
               <section className="relative order-1 h-[40vh] shrink-0 md:order-2 md:h-auto md:w-1/2">
                 {armed && (
-                  <div className="absolute left-3 top-3 z-[1000] rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow">
+                  <div className="absolute left-3 top-3 z-[1000] rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow dark:bg-emerald-600">
                     Click the map to set the {armed}
                   </div>
                 )}
@@ -364,6 +366,7 @@ export default function App() {
                   radar={radar}
                   wLayers={wLayers}
                   onLayerToggle={(k) => setWLayers((s) => ({ ...s, [k]: !s[k] }))}
+                  dark={dark}
                 />
                 {placeInfo && (
                   <PlaceInfoCard
@@ -391,19 +394,32 @@ export default function App() {
           className="absolute inset-0 z-10"
           style={{ opacity: homeOpacity, y: homeY, pointerEvents: progressIs1 ? "none" : "auto" }}
         >
-          <HomeAurora />
+          <HomeAurora dark={dark} />
+          {/* Theme switch reachable from the home too (the header only exists on the
+              map stage). */}
+          <button
+            type="button"
+            aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+            aria-pressed={dark}
+            onClick={toggleTheme}
+            className="absolute right-4 top-4 rounded-full border border-white/60 bg-white/70 p-2 text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-emerald-300 dark:hover:bg-white/20"
+          >
+            <span aria-hidden="true" className="material-symbols-rounded block text-[20px] leading-none">
+              {dark ? "light_mode" : "dark_mode"}
+            </span>
+          </button>
           <section className="relative mx-auto max-w-4xl px-6 pt-20 text-center">
-            <h1 className="text-4xl font-bold leading-tight text-gray-900 sm:text-5xl">
+            <h1 className="text-4xl font-bold leading-tight text-gray-900 dark:text-slate-100 sm:text-5xl">
               Bike or transit?
               <br />
               <span className={TEXT_GRADIENT}>Let the weather decide.</span>
             </h1>
-            <p className="mx-auto mt-5 max-w-2xl text-base text-gray-600 sm:text-lg">
+            <p className="mx-auto mt-5 max-w-2xl text-base text-gray-600 dark:text-slate-300 sm:text-lg">
               Plan any trip across Amsterdam and get a rain-aware answer in one tap.
             </p>
           </section>
           <section className="mx-auto mt-[7.5rem] w-full max-w-4xl px-6 text-left">
-            <h2 className="mb-4 text-xl font-semibold text-slate-900">Popular trips</h2>
+            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">Popular trips</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {POPULAR.map((t, i) => {
                 // Clean frosted card. Colour is confined to one small accent (the
@@ -415,7 +431,7 @@ export default function App() {
                     key={`${t.from}-${t.to}`}
                     onClick={() => pickPopular(t)}
                     aria-label={`${t.from} → ${t.to}`}
-                    className="group flex flex-col gap-3 rounded-card border border-white/60 bg-white/70 p-5 text-left shadow-sm ring-1 ring-slate-900/5 backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-white/90 hover:shadow-lg"
+                    className="group flex flex-col gap-3 rounded-card border border-white/60 bg-white/70 p-5 text-left shadow-sm ring-1 ring-slate-900/5 backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-white/90 hover:shadow-lg dark:border-white/10 dark:bg-white/10 dark:ring-white/5 dark:hover:bg-white/15"
                   >
                     {/* Mini route: origin dot, connector, destination flag. */}
                     <span className="flex items-center gap-2">
@@ -435,8 +451,8 @@ export default function App() {
                       </span>
                     </span>
                     <div>
-                      <p className="truncate text-[15px] font-semibold text-slate-900">{t.from}</p>
-                      <p className="truncate text-sm text-slate-500">to {t.to}</p>
+                      <p className="truncate text-[15px] font-semibold text-slate-900 dark:text-slate-100">{t.from}</p>
+                      <p className="truncate text-sm text-slate-500 dark:text-slate-400">to {t.to}</p>
                     </div>
                   </button>
                 );
@@ -454,20 +470,25 @@ export default function App() {
 
         {/* Top bar chrome (progress -> 1): wordmark (Home) + Menu, behind the search pill. */}
         <motion.header
-          className="absolute inset-x-0 top-0 z-20 flex h-16 items-center justify-between border-b border-gray-100 bg-white/95 px-4 sm:px-6"
+          className="absolute inset-x-0 top-0 z-20 flex h-16 items-center justify-between border-b border-gray-100 bg-white/95 px-4 dark:border-white/10 dark:bg-[#23272B]/95 sm:px-6"
           style={{ opacity: chromeOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
         >
-          <button onClick={goHome} className="text-xl font-bold text-brand">
+          <button onClick={goHome} className="text-xl font-bold text-brand dark:text-emerald-300">
             Fiets of OV
           </button>
-          <HeaderMenu onClearRecents={clearRecents} onClearSaved={clearSaved} />
+          <HeaderMenu
+            onClearRecents={clearRecents}
+            onClearSaved={clearSaved}
+            dark={dark}
+            onToggleTheme={toggleTheme}
+          />
         </motion.header>
 
         {/* Shared morphing search pill: usable in both stages, flies center -> top bar.
             On phones it keeps a side margin and drops the decorative bits ("Now", the
             divider) so the two fields and the button always fit. */}
         <motion.div
-          className="absolute inset-x-0 top-0 z-30 mx-auto flex w-[calc(100%-1.5rem)] max-w-3xl items-center gap-1 rounded-full border border-gray-200 bg-white p-1.5 shadow-md sm:gap-2 sm:p-2"
+          className="absolute inset-x-0 top-0 z-30 mx-auto flex w-[calc(100%-1.5rem)] max-w-3xl items-center gap-1 rounded-full border border-gray-200 bg-white p-1.5 shadow-md dark:border-white/15 dark:bg-[#2A2F34] sm:gap-2 sm:p-2"
           style={{ y: searchY }}
         >
           <div className="flex min-w-0 flex-1 items-center px-2 sm:px-3">
@@ -502,8 +523,8 @@ export default function App() {
               onPickHistory={pickHistoryTo}
             />
           </div>
-          <span className="hidden h-7 w-px bg-gray-200 sm:block" />
-          <span className="hidden px-3 text-sm text-gray-500 sm:inline">Now</span>
+          <span className="hidden h-7 w-px bg-gray-200 dark:bg-white/15 sm:block" />
+          <span className="hidden px-3 text-sm text-gray-500 dark:text-slate-400 sm:inline">Now</span>
           <button
             aria-label="Search"
             onClick={commitSearch}

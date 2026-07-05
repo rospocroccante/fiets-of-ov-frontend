@@ -1,8 +1,13 @@
 import React from "react";
 
-export function MapContainer({ children, className }: { children?: React.ReactNode; className?: string }) {
-  return <div className={`leaflet-container ${className ?? ""}`.trim()}>{children}</div>;
-}
+// forwardRef so MapView's map ref (used by the zoom-to-POIs chip) attaches without
+// React warnings; the mock exposes no map instance, so the ref simply stays null and
+// callers must guard.
+export const MapContainer = React.forwardRef<never, { children?: React.ReactNode; className?: string }>(
+  function MapContainer({ children, className }, _ref) {
+    return <div className={`leaflet-container ${className ?? ""}`.trim()}>{children}</div>;
+  },
+);
 
 export function TileLayer() {
   return null;

@@ -37,12 +37,14 @@ export function FilterBar({
   const chip = (pressed: boolean) =>
     `rounded-full border px-3 py-1.5 text-sm font-medium transition sm:px-4 ${
       pressed
-        ? "border-transparent bg-brand text-white"
-        : "border-gray-200 text-gray-500 hover:bg-gray-50"
+        ? "border-transparent bg-brand text-white dark:bg-emerald-600"
+        : "border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
     }`;
   const segment = (pressed: boolean) =>
     `rounded-full px-3 py-1 text-sm transition ${
-      pressed ? "bg-brand text-white" : "text-gray-600 hover:bg-gray-100"
+      pressed
+        ? "bg-brand text-white dark:bg-emerald-600"
+        : "text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-white/10"
     }`;
 
   const pickBtn = (which: "start" | "end", label: string) => (
@@ -74,7 +76,7 @@ export function FilterBar({
             {KIND_LABEL[m]}
           </button>
         ))}
-        <span className="hidden pl-1 text-sm text-gray-500 sm:inline">{count} routes in area</span>
+        <span className="hidden pl-1 text-sm text-gray-500 dark:text-slate-400 sm:inline">{count} routes in area</span>
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
@@ -83,13 +85,13 @@ export function FilterBar({
             group's content is fixed (the Rain/Wind picker lives on the map itself), so
             its width never changes. */}
         {!hideMap && (
-          <div className="flex items-center gap-1 rounded-full border border-gray-200 bg-white p-1">
-            <span className="hidden pl-2.5 pr-1 text-xs font-medium text-gray-500 sm:inline">
+          <div className="flex items-center gap-1 rounded-full border border-gray-200 bg-white p-1 dark:border-white/15 dark:bg-[#2A2F34]">
+            <span className="hidden pl-2.5 pr-1 text-xs font-medium text-gray-500 dark:text-slate-400 sm:inline">
               Set on map
             </span>
             {pickBtn("start", "Start")}
             {pickBtn("end", "End")}
-            <span className="mx-0.5 h-4 w-px bg-gray-200" />
+            <span className="mx-0.5 h-4 w-px bg-gray-200 dark:bg-white/15" />
             <button
               type="button"
               aria-pressed={radar}
@@ -104,7 +106,7 @@ export function FilterBar({
             button would nudge the whole right cluster on every toggle. */}
         <button
           onClick={onToggleMap}
-          className="min-w-[6.5rem] rounded-full border border-gray-200 px-4 py-1.5 text-center text-sm"
+          className="min-w-[6.5rem] rounded-full border border-gray-200 px-4 py-1.5 text-center text-sm dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/10"
         >
           {hideMap ? "Show map" : "Hide map"}
         </button>

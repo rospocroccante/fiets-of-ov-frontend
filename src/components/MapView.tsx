@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CircleMarker,
   MapContainer,
@@ -221,6 +221,7 @@ export function MapView({
   radar = false,
   wLayers = { rain: true, wind: true },
   onLayerToggle,
+  dark = false,
 }: {
   origin: LatLon | null;
   destination: LatLon | null;
@@ -240,6 +241,7 @@ export function MapView({
   radar?: boolean;
   wLayers?: WeatherLayersState;
   onLayerToggle?: (layer: keyof WeatherLayersState) => void;
+  dark?: boolean;
 }) {
   const legs = route?.legs ?? [];
   // Fresh array per render would re-fire FitRoute's fitBounds on every render (snapping
@@ -255,7 +257,8 @@ export function MapView({
   // Maps-style POI labels: fetched for the visible area once the user is zoomed in
   // enough for names to be useful (the hook gates on POI_MIN_ZOOM).
   const [viewport, setViewport] = useState<Viewport | null>(null);
-  const pois = usePois(interactive ? viewport : null);
+  const { pois, error: poisError } = usePois(interactive ? viewport : null);
+  const mapRef = useRef<L.Map | null>(null);
 
   const handleMenu = (m: MenuState) => {
     if (m.x < 0) setMenu(null);
@@ -267,6 +270,7 @@ export function MapView({
     // MapContainer's className is frozen at mount, so it cannot carry a toggling class.
     <div className={`relative h-full w-full ${picking ? "map-picking" : ""}`}>
       <MapContainer
+        ref={mapRef}
         center={AMS}
         zoom={13}
         className="h-full w-full rounded-card"
@@ -275,7 +279,10 @@ export function MapView({
       >
         <MapInteraction interactive={interactive} />
         <ViewportTracker onChange={setViewport} />
-        <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
+        {/* CARTO voyager by day, dark matter for the dark theme. */}
+        <TileLayer
+          url={`https://{s}.basemaps.cartocdn.com/rastertiles/${dark ? "dark_all" : "voyager"}/{z}/{x}/{y}{r}.png`}
+        />
         {showWeather && wLayers.rain && <RadarOverlay frames={rain.frames} />}
         {showWeather && wLayers.wind && <WindVelocityLayer data={wind.data} />}
         <MapEvents onPick={onPick} onContextMenu={handleMenu} />
@@ -349,10 +356,24 @@ export function MapView({
         <PoiMarkers pois={pois} onPick={onPoiPick} />
       )}
       </MapContainer>
-      {/* Discoverability: the POI layer only exists at street zoom, so say so. */}
+      {/* Discoverability: the POI layer only exists at street zoom — say so, and let
+          the chip do the zooming (guarded: the test mock's map has no setZoom). */}
       {interactive && viewport != null && viewport.zoom < POI_MIN_ZOOM && (
-        <span className="absolute bottom-3 right-3 z-[1000] rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-500 shadow">
+        <button
+          type="button"
+          onClick={() => {
+            const m = mapRef.current;
+            if (m && typeof m.setZoom === "function") m.setZoom(POI_MIN_ZOOM);
+          }}
+          className="absolute bottom-3 right-3 z-[1000] rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 shadow transition hover:bg-white dark:bg-slate-800/90 dark:text-slate-200 dark:hover:bg-slate-800"
+        >
           Zoom in to see bars and places
+        </button>
+      )}
+      {/* A dead POI feed must say so, or an Overpass outage reads as "no places". */}
+      {interactive && poisError && (
+        <span className="absolute bottom-3 right-3 z-[1000] rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-red-600 shadow dark:bg-slate-800/90">
+          Places unavailable right now
         </span>
       )}
       {showWeather && (
@@ -366,12 +387,12 @@ export function MapView({
 
       {menu && (
         <div
-          className="absolute z-[1000] overflow-hidden rounded-lg border border-slate-200 bg-white text-sm shadow-lg"
+          className="absolute z-[1000] overflow-hidden rounded-lg border border-slate-200 bg-white text-sm shadow-lg dark:border-white/10 dark:bg-[#2A2F34]"
           style={{ left: menu.x, top: menu.y }}
         >
           <button
             type="button"
-            className="block w-full px-4 py-2 text-left hover:bg-slate-100"
+            className="block w-full px-4 py-2 text-left hover:bg-slate-100 dark:hover:bg-white/10"
             onClick={() => {
               onContextPick?.("start", { lat: menu.lat, lon: menu.lon });
               setMenu(null);
@@ -381,7 +402,7 @@ export function MapView({
           </button>
           <button
             type="button"
-            className="block w-full px-4 py-2 text-left hover:bg-slate-100"
+            className="block w-full px-4 py-2 text-left hover:bg-slate-100 dark:hover:bg-white/10"
             onClick={() => {
               onContextPick?.("end", { lat: menu.lat, lon: menu.lon });
               setMenu(null);
@@ -391,7 +412,7 @@ export function MapView({
           </button>
           <button
             type="button"
-            className="block w-full border-t border-slate-100 px-4 py-2 text-left hover:bg-slate-100"
+            className="block w-full border-t border-slate-100 px-4 py-2 text-left hover:bg-slate-100 dark:border-white/10 dark:hover:bg-white/10"
             onClick={() => {
               onWhatsHere?.({ lat: menu.lat, lon: menu.lon });
               setMenu(null);
