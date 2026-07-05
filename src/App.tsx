@@ -299,9 +299,17 @@ export default function App() {
   return (
     <div
       ref={containerRef}
-      className={reduced ? "h-screen" : "h-[200vh]"}
+      className={reduced ? "relative h-screen" : "relative h-[200vh]"}
       data-reduced={reduced ? "true" : "false"}
     >
+      {/* Scroll snap sentinels: resting mid-morph leaves a half-faded, half-dead UI, so
+          proximity snap (see index.css) resolves the scroll to whichever stage is closer. */}
+      {!reduced && (
+        <>
+          <div aria-hidden="true" className="absolute top-0 h-px w-px snap-start" />
+          <div aria-hidden="true" className="absolute top-[100vh] h-px w-px snap-start" />
+        </>
+      )}
       <div className="sticky top-0 h-screen overflow-hidden bg-gradient-to-b from-brand-light to-white">
         {/* Map stage (progress -> 1): fills the screen below the top bar. */}
         <motion.div
@@ -316,13 +324,15 @@ export default function App() {
               armed={armed}
               onArm={armPick}
               radar={radar}
-              wLayers={wLayers}
               onToggleRadar={() => setRadar((r) => !r)}
-              onToggleLayer={(k) => setWLayers((s) => ({ ...s, [k]: !s[k] }))}
               kinds={kinds}
               onToggleKind={(m) => setKinds((s) => ({ ...s, [m]: !s[m] }))}
               dryOnly={dryOnly}
               onToggleDry={() => setDryOnly((v) => !v)}
+              onResetFilters={() => {
+                setKinds({ bike: true, transit: true, bike_and_ride: true });
+                setDryOnly(false);
+              }}
             />
           </div>
           <main className="flex min-h-0 flex-1 gap-4 px-6 pb-6">
@@ -356,6 +366,7 @@ export default function App() {
                   interactive={progressIs1}
                   radar={radar}
                   wLayers={wLayers}
+                  onLayerToggle={(k) => setWLayers((s) => ({ ...s, [k]: !s[k] }))}
                 />
                 {placeInfo && (
                   <PlaceInfoCard

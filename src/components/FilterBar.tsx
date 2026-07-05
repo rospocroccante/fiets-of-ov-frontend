@@ -1,7 +1,5 @@
 import { useState } from "react";
 import type { Mode } from "../api/types";
-import { RadarControls } from "./RainRadar";
-import type { WeatherLayersState } from "./RainRadar";
 
 type Armed = "start" | "end" | null;
 
@@ -20,13 +18,12 @@ export function FilterBar({
   armed,
   onArm,
   radar,
-  wLayers,
   onToggleRadar,
-  onToggleLayer,
   kinds,
   onToggleKind,
   dryOnly,
   onToggleDry,
+  onResetFilters,
 }: {
   count: number;
   hideMap: boolean;
@@ -34,81 +31,106 @@ export function FilterBar({
   armed: Armed;
   onArm: (which: "start" | "end") => void;
   radar: boolean;
-  wLayers: WeatherLayersState;
   onToggleRadar: () => void;
-  onToggleLayer: (layer: keyof WeatherLayersState) => void;
   kinds: KindFilter;
   onToggleKind: (m: Mode) => void;
   dryOnly: boolean;
   onToggleDry: () => void;
+  onResetFilters: () => void;
 }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilters = Object.values(kinds).filter((on) => !on).length + (dryOnly ? 1 : 0);
+
+  // Two button treatments, both with a constant box so toggling never resizes the bar:
+  // standalone chips keep a border in every state (transparent when filled), segments
+  // inside the map-tools group are borderless (the group carries the border).
+  const chip = (pressed: boolean) =>
+    `rounded-full border px-4 py-1.5 text-sm font-medium transition ${
+      pressed
+        ? "border-transparent bg-brand text-white"
+        : "border-gray-200 text-gray-500 hover:bg-gray-50"
+    }`;
+  const segment = (pressed: boolean) =>
+    `rounded-full px-3 py-1 text-sm transition ${
+      pressed ? "bg-brand text-white" : "text-gray-600 hover:bg-gray-100"
+    }`;
 
   const pickBtn = (which: "start" | "end", label: string) => (
     <button
       type="button"
       onClick={() => onArm(which)}
       aria-pressed={armed === which}
-      className={`rounded-full px-3 py-1 text-sm transition ${
-        armed === which ? "bg-brand text-white" : "text-gray-600 hover:bg-gray-100"
-      }`}
+      className={segment(armed === which)}
     >
       {label}
     </button>
   );
 
-  const kindChip = (m: Mode) => (
-    <button
-      type="button"
-      aria-pressed={kinds[m]}
-      onClick={() => onToggleKind(m)}
-      className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
-        kinds[m] ? "bg-brand text-white" : "border border-gray-200 text-gray-500 hover:bg-gray-50"
-      }`}
-    >
-      {KIND_LABEL[m]}
-    </button>
-  );
-
   return (
     <div className="relative flex items-center justify-between gap-3 py-3">
-      {/* Quick mode filters: pressed = that kind of option is shown in the results. */}
+      {/* Left cluster: quick mode filters plus the live count. The count lives here so
+          changes on the right side of the bar never push it around. */}
       <div className="flex items-center gap-2">
-        {kindChip("bike")}
-        {kindChip("transit")}
+        {(["bike", "transit"] as Mode[]).map((m) => (
+          <button
+            key={m}
+            type="button"
+            aria-pressed={kinds[m]}
+            onClick={() => onToggleKind(m)}
+            className={chip(kinds[m])}
+          >
+            {KIND_LABEL[m]}
+          </button>
+        ))}
+        <span className="hidden pl-1 text-sm text-gray-500 sm:inline">{count} routes in area</span>
       </div>
-      <span className="hidden text-sm text-gray-500 sm:inline">{count} routes in area</span>
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {/* Map tools live in one segmented group: setting endpoints on the map and the
-            weather radar both act on the map, so they read as a single cluster and are
-            hidden together while the map is hidden. */}
+
+      <div className="flex items-center gap-2">
+        {/* Map tools in one segmented group: endpoints-on-map and the radar both act on
+            the map, so they read as a single cluster and hide together with it. The
+            group's content is fixed (the Rain/Wind picker lives on the map itself), so
+            its width never changes. */}
         {!hideMap && (
           <div className="flex items-center gap-1 rounded-full border border-gray-200 bg-white p-1">
             <span className="pl-2.5 pr-1 text-xs font-medium text-gray-500">Set on map</span>
             {pickBtn("start", "Start")}
             {pickBtn("end", "End")}
             <span className="mx-0.5 h-4 w-px bg-gray-200" />
-            <RadarControls
-              active={radar}
-              layers={wLayers}
-              onToggle={onToggleRadar}
-              onLayerToggle={onToggleLayer}
-            />
+            <button
+              type="button"
+              aria-pressed={radar}
+              onClick={onToggleRadar}
+              className={segment(radar)}
+            >
+              Radar
+            </button>
           </div>
         )}
         <button
           type="button"
+          aria-label="Filters"
           aria-pressed={filtersOpen}
           onClick={() => setFiltersOpen((v) => !v)}
-          className={`rounded-full px-4 py-1.5 text-sm transition ${
-            filtersOpen ? "bg-brand text-white" : "border border-gray-200 hover:bg-gray-50"
-          }`}
+          className={chip(filtersOpen)}
         >
-          Filters
+          <span className="flex items-center gap-1.5">
+            Filters
+            {activeFilters > 0 && (
+              <span
+                className={`grid h-4 w-4 place-items-center rounded-full text-[10px] font-bold ${
+                  filtersOpen ? "bg-white text-brand" : "bg-brand text-white"
+                }`}
+              >
+                {activeFilters}
+              </span>
+            )}
+          </span>
         </button>
+        {/* Fixed width: "Hide map" and "Show map" differ slightly, and a resizing
+            button would nudge the whole right cluster on every toggle. */}
         <button
           onClick={onToggleMap}
-          className="rounded-full border border-gray-200 px-4 py-1.5 text-sm"
+          className="min-w-[6.5rem] rounded-full border border-gray-200 px-4 py-1.5 text-center text-sm"
         >
           {hideMap ? "Show map" : "Hide map"}
         </button>
@@ -151,6 +173,13 @@ export function FilterBar({
             <p className="mt-1 text-[11px] leading-snug text-gray-400">
               Hides options that put you in the rain.
             </p>
+            <button
+              type="button"
+              onClick={onResetFilters}
+              className="mt-3 w-full rounded-full border border-gray-200 px-3 py-1.5 text-sm text-gray-600 transition hover:bg-gray-50"
+            >
+              Reset filters
+            </button>
           </div>
         </>
       )}

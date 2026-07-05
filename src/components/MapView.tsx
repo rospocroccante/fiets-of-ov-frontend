@@ -217,6 +217,7 @@ export function MapView({
   interactive = true,
   radar = false,
   wLayers = { rain: true, wind: true },
+  onLayerToggle,
 }: {
   origin: LatLon | null;
   destination: LatLon | null;
@@ -235,6 +236,7 @@ export function MapView({
   // ~1 km and only read well at country zoom, useless at the city zoom this map is at.
   radar?: boolean;
   wLayers?: WeatherLayersState;
+  onLayerToggle?: (layer: keyof WeatherLayersState) => void;
 }) {
   const legs = route?.legs ?? [];
   // Fresh array per render would re-fire FitRoute's fitBounds on every render (snapping
@@ -352,7 +354,8 @@ export function MapView({
       )}
       {showWeather && (
         <RadarReadout
-          showRain={wLayers.rain}
+          layers={wLayers}
+          onLayerToggle={onLayerToggle}
           rainError={wLayers.rain && rain.error}
           windError={wLayers.wind && wind.error}
         />

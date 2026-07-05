@@ -1,9 +1,7 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { FilterBar } from "./FilterBar";
 import type { KindFilter } from "./FilterBar";
-import type { WeatherLayersState } from "./RainRadar";
 
-const LAYERS: WeatherLayersState = { rain: true, wind: true };
 const KINDS: KindFilter = { bike: true, transit: true, bike_and_ride: true };
 
 function renderBar(overrides: Partial<React.ComponentProps<typeof FilterBar>> = {}) {
@@ -14,13 +12,12 @@ function renderBar(overrides: Partial<React.ComponentProps<typeof FilterBar>> = 
     armed: null,
     onArm: () => {},
     radar: false,
-    wLayers: LAYERS,
     onToggleRadar: () => {},
-    onToggleLayer: () => {},
     kinds: KINDS,
     onToggleKind: () => {},
     dryOnly: false,
     onToggleDry: () => {},
+    onResetFilters: () => {},
     ...overrides,
   };
   return render(<FilterBar {...props} />);
@@ -38,12 +35,14 @@ test("the armed endpoint's button is pressed", () => {
   expect(screen.getByRole("button", { name: /^end$/i })).toHaveAttribute("aria-pressed", "true");
 });
 
-test("Radar toggle reports the master toggle; Rain/Wind chips appear only when active", () => {
+test("Radar is a bar toggle; the Rain/Wind picker lives on the map, not in the bar", () => {
   const toggles: number[] = [];
-  renderBar({ onToggleRadar: () => toggles.push(1) });
+  renderBar({ radar: true, onToggleRadar: () => toggles.push(1) });
   const radarBtn = screen.getByRole("button", { name: "Radar" });
-  expect(radarBtn).toHaveAttribute("aria-pressed", "false");
+  expect(radarBtn).toHaveAttribute("aria-pressed", "true");
+  // Even with the radar active the bar gains no extra chips (no layout shift).
   expect(screen.queryByRole("button", { name: "Rain" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Wind" })).toBeNull();
   fireEvent.click(radarBtn);
   expect(toggles).toEqual([1]);
 });
@@ -82,4 +81,18 @@ test("Filters opens a popover with kind checkboxes and the dry-only toggle", () 
   // Outside click closes the popover.
   fireEvent.click(screen.getByRole("button", { name: /close filters/i }));
   expect(screen.queryByText(/show options/i)).toBeNull();
+});
+
+test("the Filters button shows how many filters are active", () => {
+  renderBar({ kinds: { bike: true, transit: false, bike_and_ride: true }, dryOnly: true });
+  // One kind off plus dry-only = 2 active filters on the badge.
+  expect(screen.getByRole("button", { name: "Filters" })).toHaveTextContent("2");
+});
+
+test("Reset filters in the popover restores the defaults", () => {
+  const reset = vi.fn();
+  renderBar({ onResetFilters: reset });
+  fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+  fireEvent.click(screen.getByRole("button", { name: /reset filters/i }));
+  expect(reset).toHaveBeenCalledTimes(1);
 });

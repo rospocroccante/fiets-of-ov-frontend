@@ -5,6 +5,12 @@
 html, body, #root { height: 100%; margin: 0; }
 body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; color: #111; }
 
+/* Home<->map morph: the page scroll drives the transition, and resting between the
+   two ends leaves a half-faded, half-interactive UI. Proximity snap (with the two
+   sentinels App renders at 0 and 100vh) settles the scroll on whichever stage is
+   closer, so releasing the wheel always lands on a fully working screen. */
+html { scroll-snap-type: y proximity; }
+
 /* Maps-style POI labels: a coloured dot with the place name beside it, white halo so
    the text stays readable over any basemap. Rendered as Leaflet divIcons. */
 .poi-marker {
