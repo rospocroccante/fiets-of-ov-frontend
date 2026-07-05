@@ -59,9 +59,10 @@ const LAYER_LABEL: Record<keyof WeatherLayersState, string> = {
   wind: "Wind",
 };
 
-// The weather controls, meant to sit inline in the filter bar next to Filters: a master
-// Radar toggle plus, when active, one chip per weather layer. The frame clock and legend
-// live on the map itself (RadarReadout) since they read the imagery, not command it.
+// The weather controls, styled as borderless segments of the filter bar's map-tools
+// group (the group carries the border): a master Radar toggle plus, when active, one
+// chip per weather layer. The frame clock and legend live on the map itself
+// (RadarReadout) since they read the imagery, not command it.
 export function RadarControls({
   active,
   layers,
@@ -74,13 +75,13 @@ export function RadarControls({
   onLayerToggle: (layer: keyof WeatherLayersState) => void;
 }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1">
       <button
         type="button"
         aria-pressed={active}
         onClick={onToggle}
-        className={`rounded-full px-4 py-1.5 text-sm transition ${
-          active ? "bg-brand text-white" : "border border-gray-200 hover:bg-gray-50"
+        className={`rounded-full px-3 py-1 text-sm transition ${
+          active ? "bg-brand text-white" : "text-gray-600 hover:bg-gray-100"
         }`}
       >
         Radar
@@ -93,9 +94,7 @@ export function RadarControls({
             aria-pressed={layers[k]}
             onClick={() => onLayerToggle(k)}
             className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
-              layers[k]
-                ? "bg-brand text-white"
-                : "border border-gray-200 text-gray-500 hover:bg-gray-50"
+              layers[k] ? "bg-brand text-white" : "text-gray-400 hover:bg-gray-100"
             }`}
           >
             {LAYER_LABEL[k]}

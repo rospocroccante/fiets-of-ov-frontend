@@ -49,8 +49,8 @@ export function FilterBar({
       type="button"
       onClick={() => onArm(which)}
       aria-pressed={armed === which}
-      className={`rounded-full px-3 py-1.5 text-sm transition ${
-        armed === which ? "bg-brand text-white" : "border border-gray-200 hover:bg-gray-50"
+      className={`rounded-full px-3 py-1 text-sm transition ${
+        armed === which ? "bg-brand text-white" : "text-gray-600 hover:bg-gray-100"
       }`}
     >
       {label}
@@ -79,22 +79,22 @@ export function FilterBar({
       </div>
       <span className="hidden text-sm text-gray-500 sm:inline">{count} routes in area</span>
       <div className="flex flex-wrap items-center justify-end gap-2">
-        {/* Map-only controls: setting endpoints on the map and the weather radar have
-            no meaning while the map is hidden. */}
+        {/* Map tools live in one segmented group: setting endpoints on the map and the
+            weather radar both act on the map, so they read as a single cluster and are
+            hidden together while the map is hidden. */}
         {!hideMap && (
-          <>
-            <span className="text-xs font-medium text-gray-500">Set on map</span>
+          <div className="flex items-center gap-1 rounded-full border border-gray-200 bg-white p-1">
+            <span className="pl-2.5 pr-1 text-xs font-medium text-gray-500">Set on map</span>
             {pickBtn("start", "Start")}
             {pickBtn("end", "End")}
-            <span className="h-5 w-px bg-gray-200" />
+            <span className="mx-0.5 h-4 w-px bg-gray-200" />
             <RadarControls
               active={radar}
               layers={wLayers}
               onToggle={onToggleRadar}
               onLayerToggle={onToggleLayer}
             />
-            <span className="h-5 w-px bg-gray-200" />
-          </>
+          </div>
         )}
         <button
           type="button"
