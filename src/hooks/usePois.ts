@@ -8,11 +8,12 @@ import { isLive } from "../api/client";
 export const POI_MIN_ZOOM = 14;
 const MAX_POIS = 60;
 
-// Overpass instances, tried in order: the canonical host first, then public mirrors.
-// Networks (and rate limits) routinely block one instance while another works, and a
-// dead first host must not mean "no places" (observed live: overpass-api.de refusing
-// connections while overpass.openstreetmap.fr answered in ~1 s).
+// Overpass instances, tried in order. In dev the first stop is the vite proxy
+// (same-origin, server-side hop: this network has intermittently refused browser
+// connections to overpass-api.de); then the canonical host and public mirrors.
+// A dead endpoint must not mean "no places".
 const OVERPASS_ENDPOINTS = [
+  ...(import.meta.env.DEV ? ["/overpass"] : []),
   "https://overpass-api.de/api/interpreter",
   "https://overpass.openstreetmap.fr/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",

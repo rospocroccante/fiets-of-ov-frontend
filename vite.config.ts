@@ -28,6 +28,15 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api/, ""),
       },
+      // Same-origin POI fetches in dev: this network has intermittently refused
+      // connections to overpass-api.de from the browser, and a server-side hop
+      // removes every browser variable (CORS, DNS, extensions). Prod builds skip
+      // this path and hit the public mirrors directly (see usePois).
+      "/overpass": {
+        target: "https://overpass.openstreetmap.fr",
+        changeOrigin: true,
+        rewrite: () => "/api/interpreter",
+      },
     },
   },
   test: {
