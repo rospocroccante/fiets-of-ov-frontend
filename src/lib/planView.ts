@@ -8,7 +8,6 @@ export interface OptionView {
   distanceKm: number | null;
   recommended: boolean;
   summary: string; // e.g. "Metro 52 -> Tram 1" or "4.8 km"
-  rainMinutes: number;
   itinerary: Itinerary;
 }
 
@@ -103,7 +102,6 @@ function toOptionView(option: Option): OptionView {
     distanceKm: option.kind === "bike" ? km(bikeDistanceM(it)) : null,
     recommended: option.recommended,
     summary: summarise(option.kind, it),
-    rainMinutes: option.rain_minutes,
     itinerary: it,
   };
 }

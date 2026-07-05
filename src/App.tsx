@@ -77,9 +77,8 @@ export default function App() {
   const { trips: recentTrips, record: recordTrip, clear: clearRecents } = useRecentTrips();
   const { places: savedPlaces, isSaved, toggle: toggleSaved, clearAll: clearSaved } = useSavedPlaces();
   const [placeInfo, setPlaceInfo] = useState<PlaceInfo | null>(null);
-  // Real filters: which option kinds show, and whether rainy options are hidden.
+  // Real filters: which option kinds show (one chip per kind in the filter bar).
   const [kinds, setKinds] = useState<KindFilter>({ bike: true, transit: true, bike_and_ride: true });
-  const [dryOnly, setDryOnly] = useState(false);
 
   // Every endpoint the user has planned with, newest first, for the focus dropdown
   // (an endpoint used as origin is a fine future destination and vice versa).
@@ -262,11 +261,9 @@ export default function App() {
   // first visible option when the current pick is filtered away.
   const filteredView = useMemo(() => {
     if (!planView) return null;
-    const options = planView.options.filter(
-      (o) => kinds[o.mode] && (!dryOnly || o.rainMinutes === 0),
-    );
+    const options = planView.options.filter((o) => kinds[o.mode]);
     return { ...planView, options };
-  }, [planView, kinds, dryOnly]);
+  }, [planView, kinds]);
   const visible = filteredView?.options ?? [];
   const effectiveMode: Mode =
     selectedMode && visible.some((o) => o.mode === selectedMode)
@@ -316,7 +313,7 @@ export default function App() {
           className="absolute inset-0 z-0 flex flex-col bg-white pt-20"
           style={{ opacity: mapOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
         >
-          <div className="px-6">
+          <div className="px-4 md:px-6">
             <FilterBar
               count={count}
               hideMap={hideMap}
@@ -327,16 +324,16 @@ export default function App() {
               onToggleRadar={() => setRadar((r) => !r)}
               kinds={kinds}
               onToggleKind={(m) => setKinds((s) => ({ ...s, [m]: !s[m] }))}
-              dryOnly={dryOnly}
-              onToggleDry={() => setDryOnly((v) => !v)}
-              onResetFilters={() => {
-                setKinds({ bike: true, transit: true, bike_and_ride: true });
-                setDryOnly(false);
-              }}
             />
           </div>
-          <main className="flex min-h-0 flex-1 gap-4 px-6 pb-6">
-            <section className={hideMap ? "w-full overflow-y-auto" : "w-1/2 overflow-y-auto"}>
+          {/* Below md the two panes stack, map first (Maps-style: map on top, results
+              scrolling under it); from md up they sit side by side, results left. */}
+          <main className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-4 md:flex-row md:gap-4 md:px-6 md:pb-6">
+            <section
+              className={`order-2 min-h-0 flex-1 overflow-y-auto md:order-1 md:flex-none ${
+                hideMap ? "md:w-full" : "md:w-1/2"
+              }`}
+            >
               <WeatherStrip
                 lat={view.origin?.lat ?? AMS_CENTER.lat}
                 lon={view.origin?.lon ?? AMS_CENTER.lon}
@@ -344,7 +341,7 @@ export default function App() {
               <ResultsPanel state={panel} />
             </section>
             {!hideMap && (
-              <section className="relative w-1/2">
+              <section className="relative order-1 h-[40vh] shrink-0 md:order-2 md:h-auto md:w-1/2">
                 {armed && (
                   <div className="absolute left-3 top-3 z-[1000] rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow">
                     Click the map to set the {armed}
@@ -396,12 +393,12 @@ export default function App() {
         >
           <HomeAurora />
           <section className="relative mx-auto max-w-4xl px-6 pt-20 text-center">
-            <h1 className="text-5xl font-bold leading-tight text-gray-900">
+            <h1 className="text-4xl font-bold leading-tight text-gray-900 sm:text-5xl">
               Bike or transit?
               <br />
               <span className={TEXT_GRADIENT}>Let the weather decide.</span>
             </h1>
-            <p className="mx-auto mt-5 max-w-2xl text-lg text-gray-600">
+            <p className="mx-auto mt-5 max-w-2xl text-base text-gray-600 sm:text-lg">
               Plan any trip across Amsterdam and get a rain-aware answer in one tap.
             </p>
           </section>
@@ -457,7 +454,7 @@ export default function App() {
 
         {/* Top bar chrome (progress -> 1): wordmark (Home) + Menu, behind the search pill. */}
         <motion.header
-          className="absolute inset-x-0 top-0 z-20 flex h-16 items-center justify-between border-b border-gray-100 bg-white/95 px-6"
+          className="absolute inset-x-0 top-0 z-20 flex h-16 items-center justify-between border-b border-gray-100 bg-white/95 px-4 sm:px-6"
           style={{ opacity: chromeOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
         >
           <button onClick={goHome} className="text-xl font-bold text-brand">
@@ -466,12 +463,14 @@ export default function App() {
           <HeaderMenu onClearRecents={clearRecents} onClearSaved={clearSaved} />
         </motion.header>
 
-        {/* Shared morphing search pill: usable in both stages, flies center -> top bar. */}
+        {/* Shared morphing search pill: usable in both stages, flies center -> top bar.
+            On phones it keeps a side margin and drops the decorative bits ("Now", the
+            divider) so the two fields and the button always fit. */}
         <motion.div
-          className="absolute inset-x-0 top-0 z-30 mx-auto flex w-full max-w-3xl items-center gap-2 rounded-full border border-gray-200 bg-white p-2 shadow-md"
+          className="absolute inset-x-0 top-0 z-30 mx-auto flex w-[calc(100%-1.5rem)] max-w-3xl items-center gap-1 rounded-full border border-gray-200 bg-white p-1.5 shadow-md sm:gap-2 sm:p-2"
           style={{ y: searchY }}
         >
-          <div className="flex flex-1 items-center px-3">
+          <div className="flex min-w-0 flex-1 items-center px-2 sm:px-3">
             <EndpointField
               value={fromText}
               placeholder="From"
@@ -487,11 +486,11 @@ export default function App() {
             type="button"
             aria-label="Swap start and end"
             onClick={swap}
-            className="flex-shrink-0 px-2 text-gray-400 hover:text-brand"
+            className="flex-shrink-0 px-1 text-gray-400 hover:text-brand sm:px-2"
           >
             &#8646;
           </button>
-          <div className="flex flex-1 items-center px-3">
+          <div className="flex min-w-0 flex-1 items-center px-2 sm:px-3">
             <EndpointField
               value={toText}
               placeholder="To"
@@ -503,12 +502,12 @@ export default function App() {
               onPickHistory={pickHistoryTo}
             />
           </div>
-          <span className="h-7 w-px bg-gray-200" />
-          <span className="px-3 text-sm text-gray-500">Now</span>
+          <span className="hidden h-7 w-px bg-gray-200 sm:block" />
+          <span className="hidden px-3 text-sm text-gray-500 sm:inline">Now</span>
           <button
             aria-label="Search"
             onClick={commitSearch}
-            className={`rounded-full px-6 py-3 text-sm font-semibold text-white shadow-md transition hover:brightness-110 ${PRIMARY_GRADIENT}`}
+            className={`rounded-full px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-110 sm:px-6 sm:py-3 ${PRIMARY_GRADIENT}`}
           >
             Search
           </button>

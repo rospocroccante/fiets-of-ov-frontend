@@ -18,7 +18,6 @@ const recommended: OptionView = {
   distanceKm: 4.8,
   recommended: true,
   summary: "4.8 km by bike",
-  rainMinutes: 0,
   itinerary,
 };
 
