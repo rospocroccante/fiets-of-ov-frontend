@@ -16,6 +16,7 @@ import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
 import { MapView } from "./components/MapView";
 import type { WeatherLayersState } from "./components/RainRadar";
 import { useLiveLocation } from "./hooks/useLiveLocation";
+import { useMediaQuery } from "./hooks/useMediaQuery";
 import { useMorphProgress } from "./hooks/useMorphProgress";
 import { useRecentTrips } from "./hooks/useRecentTrips";
 import type { RecentTrip } from "./hooks/useRecentTrips";
@@ -367,9 +368,13 @@ export default function App() {
   const homeY = useTransform(progress, [0, 1], [0, -30]);
   const chromeOpacity = useTransform(progress, [0.5, 1], [0, 1]);
   const mapOpacity = useTransform(progress, [0.35, 1], [0, 1]);
-  // 9px lands the ~62px pill vertically centred in the 80px (h-20) header, so its
-  // outline never straddles the header's bottom border.
-  const searchY = useTransform(progress, [0, 1], [260, 9]);
+  // Wide screens: 9px lands the ~62px pill vertically centred in the 80px (h-20)
+  // header, between the wordmark and the menu. Below lg there is no room for all
+  // three on one line, so the pill flies to its own row under the header instead of
+  // covering the wordmark. The map stage's top padding follows the same breakpoint
+  // (pt-40 vs lg:pt-24).
+  const wideChrome = useMediaQuery("(min-width: 1024px)", true);
+  const searchY = useTransform(progress, [0, 1], [260, wideChrome ? 9 : 88]);
 
   return (
     <div
@@ -388,7 +393,7 @@ export default function App() {
       <div className="sticky top-0 h-screen overflow-hidden bg-white dark:bg-[#23272B]">
         {/* Map stage (progress -> 1): fills the screen below the top bar. */}
         <motion.div
-          className="absolute inset-0 z-0 flex flex-col bg-white pt-24 dark:bg-[#23272B]"
+          className="absolute inset-0 z-0 flex flex-col bg-white pt-40 dark:bg-[#23272B] lg:pt-24"
           style={{ opacity: mapOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
         >
           <div className="px-4 md:px-6">
@@ -593,7 +598,7 @@ export default function App() {
             On phones it keeps a side margin and drops the decorative bits ("Now", the
             divider) so the two fields and the button always fit. */}
         <motion.div
-          className="absolute inset-x-0 top-0 z-30 mx-auto flex w-[calc(100%-1.5rem)] max-w-3xl items-center gap-1 rounded-full border border-gray-200 bg-white p-1.5 shadow-md dark:border-white/15 dark:bg-[#2A2F34] sm:gap-2 sm:p-2"
+          className="absolute inset-x-0 top-0 z-30 mx-auto flex w-[calc(100%-1.5rem)] max-w-2xl items-center gap-1 rounded-full border border-gray-200 bg-white p-1.5 shadow-md dark:border-white/15 dark:bg-[#2A2F34] sm:gap-2 sm:p-2 xl:max-w-3xl"
           style={{ y: searchY }}
         >
           <div className="flex min-w-0 flex-1 items-center px-2 sm:px-3">
