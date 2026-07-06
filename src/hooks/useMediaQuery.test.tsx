@@ -1,7 +1,9 @@
 import { renderHook, act } from "@testing-library/react";
 import { useMediaQuery } from "./useMediaQuery";
 
-test("uses the fallback when matchMedia is unavailable (jsdom default)", () => {
+test("uses the fallback when matchMedia is unavailable", () => {
+  // jsdom does provide matchMedia (always non-matching), so simulate its absence.
+  vi.stubGlobal("matchMedia", undefined);
   const { result } = renderHook(() => useMediaQuery("(min-width: 1024px)", true));
   expect(result.current).toBe(true);
 });
