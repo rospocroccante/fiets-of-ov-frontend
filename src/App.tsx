@@ -370,11 +370,11 @@ export default function App() {
   const mapOpacity = useTransform(progress, [0.35, 1], [0, 1]);
   // Wide screens: 9px lands the ~62px pill vertically centred in the 80px (h-20)
   // header, between the wordmark and the menu. Below lg there is no room for all
-  // three on one line, so the pill flies to its own row under the header instead of
-  // covering the wordmark. The map stage's top padding follows the same breakpoint
-  // (pt-40 vs lg:pt-24).
+  // three on one line, so the header shrinks to h-14 (56px) and the pill flies to
+  // its own row tight underneath (y=60) instead of covering the wordmark. The map
+  // stage's top padding follows the same breakpoint (pt-[8.25rem] vs lg:pt-24).
   const wideChrome = useMediaQuery("(min-width: 1024px)", true);
-  const searchY = useTransform(progress, [0, 1], [260, wideChrome ? 9 : 88]);
+  const searchY = useTransform(progress, [0, 1], [260, wideChrome ? 9 : 60]);
 
   return (
     <div
@@ -393,7 +393,7 @@ export default function App() {
       <div className="sticky top-0 h-screen overflow-hidden bg-white dark:bg-[#23272B]">
         {/* Map stage (progress -> 1): fills the screen below the top bar. */}
         <motion.div
-          className="absolute inset-0 z-0 flex flex-col bg-white pt-40 dark:bg-[#23272B] lg:pt-24"
+          className="absolute inset-0 z-0 flex flex-col bg-white pt-[8.25rem] dark:bg-[#23272B] lg:pt-24"
           style={{ opacity: mapOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
         >
           <div className="px-4 md:px-6">
@@ -580,7 +580,7 @@ export default function App() {
 
         {/* Top bar chrome (progress -> 1): wordmark (Home) + Menu, behind the search pill. */}
         <motion.header
-          className="absolute inset-x-0 top-0 z-20 flex h-20 items-center justify-between border-b border-gray-100 bg-white/95 px-4 dark:border-white/10 dark:bg-[#23272B]/95 sm:px-6"
+          className="absolute inset-x-0 top-0 z-20 flex h-14 items-center justify-between border-b border-gray-100 bg-white/95 px-4 dark:border-white/10 dark:bg-[#23272B]/95 sm:px-6 lg:h-20"
           style={{ opacity: chromeOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
         >
           <button onClick={goHome} className="text-xl font-bold text-brand dark:text-emerald-300">

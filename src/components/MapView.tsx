@@ -327,8 +327,10 @@ export function MapView({
       >
         <MapInteraction interactive={interactive} />
         <ViewportTracker onChange={setViewport} />
-        {/* CARTO voyager by day, dark matter for the dark theme. */}
+        {/* CARTO voyager by day, dark matter for the dark theme. The dark tiles are
+            near-black out of the box; .dark .basemap-tiles (index.css) lifts them. */}
         <TileLayer
+          className="basemap-tiles"
           url={`https://{s}.basemaps.cartocdn.com/rastertiles/${dark ? "dark_all" : "voyager"}/{z}/{x}/{y}{r}.png`}
         />
         {showWeather && wLayers.rain && <RadarOverlay frames={rain.frames} />}

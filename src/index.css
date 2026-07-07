@@ -47,6 +47,12 @@ html { scroll-snap-type: y proximity; }
     1px 0 2px #fff,
     -1px 0 2px #fff;
 }
+/* CARTO dark_matter is near-black out of the box; lift it so streets, water and
+   labels read while staying clearly "dark". */
+.dark .basemap-tiles {
+  filter: brightness(1.6) saturate(1.15);
+}
+
 /* On the dark basemap the halo flips: light text, dark glow. */
 .dark .poi-name {
   color: #E2E8F0;
