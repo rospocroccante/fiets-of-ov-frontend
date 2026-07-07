@@ -17,6 +17,7 @@ import { MapView } from "./components/MapView";
 import type { WeatherLayersState } from "./components/RainRadar";
 import { useLiveLocation } from "./hooks/useLiveLocation";
 import { useMediaQuery } from "./hooks/useMediaQuery";
+import { prefetchAmsterdamPois } from "./hooks/usePois";
 import { useMorphProgress } from "./hooks/useMorphProgress";
 import { useRecentTrips } from "./hooks/useRecentTrips";
 import type { RecentTrip } from "./hooks/useRecentTrips";
@@ -83,6 +84,14 @@ export default function App() {
     [origin, destination]
   );
   const view = useTripPlan(trip);
+
+  // Warm the POI layer once the initial render has settled: one bulk fetch covers
+  // central Amsterdam and persists per cell, so places appear instantly everywhere.
+  useEffect(() => {
+    if (!isLive()) return;
+    const id = window.setTimeout(() => void prefetchAmsterdamPois(), 2500);
+    return () => window.clearTimeout(id);
+  }, []);
 
   // Maps-style local memory: search history and saved places, plus the place-info
   // card opened from the map's "What's here?".

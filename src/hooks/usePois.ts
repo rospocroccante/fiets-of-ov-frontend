@@ -1,5 +1,6 @@
 import { useQueries } from "@tanstack/react-query";
 import { isLive } from "../api/client";
+import { getCell, putCell, putMany } from "../lib/poiStore";
 
 // Named points of interest (bars, restaurants, museums...) for the Maps-style POI
 // layer. Only fetched at neighbourhood zoom, where names are readable and the
@@ -97,13 +98,14 @@ interface Bbox {
   east: number;
 }
 
-function overpassQuery(v: Bbox): string {
+function overpassQuery(v: Bbox, cap: number): string {
   const bbox = `${v.south.toFixed(4)},${v.west.toFixed(4)},${v.north.toFixed(4)},${v.east.toFixed(4)}`;
+  const timeout = cap > MAX_POIS ? 25 : 10;
   return (
-    "[out:json][timeout:10];(" +
+    `[out:json][timeout:${timeout}];(` +
     `node["amenity"~"^(restaurant|fast_food|ice_cream|cafe|bar|pub)$"]["name"](${bbox});` +
     `node["tourism"~"^(museum|attraction|gallery)$"]["name"](${bbox});` +
-    `);out body ${MAX_POIS} qt;`
+    `);out body ${cap} qt;`
   );
 }
 
@@ -151,27 +153,88 @@ function attemptSignal(outer: AbortSignal | undefined, ms: number): AbortSignal 
   return typeof AbortSignal.any === "function" ? AbortSignal.any([outer, t]) : t;
 }
 
-async function fetchPois(v: Bbox, signal: AbortSignal | undefined): Promise<Poi[]> {
+async function fetchPois(
+  v: Bbox,
+  signal: AbortSignal | undefined,
+  cap = MAX_POIS,
+): Promise<Poi[]> {
   let lastError: unknown = new Error("overpass unavailable");
+  // Bulk prefetch queries need a longer leash than a single-cell fill.
+  const attemptMs = cap > MAX_POIS ? 30_000 : 6000;
   for (const endpoint of OVERPASS_ENDPOINTS) {
     try {
       const res = await fetch(endpoint, {
         method: "POST",
-        body: overpassQuery(v),
-        signal: attemptSignal(signal, 6000),
+        body: overpassQuery(v, cap),
+        signal: attemptSignal(signal, attemptMs),
       });
       if (!res.ok) throw new Error(`overpass failed: ${res.status}`);
       const data = (await res.json()) as { elements?: OverpassElement[] };
       return (data.elements ?? [])
         .map(toPoi)
         .filter((p): p is Poi => p !== null)
-        .slice(0, MAX_POIS);
+        .slice(0, cap);
     } catch (e) {
       if (signal?.aborted) throw e;
       lastError = e;
     }
   }
   throw lastError;
+}
+
+// Warm the whole city in one shot: a single bulk Overpass query covering central
+// Amsterdam, chunked into grid cells and persisted (poiStore), so the POI layer
+// renders instantly wherever the user pans - no per-cell network on the way. Cells
+// the bulk result leaves empty are stored as known-empty (water, parks) so they do
+// not refetch either; that marking is skipped if the result hit the cap, because a
+// truncated sweep cannot prove a cell empty. Runs at most once a week; a failure is
+// silent (the on-demand per-cell path still works).
+const PREFETCH_META_KEY = "fov.poisPrefetch.v1";
+const PREFETCH_TTL_MS = 7 * 24 * 3600 * 1000;
+const PREFETCH_CAP = 8000;
+const AMS_CORE: Bbox = { south: 52.32, west: 4.8, north: 52.43, east: 4.99 };
+
+export async function prefetchAmsterdamPois(): Promise<void> {
+  if (!isLive()) return;
+  try {
+    const raw = window.localStorage.getItem(PREFETCH_META_KEY);
+    if (raw && Date.now() - ((JSON.parse(raw) as { at?: number }).at ?? 0) < PREFETCH_TTL_MS) {
+      return;
+    }
+  } catch {
+    // Unreadable meta: just prefetch again.
+  }
+  let all: Poi[];
+  try {
+    all = await fetchPois(AMS_CORE, undefined, PREFETCH_CAP);
+  } catch {
+    return;
+  }
+  const byCell = new Map<string, Poi[]>();
+  for (const p of all) {
+    const key = `${Math.floor(p.lat / CELL_LAT)}:${Math.floor(p.lon / CELL_LON)}`;
+    const list = byCell.get(key) ?? [];
+    list.push(p);
+    byCell.set(key, list);
+  }
+  const entries: Array<readonly [string, Poi[]]> = [...byCell.entries()].map(([key, pois]) => [
+    key,
+    pois.sort((a, b) => KIND_PRIORITY[a.kind] - KIND_PRIORITY[b.kind]).slice(0, MAX_POIS),
+  ]);
+  if (all.length < PREFETCH_CAP) {
+    for (let i = Math.floor(AMS_CORE.south / CELL_LAT); i <= Math.floor(AMS_CORE.north / CELL_LAT); i++) {
+      for (let j = Math.floor(AMS_CORE.west / CELL_LON); j <= Math.floor(AMS_CORE.east / CELL_LON); j++) {
+        const key = `${i}:${j}`;
+        if (!byCell.has(key)) entries.push([key, []]);
+      }
+    }
+  }
+  putMany(entries);
+  try {
+    window.localStorage.setItem(PREFETCH_META_KEY, JSON.stringify({ at: Date.now() }));
+  } catch {
+    // Not persistable: the store entries still serve this session.
+  }
 }
 
 // Label decluttering, Maps-style: at each zoom keep only POIs a minimum distance
@@ -218,7 +281,13 @@ export function usePois(viewport: Viewport | null): { pois: Poi[]; error: boolea
             (p) => p.lat >= c.south && p.lat < c.north && p.lon >= c.west && p.lon < c.east,
           );
         }
-        return fetchPois(c, signal);
+        // The persistent store answers first (bulk-prefetched or previously fetched
+        // cells, including known-empty ones); the network only fills true gaps.
+        const stored = getCell(c.key);
+        if (stored) return stored;
+        const pois = await fetchPois(c, signal);
+        putCell(c.key, pois);
+        return pois;
       },
     })),
   });
