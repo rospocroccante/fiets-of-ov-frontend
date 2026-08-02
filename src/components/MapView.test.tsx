@@ -141,6 +141,17 @@ test("right-click menu 'to here' fires onContextPick('end') and closes", () => {
   expect(screen.queryByRole("button", { name: /directions to here/i })).toBeNull();
 });
 
+test("Escape closes the context menu (clicking the map would also drop a pin)", () => {
+  renderMap(
+    <MapView origin={null} destination={null} stops={[]} route={null} onContextPick={() => {}} />
+  );
+  act(() => __fireMapContextMenu(52.36, 4.9, 10, 20));
+  expect(screen.getByRole("button", { name: /directions from here/i })).toBeInTheDocument();
+
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(screen.queryByRole("button", { name: /directions from here/i })).toBeNull();
+});
+
 test("renders without error when interactive={false}", () => {
   const { container } = renderMap(
     <MapView

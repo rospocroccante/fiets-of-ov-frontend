@@ -31,7 +31,10 @@ function coords(ref: PlaceRef): LatLon | null {
 export function useTripPlan(trip: Trip | null): TripPlanView {
   const { lang } = useI18n();
   const query = useQuery<TripData>({
-    queryKey: ["plan", trip?.from, trip?.to],
+    // The submit nonce is part of the key on purpose: this hook lives in an
+    // always-mounted component, so without it a second Search on the same route would
+    // hand back the first plan forever, departure times and all.
+    queryKey: ["plan", trip?.from, trip?.to, trip?.submit],
     enabled: trip !== null,
     queryFn: async () => {
       const t = trip!;

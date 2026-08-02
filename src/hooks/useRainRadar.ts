@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { isLive } from "../api/client";
 
 export interface RadarFrame {
   time: number; // unix seconds of the radar snapshot
@@ -31,6 +32,18 @@ export const RADAR_TILE_OPTIONS = { tileSize: 512, zoomOffset: -1, maxNativeZoom
 const PAST_FRAMES = 6;
 const NOWCAST_FRAMES = 2;
 
+// Offline fixture for mock mode: the frame list and its clock behave exactly like the
+// real feed (5-minute steps ending one step into the nowcast), but every tile is an
+// inline transparent pixel, so toggling the radar never reaches rainviewer.com — same
+// rule as useShortForecast's MOCK_FORECAST.
+const MOCK_TILE =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII=";
+
+function mockFrames(): RadarFrame[] {
+  const latest = Math.floor(Date.now() / 300_000) * 300;
+  return [-3, -2, -1, 0, 1].map((step) => ({ time: latest + step * 300, url: MOCK_TILE }));
+}
+
 export interface RainRadarState {
   frames: RadarFrame[];
   // Surfaced so the UI can say "radar unavailable" instead of silently showing a
@@ -47,6 +60,7 @@ export function useRainRadar(enabled: boolean): RainRadarState {
     // coming back to the map) within that window must not refetch.
     staleTime: 5 * 60 * 1000,
     queryFn: async ({ signal }) => {
+      if (!isLive()) return mockFrames();
       const res = await fetch(INDEX_URL, { signal });
       if (!res.ok) throw new Error(`radar index failed: ${res.status}`);
       const data = (await res.json()) as RainViewerMaps;

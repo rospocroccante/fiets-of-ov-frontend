@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export interface Fix {
   lat: number;
@@ -10,7 +10,9 @@ export interface Fix {
 }
 
 export interface Simulation {
-  points: [number, number][]; // route to replay
+  // Route to replay. The array may be rebuilt freely between renders: the hook keys its
+  // replay on the route's shape, not on the array's identity (see routeKey below).
+  points: [number, number][];
   intervalMs?: number; // default 1000
   stepM?: number; // meters advanced per tick; default 6 (bike pace at 1 s ticks)
 }
@@ -50,6 +52,17 @@ export function useLiveLocation(
   const intervalMs = simulate?.intervalMs ?? 1000;
   const stepM = simulate?.stepM ?? 6;
 
+  // Keying the replay on the array's identity made correctness a caller's problem: it
+  // worked only because App memoizes the simulation, and an un-memoized caller would
+  // have restarted the route from its first meter on every render. A cheap signature
+  // (how many points, where it starts, where it ends) identifies the route instead, and
+  // the array itself is read through a ref, which never re-triggers the effect.
+  const pointsRef = useRef(points);
+  pointsRef.current = points;
+  const routeKey = points
+    ? `${points.length}|${points[0]?.join(",") ?? ""}|${points[points.length - 1]?.join(",") ?? ""}`
+    : null;
+
   useEffect(() => {
     if (!active) {
       setFix(null);
@@ -57,7 +70,8 @@ export function useLiveLocation(
       return;
     }
 
-    if (points) {
+    const points = pointsRef.current;
+    if (routeKey !== null && points) {
       if (points.length === 0) return;
       const cum = [0];
       for (let i = 1; i < points.length; i++) {
@@ -126,7 +140,7 @@ export function useLiveLocation(
       { enableHighAccuracy: true, maximumAge: 1000, timeout: 10_000 },
     );
     return () => geo.clearWatch(id);
-  }, [active, points, intervalMs, stepM]);
+  }, [active, routeKey, intervalMs, stepM]);
 
   return { fix, error };
 }

@@ -267,7 +267,14 @@ export function declutterPois(pois: Poi[], zoom: number): Poi[] {
   return kept;
 }
 
-export function usePois(viewport: Viewport | null): { pois: Poi[]; error: boolean } {
+export function usePois(viewport: Viewport | null): {
+  pois: Poi[];
+  error: boolean;
+  // True when part of the view is missing: the layer is showing real places, just not
+  // all of them. Reporting only the total outage let a few dead cells pass for "there
+  // is nothing here", which is the one thing a places layer must never imply.
+  partial: boolean;
+} {
   const active = viewport != null && viewport.zoom >= POI_MIN_ZOOM;
   const cells = active ? cellsFor(viewport as Viewport) : [];
   const results = useQueries({
@@ -303,6 +310,11 @@ export function usePois(viewport: Viewport | null): { pois: Poi[]; error: boolea
       }
     }
   }
-  const error = active && results.length > 0 && pois.length === 0 && results.some((r) => r.isError);
-  return { pois, error };
+  // Every cell dead is an outage; some cells dead while others answered is a hole in
+  // the coverage. Cells still loading count as neither, so a slow mirror does not raise
+  // an alarm on its own.
+  const failed = results.filter((r) => r.isError).length;
+  const error = active && failed > 0 && failed === results.length;
+  const partial = active && failed > 0 && failed < results.length;
+  return { pois, error, partial };
 }

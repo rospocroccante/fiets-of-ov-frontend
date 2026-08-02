@@ -3,6 +3,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useRainRadar } from "./useRainRadar";
 
+// The RainViewer index is a live-mode feature; most tests here force the live path to
+// exercise the parser, and one flips the flag to check the offline fixture.
+const mode = vi.hoisted(() => ({ live: true }));
+vi.mock("../api/client", () => ({ isLive: () => mode.live }));
+afterEach(() => {
+  mode.live = true;
+});
+
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
@@ -47,6 +55,20 @@ test("disabled hook never fetches", () => {
   vi.stubGlobal("fetch", fetchMock);
   renderHook(() => useRainRadar(false), { wrapper });
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test("mock mode animates an offline fixture without touching rainviewer.com", async () => {
+  mode.live = false;
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+
+  const { result } = renderHook(() => useRainRadar(true), { wrapper });
+
+  await waitFor(() => expect(result.current.frames.length).toBeGreaterThan(1));
+  expect(fetchMock).not.toHaveBeenCalled();
+  // Inline tiles: even Leaflet's tile requests stay on the machine.
+  expect(result.current.frames.every((f) => f.url.startsWith("data:image/png"))).toBe(true);
+  expect(result.current.error).toBe(false);
 });
 
 test("a failed or malformed index surfaces error instead of silent emptiness", async () => {

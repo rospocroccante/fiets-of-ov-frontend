@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { ResultsPanel } from "./ResultsPanel";
 import { buildPlanView } from "../lib/planView";
 import { mockPlanFor } from "../api/mock";
@@ -42,6 +42,26 @@ test("clicking an option calls onSelect", () => {
   render(<ResultsPanel state={{ status: "ready", view, selectedMode: "transit", onSelect }} />);
   fireEvent.click(screen.getByText("By bike"));
   expect(onSelect).toHaveBeenCalledWith("bike");
+});
+
+test("the departure line keeps up with the clock instead of freezing at first render", () => {
+  vi.useFakeTimers();
+  try {
+    const view = buildPlanView(mockPlanFor("A", "Bijlmer rain"));
+    const departure = view.options[0].itinerary.start_time;
+    // Ten minutes before departure: the panel shows the clock time.
+    vi.setSystemTime(departure - 10 * 60_000);
+    render(
+      <ResultsPanel state={{ status: "ready", view, selectedMode: "transit", onSelect: () => {} }} />,
+    );
+    expect(screen.getByText(/Leave at/)).toBeInTheDocument();
+
+    // Nine minutes later the same mounted panel must say "leave now", untouched.
+    act(() => vi.advanceTimersByTime(9 * 60_000));
+    expect(screen.getByText("Leave now")).toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("onStartNav renders a Start button beside the departure line and fires on click", () => {

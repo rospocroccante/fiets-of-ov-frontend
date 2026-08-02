@@ -3,6 +3,18 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { declutterPois, toPoi, usePois } from "./usePois";
 import type { Poi, Viewport } from "./usePois";
+import { __resetPoiStore } from "../lib/poiStore";
+
+// Overpass is a live-mode feature: the suite runs in mock mode (offline fixture), and
+// the partial-failure test flips the flag to exercise the network path.
+const mode = vi.hoisted(() => ({ live: false }));
+vi.mock("../api/client", () => ({ isLive: () => mode.live }));
+
+afterEach(() => {
+  mode.live = false;
+  __resetPoiStore();
+  window.localStorage.clear();
+});
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -21,6 +33,38 @@ test("returns fixture POIs inside the viewport (mock mode), none below the zoom 
 
   const { result: low } = renderHook(() => usePois({ ...CENTRE, zoom: 13 }), { wrapper });
   expect(low.current.pois).toEqual([]);
+});
+
+test("cells that fail while others answer report a partial gap, not an outage", async () => {
+  mode.live = true;
+  // The first cell answers, every later attempt fails: the layer shows real places but
+  // is missing part of the view, which must not be reported as "no places here".
+  let served = false;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      if (served) return { ok: false, status: 503, json: async () => ({}) };
+      served = true;
+      return {
+        ok: true,
+        json: async () => ({
+          elements: [{ id: 7, lat: 52.3705, lon: 4.8905, tags: { amenity: "bar", name: "Bar A" } }],
+        }),
+      };
+    }),
+  );
+  // retryDelay 0: usePois asks for one retry per cell, and the default backoff would
+  // park this test on a timer for a second.
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } });
+  const live = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+
+  const { result } = renderHook(() => usePois(CENTRE), { wrapper: live });
+
+  await waitFor(() => expect(result.current.partial).toBe(true));
+  expect(result.current.error).toBe(false);
+  expect(result.current.pois.map((p) => p.name)).toContain("Bar A");
 });
 
 test("declutterPois thins crowded labels by zoom and lets culture win the spot", () => {

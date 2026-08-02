@@ -45,9 +45,12 @@ function inAmsterdam(lat: number, lon: number): boolean {
   return lon >= 4.728 && lon <= 5.079 && lat >= 52.278 && lat <= 52.431;
 }
 
-export async function searchPlaces(query: string): Promise<Place[]> {
+// The signal is how a superseded keystroke stops costing bandwidth: the caller aborts
+// the previous lookup as soon as the query moves on, instead of leaving it running and
+// having to ignore an answer that arrives out of order.
+export async function searchPlaces(query: string, signal?: AbortSignal): Promise<Place[]> {
   if (!isLive()) return mockSearchPlaces(query);
-  return photonSearch(query);
+  return photonSearch(query, signal);
 }
 
 interface PhotonFeature {
@@ -63,13 +66,13 @@ interface PhotonFeature {
   geometry: { coordinates: [number, number] };
 }
 
-async function photonSearch(query: string): Promise<Place[]> {
+async function photonSearch(query: string, signal?: AbortSignal): Promise<Place[]> {
   const q = query.trim();
   if (q.length < 2) return [];
   const url =
     `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}` +
     `&lat=${AMS_CENTER.lat}&lon=${AMS_CENTER.lon}&limit=8&lang=en`;
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  const res = await fetch(url, { headers: { Accept: "application/json" }, signal });
   if (!res.ok) return [];
   const data = (await res.json()) as { features?: PhotonFeature[] };
   return (data.features ?? [])
