@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MapView, poiGlyph, poiMarkerHtml } from "./MapView";
+import { MapView, poiIconName, poiMarkerHtml } from "./MapView";
 import { I18nProvider } from "../lib/i18n";
 
 // The POI health pill is the layer's only honest signal, and the difference between its
@@ -55,24 +55,25 @@ test("a full outage gets the red 'places unavailable' pill instead", () => {
   expect(screen.queryByText("Some places are missing here")).toBeNull();
 });
 
-// Google-style category glyphs. The raw OSM tag picks the icon — a cafe cup is
-// not a cocktail glass — and the kind only steps in for POIs persisted by
-// poiStore before the tag field existed, so old caches degrade to a sensible
-// icon instead of a blank badge. The react-leaflet mock never renders real
-// divIcons, so the pure html seam is where the markup gets asserted.
-test("the OSM tag picks the marker glyph, kind is only the fallback", () => {
-  expect(poiGlyph({ kind: "drink", tag: "cafe" })).toBe("local_cafe");
-  expect(poiGlyph({ kind: "drink", tag: "bar" })).toBe("local_bar");
-  expect(poiGlyph({ kind: "drink", tag: "pub" })).toBe("sports_bar");
-  expect(poiGlyph({ kind: "food", tag: "restaurant" })).toBe("restaurant");
-  expect(poiGlyph({ kind: "food", tag: "ice_cream" })).toBe("icecream");
-  expect(poiGlyph({ kind: "culture", tag: "gallery" })).toBe("palette");
+// Maki category icons. The raw OSM tag picks the icon — a cafe cup is not a
+// cocktail glass even though both kinds are "drink" — and the kind only steps
+// in for POIs persisted by poiStore before the tag field existed, so old
+// caches degrade to a sensible icon instead of a blank badge. The
+// react-leaflet mock never renders real divIcons, so the pure html seam is
+// where the markup gets asserted.
+test("the OSM tag picks the Maki icon, kind is only the fallback", () => {
+  expect(poiIconName({ kind: "drink", tag: "cafe" })).toBe("cafe");
+  expect(poiIconName({ kind: "drink", tag: "bar" })).toBe("bar");
+  expect(poiIconName({ kind: "drink", tag: "pub" })).toBe("beer");
+  expect(poiIconName({ kind: "food", tag: "restaurant" })).toBe("restaurant");
+  expect(poiIconName({ kind: "food", tag: "ice_cream" })).toBe("ice-cream");
+  expect(poiIconName({ kind: "culture", tag: "gallery" })).toBe("art-gallery");
   // Cached POIs predating the tag field: per-kind fallback, never a blank badge.
-  expect(poiGlyph({ kind: "culture" })).toBe("museum");
-  expect(poiGlyph({ kind: "other", tag: null })).toBe("location_on");
+  expect(poiIconName({ kind: "culture" })).toBe("museum");
+  expect(poiIconName({ kind: "other", tag: null })).toBe("marker");
 });
 
-test("marker html wraps the glyph in a coloured badge and still escapes the name", () => {
+test("marker html inlines the Maki svg in a coloured badge and still escapes the name", () => {
   const html = poiMarkerHtml({
     id: "x1",
     name: "Jack's <Bar>",
@@ -83,11 +84,31 @@ test("marker html wraps the glyph in a coloured badge and still escapes the name
     lon: 4.89,
   });
   expect(html).toContain('class="poi-badge"');
-  expect(html).toContain(">local_bar</span>");
-  // The ligature name must never be read out loud or picked up by find-in-page.
+  // A real inline svg — with the XML prolog stripped, because this string goes
+  // through divIcon innerHTML where "<?xml" would parse as a bogus comment.
+  expect(html).toContain("<svg");
+  expect(html).toContain('viewBox="0 0 15 15"');
+  expect(html).not.toContain("<?xml");
+  // The badge is decorative: hidden from screen readers, and an svg has no
+  // ligature text for find-in-page to match.
   expect(html).toContain('aria-hidden="true"');
   expect(html).toContain("Jack&#39;s &lt;Bar&gt;");
   expect(html).not.toContain("<Bar>");
+});
+
+// A name → svg lookup that misses would render an empty badge, which is exactly
+// the failure mode the old font subset had with unknown ligatures. Every tag we
+// map and every kind fallback must resolve to a bundled svg.
+test("every mapped tag and kind fallback resolves to an inline svg", () => {
+  const tags = ["restaurant", "fast_food", "ice_cream", "cafe", "bar", "pub", "museum", "attraction", "gallery"];
+  for (const tag of tags) {
+    const html = poiMarkerHtml({ id: tag, name: tag, kind: "food", kindLabel: "x", tag, lat: 0, lon: 0 });
+    expect(html, tag).toContain("<svg");
+  }
+  for (const kind of ["food", "drink", "culture", "other"] as const) {
+    const html = poiMarkerHtml({ id: kind, name: kind, kind, kindLabel: "x", tag: null, lat: 0, lon: 0 });
+    expect(html, kind).toContain("<svg");
+  }
 });
 
 test("the pills are translated", () => {

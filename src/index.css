@@ -64,9 +64,9 @@ html { scroll-snap-type: y proximity; }
   white-space: nowrap;
   cursor: pointer;
 }
-/* The badge: kind colour underneath, filled white Material glyph on top, like
-   Google Maps' category pins. 16px border-box — the declutter maths in usePois
-   (LABEL_DOT_W) mirrors this size, keep them in sync. */
+/* The badge: kind colour underneath, white Maki icon on top, like Google Maps'
+   category pins. 16px border-box — the declutter maths in usePois (LABEL_DOT_W)
+   mirrors this size, keep them in sync. */
 .poi-badge {
   width: 16px;
   height: 16px;
@@ -78,15 +78,13 @@ html { scroll-snap-type: y proximity; }
   align-items: center;
   justify-content: center;
 }
-/* Overrides the 24px default from index.html; FILL 1 because a hollow outline
-   glyph at 10px on a coloured disc is unreadable. */
-.poi-glyph {
-  font-size: 10px;
-  color: #fff;
-  font-variation-settings:
-    "FILL" 1,
-    "opsz" 20,
-    "wght" 500;
+/* Maki ships width/height="15"; size it to the badge here instead. The paths
+   carry no fill attribute, so fill on the root svg paints them white. */
+.poi-badge svg {
+  width: 10px;
+  height: 10px;
+  display: block;
+  fill: #fff;
 }
 .poi-name {
   font-size: 11px;

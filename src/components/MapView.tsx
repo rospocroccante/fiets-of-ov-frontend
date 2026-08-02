@@ -16,6 +16,19 @@ import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
 // MapView, and importing the CSS from main.tsx would keep shipping it (and the render-
 // blocking <link> for it) to a home screen that never draws a map.
 import "leaflet/dist/leaflet.css";
+// Maki (CC0, mapbox/maki): the POI icon set drawn on a 15px grid for exactly
+// this job — badges on a map. ?raw inlines each file as a string at build time,
+// so only the ten icons below ship, not the whole set.
+import artGallerySvg from "@mapbox/maki/icons/art-gallery.svg?raw";
+import attractionSvg from "@mapbox/maki/icons/attraction.svg?raw";
+import barSvg from "@mapbox/maki/icons/bar.svg?raw";
+import beerSvg from "@mapbox/maki/icons/beer.svg?raw";
+import cafeSvg from "@mapbox/maki/icons/cafe.svg?raw";
+import fastFoodSvg from "@mapbox/maki/icons/fast-food.svg?raw";
+import iceCreamSvg from "@mapbox/maki/icons/ice-cream.svg?raw";
+import markerSvg from "@mapbox/maki/icons/marker.svg?raw";
+import museumSvg from "@mapbox/maki/icons/museum.svg?raw";
+import restaurantSvg from "@mapbox/maki/icons/restaurant.svg?raw";
 import type { Itinerary, PlanLeg, Stop } from "../api/types";
 import { declutterPois, usePois, POI_MIN_ZOOM } from "../hooks/usePois";
 import type { Poi, Viewport } from "../hooks/usePois";
@@ -93,43 +106,60 @@ const POI_COLOR: Record<Poi["kind"], string> = {
   other: "#d97706",
 };
 
-// Google-style category glyphs: the raw OSM tag picks the icon, because a cafe
-// cup is not a cocktail glass even though both kinds are "drink". Every name here
-// must exist in the frozen icon-font subset — regeneration note in index.html.
-const POI_GLYPH_TAG: Record<string, string> = {
+// Maki ships each icon with an XML prolog; innerHTML would parse "<?xml" as a
+// bogus comment, so slice from the <svg> root before embedding.
+const maki = (svg: string): string => svg.slice(svg.indexOf("<svg"));
+
+const MAKI: Record<string, string> = {
+  "art-gallery": maki(artGallerySvg),
+  attraction: maki(attractionSvg),
+  bar: maki(barSvg),
+  beer: maki(beerSvg),
+  cafe: maki(cafeSvg),
+  "fast-food": maki(fastFoodSvg),
+  "ice-cream": maki(iceCreamSvg),
+  marker: maki(markerSvg),
+  museum: maki(museumSvg),
+  restaurant: maki(restaurantSvg),
+};
+
+// The raw OSM tag picks the icon, because a cafe cup is not a cocktail glass
+// even though both kinds are "drink". Values are Maki icon names — every one
+// must have an entry in MAKI above, or the badge renders empty.
+const POI_ICON_TAG: Record<string, string> = {
   restaurant: "restaurant",
-  fast_food: "fastfood",
-  ice_cream: "icecream",
-  cafe: "local_cafe",
-  bar: "local_bar",
-  pub: "sports_bar",
+  fast_food: "fast-food",
+  ice_cream: "ice-cream",
+  cafe: "cafe",
+  bar: "bar",
+  pub: "beer",
   museum: "museum",
-  attraction: "attractions",
-  gallery: "palette",
+  attraction: "attraction",
+  gallery: "art-gallery",
 };
 
 // Per-kind fallback for POIs persisted by poiStore before Poi carried the tag:
 // an old cache must degrade to a sensible icon, never to a blank badge.
-const POI_GLYPH_KIND: Record<Poi["kind"], string> = {
+const POI_ICON_KIND: Record<Poi["kind"], string> = {
   food: "restaurant",
-  drink: "local_cafe",
+  drink: "cafe",
   culture: "museum",
-  other: "location_on",
+  other: "marker",
 };
 
 // Exported for tests along with poiMarkerHtml: the react-leaflet mock never
 // renders real divIcons, so this pure string seam is the only place the badge
 // markup can be asserted.
-export function poiGlyph(p: Pick<Poi, "kind" | "tag">): string {
-  return (p.tag && POI_GLYPH_TAG[p.tag]) || POI_GLYPH_KIND[p.kind];
+export function poiIconName(p: Pick<Poi, "kind" | "tag">): string {
+  return (p.tag && POI_ICON_TAG[p.tag]) || POI_ICON_KIND[p.kind];
 }
 
-// aria-hidden because the glyph is a ligature: without it, screen readers and
-// find-in-page would see the literal text "local_cafe" next to every cafe.
+// The badge is aria-hidden: the icon is decoration next to the visible name,
+// and unlike the old icon-font ligature an svg leaves nothing for find-in-page.
 export function poiMarkerHtml(p: Poi): string {
   return (
-    `<span class="poi-badge" style="background:${POI_COLOR[p.kind]}">` +
-    `<span class="material-symbols-rounded poi-glyph" aria-hidden="true">${poiGlyph(p)}</span>` +
+    `<span class="poi-badge" aria-hidden="true" style="background:${POI_COLOR[p.kind]}">` +
+    MAKI[poiIconName(p)] +
     `</span>` +
     `<span class="poi-name">${escapeHtml(p.name)}</span>`
   );
