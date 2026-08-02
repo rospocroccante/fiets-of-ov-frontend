@@ -1,17 +1,78 @@
 <!doctype html>
-<html lang="en">
+<!-- Dutch is the app's default language (I18nProvider only switches to English when
+     the browser or a stored preference asks for it), so the static document starts in
+     nl and the provider rewrites this attribute on every language change. -->
+<html lang="nl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover lets the page paint into the notch/home-indicator area;
+         the fixed chrome pays for it with env(safe-area-inset-*) padding. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <title>Fiets of OV</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- icon_names scopes the variable font to the glyphs the app uses instead
-         of shipping the whole icon set; keep the list alphabetical (API requirement)
-         and in sync with usages of material-symbols-rounded. -->
+    <meta
+      name="description"
+      content="Fiets of OV weegt regen, wind en reistijd tegen elkaar af en zegt of je in Amsterdam beter kunt fietsen of het OV kunt nemen."
+    />
+    <!-- Browser UI colour per theme. The values are the app's real backgrounds:
+         white in light mode, and in dark mode the night palette's page step
+         (`night.bg` in tailwind.config.js) that .dark body paints. Keep the two in
+         sync — a stale value here shows up as a seam between the browser chrome and
+         the page on a phone. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#20282E" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- Icon font, self-hosted. This is byte-for-byte the file the Google Fonts css2 URL
+         below resolves to: a 25 kB subset holding only the glyphs the app uses, with the
+         opsz/wght/FILL/GRAD axes intact (the full variable font is 336 kB). Serving it
+         ourselves takes two cross-origin connections and one render-blocking third-party
+         stylesheet off the critical path, which is the part a phone on a slow network
+         feels.
+
+         To add an icon you must regenerate the file — the subset is frozen, and a glyph
+         that is not in it renders as its literal ligature name ("dark_mode") rather than
+         as an icon. Fetch the CSS with a browser User-Agent, follow the src: url() in the
+         response, and overwrite public/fonts/material-symbols-rounded-subset.woff2:
+
+         https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,0&icon_names=bedtime,close,cloud,dark_mode,foggy,history,light_mode,location_on,my_location,partly_cloudy_day,partly_cloudy_night,progress_activity,rainy,roundabout_left,roundabout_right,sports_score,star,straight,sunny,thunderstorm,tram,turn_left,turn_right,turn_slight_left,turn_slight_right,u_turn_left,u_turn_right,weather_snowy&display=block
+
+         Keep that icon_names list alphabetical (the API requires it) and in sync with the
+         usages of material-symbols-rounded in src/. font-display: block is deliberate and
+         matches what the CSS used to say: an icon font's fallback is the ligature name in
+         readable text, so a flash of it is worse than a flash of nothing. -->
+    <style>
+      @font-face {
+        font-family: "Material Symbols Rounded";
+        font-style: normal;
+        font-weight: 400 700;
+        font-display: block;
+        src: url(/fonts/material-symbols-rounded-subset.woff2) format("woff2");
+      }
+      .material-symbols-rounded {
+        font-family: "Material Symbols Rounded";
+        font-weight: normal;
+        font-style: normal;
+        font-size: 24px;
+        line-height: 1;
+        letter-spacing: normal;
+        text-transform: none;
+        display: inline-block;
+        white-space: nowrap;
+        word-wrap: normal;
+        direction: ltr;
+        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
+      }
+    </style>
     <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,0&icon_names=bedtime,close,cloud,dark_mode,foggy,history,light_mode,location_on,my_location,partly_cloudy_day,partly_cloudy_night,progress_activity,rainy,roundabout_left,roundabout_right,sports_score,star,straight,sunny,thunderstorm,tram,turn_left,turn_right,turn_slight_left,turn_slight_right,u_turn_left,u_turn_right,weather_snowy&display=block"
+      rel="preload"
+      href="/fonts/material-symbols-rounded-subset.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
     />
   </head>
   <body>

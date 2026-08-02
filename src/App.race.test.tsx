@@ -2,6 +2,7 @@ import { render, screen, fireEvent, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { __fireMapContextMenu } from "./__mocks__/react-leaflet";
+import { whenMapMounted } from "./test/mapReady";
 import { reverseGeocode } from "./geocode";
 
 // Own file: reverseGeocode is module-mocked with manually-resolved promises so the
@@ -24,6 +25,7 @@ test("a stale reverse-geocode response cannot overwrite a newer pick", async () 
     </QueryClientProvider>,
   );
 
+  await whenMapMounted();
   // Two rapid "Directions from here" picks at different spots.
   act(() => __fireMapContextMenu(52.36, 4.88, 10, 20));
   fireEvent.click(await screen.findByRole("button", { name: /directions from here/i }));

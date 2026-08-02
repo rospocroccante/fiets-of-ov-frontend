@@ -33,6 +33,7 @@ const STRINGS = {
   showMap: { en: "Show map", nl: "Toon kaart" },
   zoomInForPlaces: { en: "Zoom in to see bars and places", nl: "Zoom in voor cafés en plekken" },
   placesUnavailable: { en: "Places unavailable right now", nl: "Plekken zijn nu niet beschikbaar" },
+  placesPartial: { en: "Some places are missing here", nl: "Hier ontbreken enkele plekken" },
   clickMapSetStart: {
     en: "Click the map to set the start",
     nl: "Klik op de kaart om het startpunt te kiezen",
@@ -120,6 +121,16 @@ const STRINGS = {
   weatherThunderstorm: { en: "Thunderstorm", nl: "Onweer" },
   weatherClouds: { en: "Clouds", nl: "Bewolking" },
   bikeRoute: { en: "Bike route", nl: "Fietsroute" },
+  // Spoken by the polite live region, not drawn: a plan finishing (or failing) only
+  // repaints a pane that may be scrolled out of view on a phone.
+  planReadyAnnounce: {
+    en: "Advice ready: {n} options.",
+    nl: "Advies klaar: {n} opties.",
+  },
+  planErrorAnnounce: {
+    en: "This trip could not be planned.",
+    nl: "Deze rit kon niet gepland worden.",
+  },
 } as const;
 
 export type StringKey = keyof typeof STRINGS;
@@ -180,6 +191,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     } catch {
       // Persistence is best-effort: the toggle still works for the session.
     }
+  }, [lang]);
+
+  // index.html ships lang="nl"; a stored/browser preference for English (or the
+  // in-app switch) has to move the document with it, or a screen reader keeps reading
+  // English copy with Dutch pronunciation rules and translation tools mislabel the page.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.lang = lang;
   }, [lang]);
 
   const value = useMemo<I18n>(

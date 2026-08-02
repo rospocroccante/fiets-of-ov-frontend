@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useTransform, useMotionValueEvent } from "framer-motion";
 import { EndpointField } from "./components/EndpointField";
 import type { HistoryEntry } from "./components/PlaceInput";
@@ -13,7 +13,7 @@ import type { PlaceInfo } from "./components/PlaceInfoCard";
 import { WeatherStrip } from "./components/WeatherStrip";
 import { CARD_ACCENTS, PRIMARY_GRADIENT, TEXT_GRADIENT } from "./lib/gradients";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
-import { MapView } from "./components/MapView";
+import { LazyMapView as MapView, isMapLoaded, preloadMap } from "./components/lazyMap";
 import type { WeatherLayersState } from "./components/RainRadar";
 import { useLiveLocation } from "./hooks/useLiveLocation";
 import { useMediaQuery } from "./hooks/useMediaQuery";
@@ -36,6 +36,27 @@ import type { Endpoint, Trip } from "./trip";
 
 // Weather fallback when no trip origin is set yet: Amsterdam centre.
 const AMS_CENTER = { lat: 52.3728, lon: 4.8936 };
+
+// The first sign that the user is heading for the map. Every one of these precedes the
+// morph by hundreds of milliseconds, which is the window the map chunk needs to arrive
+// in so that its Suspense fallback never reaches the screen.
+const WARM_EVENTS = ["scroll", "pointerdown", "touchstart", "wheel", "keydown"] as const;
+
+// Both morph stages are mounted at once and only ever differ in opacity, so the one that
+// is not on screen still answers to Tab and still reads out to a screen reader. `inert`
+// is the one attribute that removes a subtree from both at the same time.
+// React 18 has no typed `inert` prop (React 19 added it) but forwards unknown *string*
+// attributes verbatim, and inert="" is what the HTML spec asks for; see
+// src/types/react-inert.d.ts for the type side.
+function inertUnless(active: boolean): { inert?: "" } {
+  return active ? {} : { inert: "" };
+}
+
+// The map pane before (or without) the map: leaflet's own default container grey in
+// light mode, the app's card surface in dark. Same box as MapContainer's className.
+function MapPlaceholder() {
+  return <div aria-hidden="true" className="h-full w-full rounded-card bg-[#ddd] dark:bg-night-surface" />;
+}
 
 type Armed = "start" | "end" | null;
 
@@ -75,13 +96,29 @@ export default function App() {
   // progressIs1 gates map interactivity and pointer-events so mid-morph clicks
   // don't misfire. Tracked via a motion value event (no re-render on every frame).
   const [progressIs1, setProgressIs1] = useState(false);
+  // Whether the map subtree may render at all. It starts false so a visitor who never
+  // leaves the home never downloads leaflet; the morph moving off zero is the last
+  // possible moment to turn it on, and by then WARM_EVENTS has normally had the chunk
+  // in flight for a while. isMapLoaded() covers the case where the chunk is already
+  // there (tests preload it), so those renders skip the placeholder entirely.
+  const [mapWanted, setMapWanted] = useState(isMapLoaded);
   useMotionValueEvent(progress, "change", (v) => {
     setProgressIs1(v > 0.99);
+    if (v > 0) setMapWanted(true);
   });
 
+  // One counter for "the user just asked for this trip". Endpoint edits already change
+  // the plan's identity through from/to, but re-submitting an unchanged route does not:
+  // this nonce is what makes that second Search fetch fresh departures.
+  const [submitSeq, setSubmitSeq] = useState(0);
+  const submitted = () => setSubmitSeq((n) => n + 1);
+
   const trip: Trip | null = useMemo(
-    () => (origin && destination ? { from: origin.query, to: destination.query } : null),
-    [origin, destination]
+    () =>
+      origin && destination
+        ? { from: origin.query, to: destination.query, submit: submitSeq }
+        : null,
+    [origin, destination, submitSeq]
   );
   const view = useTripPlan(trip);
 
@@ -92,6 +129,25 @@ export default function App() {
     const id = window.setTimeout(() => void prefetchAmsterdamPois(), 2500);
     return () => window.clearTimeout(id);
   }, []);
+
+  // Fetch the map chunk on the first sign of intent (see WARM_EVENTS) and let it render
+  // from then on. One shot: the dynamic import caches its own module, so once it has run
+  // the listeners have nothing left to do.
+  useEffect(() => {
+    if (mapWanted) return;
+    let warmed = false;
+    const warm = () => {
+      if (warmed) return;
+      warmed = true;
+      void preloadMap();
+      setMapWanted(true);
+      for (const ev of WARM_EVENTS) window.removeEventListener(ev, warm);
+    };
+    for (const ev of WARM_EVENTS) window.addEventListener(ev, warm, { passive: true });
+    return () => {
+      for (const ev of WARM_EVENTS) window.removeEventListener(ev, warm);
+    };
+  }, [mapWanted]);
 
   // Maps-style local memory: search history and saved places, plus the place-info
   // card opened from the map's "What's here?".
@@ -156,6 +212,7 @@ export default function App() {
     setOrigin(origin && origin.label === f ? origin : { label: f, query: f });
     setDestination(destination && destination.label === to ? destination : { label: to, query: to });
     setSelectedMode(null);
+    submitted();
     toMap();
   }
   function pickPopular(t: PopularTrip) {
@@ -165,6 +222,7 @@ export default function App() {
     setDestination({ label: t.to, query: t.to });
     setSelectedMode(null);
     setArmed(null);
+    submitted();
     toMap();
   }
   function armPick(which: "start" | "end") {
@@ -211,6 +269,7 @@ export default function App() {
     setDestination({ label: p.name, query: coordQuery(p.lat, p.lon) });
     setSelectedMode(null);
     setPlaceInfo({ name: p.name, address: p.label !== p.name ? p.label : null, lat: p.lat, lon: p.lon });
+    submitted();
     toMap();
   }
 
@@ -220,6 +279,7 @@ export default function App() {
     setOrigin({ label: t.fromLabel, query: t.fromQuery });
     setDestination({ label: t.toLabel, query: t.toQuery });
     setSelectedMode(null);
+    submitted();
     toMap();
   }
 
@@ -370,6 +430,15 @@ export default function App() {
 
   const count = visible.length;
 
+  // What the polite live region says. Empty while idle/loading so the region only ever
+  // speaks on an outcome; the strings are translated like everything else.
+  const liveStatus =
+    filteredView != null
+      ? t("planReadyAnnounce", { n: count })
+      : view.status === "error"
+        ? t("planErrorAnnounce")
+        : "";
+
   // Morph transforms (progress 0 = home, 1 = map). jsdom has no layout, so these
   // only affect visuals at runtime; they are inert in unit tests. The search pill is a
   // single shared element that flies from a centered hero pill to the map's top bar.
@@ -388,7 +457,7 @@ export default function App() {
   return (
     <div
       ref={containerRef}
-      className={reduced ? "relative h-screen" : "relative h-[200vh]"}
+      className={reduced ? "relative h-dvh" : "relative h-[200dvh]"}
       data-reduced={reduced ? "true" : "false"}
     >
       {/* Scroll snap sentinels: resting mid-morph leaves a half-faded, half-dead UI, so
@@ -396,14 +465,24 @@ export default function App() {
       {!reduced && (
         <>
           <div aria-hidden="true" className="absolute top-0 h-px w-px snap-start" />
-          <div aria-hidden="true" className="absolute top-[100vh] h-px w-px snap-start" />
+          <div aria-hidden="true" className="absolute top-[100dvh] h-px w-px snap-start" />
         </>
       )}
-      <div className="sticky top-0 h-screen overflow-hidden bg-white dark:bg-[#23272B]">
-        {/* Map stage (progress -> 1): fills the screen below the top bar. */}
+      {/* dvh, not vh, throughout the morph geometry. On a phone 100vh is the *large*
+          viewport (URL bar collapsed) while useMorphProgress divides by the current
+          window.innerHeight: with the bar on screen the two disagree, the stage is
+          taller than what you can see (its bottom rows unreachable, because the scroll
+          that would reveal them is spent on the morph instead) and progress reaches 1
+          before the second sentinel. dvh keeps sentinel, stage and divisor identical. */}
+      <div className="sticky top-0 h-dvh overflow-hidden bg-white dark:bg-night-bg">
+        {/* Map stage (progress -> 1): fills the screen below the top bar. Inert until
+            the morph completes: it is fully rendered from the first paint, so without
+            this a screen reader on the home reads out the whole map/results UI, and Tab
+            walks into controls nobody can see. */}
         <motion.div
-          className="absolute inset-0 z-0 flex flex-col bg-white pt-[8.25rem] dark:bg-[#23272B] lg:pt-24"
+          className="absolute inset-0 z-0 flex flex-col bg-white pt-[calc(8.25rem+env(safe-area-inset-top))] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] dark:bg-night-bg lg:pt-[calc(6rem+env(safe-area-inset-top))]"
           style={{ opacity: mapOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
+          {...inertUnless(progressIs1)}
         >
           <div className="px-4 md:px-6">
             <FilterBar
@@ -420,7 +499,7 @@ export default function App() {
           </div>
           {/* Below md the two panes stack, map first (Maps-style: map on top, results
               scrolling under it); from md up they sit side by side, results left. */}
-          <main className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-4 md:flex-row md:gap-4 md:px-6 md:pb-6">
+          <main className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:flex-row md:gap-4 md:px-6 md:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
             <section
               className={`order-2 min-h-0 flex-1 overflow-y-auto md:order-1 md:flex-none ${
                 hideMap ? "md:w-full" : "md:w-1/2"
@@ -436,33 +515,44 @@ export default function App() {
               />
             </section>
             {!hideMap && (
-              <section className="relative order-1 h-[40vh] shrink-0 md:order-2 md:h-auto md:w-1/2">
+              <section className="relative order-1 h-[40dvh] shrink-0 md:order-2 md:h-auto md:w-1/2">
                 {armed && (
                   <div className="absolute left-3 top-3 z-[1000] rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow dark:bg-emerald-600">
                     {armed === "start" ? t("clickMapSetStart") : t("clickMapSetEnd")}
                   </div>
                 )}
-                <MapView
-                  origin={view.origin}
-                  destination={view.destination}
-                  stops={view.stops}
-                  route={route}
-                  onPick={handlePick}
-                  picking={armed !== null}
-                  onMovePoint={onMovePoint}
-                  onContextPick={onContextPick}
-                  onWhatsHere={whatsHere}
-                  onPoiPick={(p) =>
-                    setPlaceInfo({ name: p.name, address: p.kindLabel, lat: p.lat, lon: p.lon })
-                  }
-                  interactive={progressIs1}
-                  radar={radar}
-                  wLayers={wLayers}
-                  onLayerToggle={(k) => setWLayers((s) => ({ ...s, [k]: !s[k] }))}
-                  dark={dark}
-                  liveFix={fix}
-                  navigating={navigating}
-                />
+                {/* Both branches render the identical box in the map container's own
+                    resting colour, so whether the chunk is here yet or not the stage has
+                    the same shape and the same fill: no layout shift, no flash of a hole
+                    mid-morph. With the warm-up above, the placeholder is normally gone
+                    before the stage is visible at all. */}
+                {!mapWanted ? (
+                  <MapPlaceholder />
+                ) : (
+                <Suspense fallback={<MapPlaceholder />}>
+                  <MapView
+                    origin={view.origin}
+                    destination={view.destination}
+                    stops={view.stops}
+                    route={route}
+                    onPick={handlePick}
+                    picking={armed !== null}
+                    onMovePoint={onMovePoint}
+                    onContextPick={onContextPick}
+                    onWhatsHere={whatsHere}
+                    onPoiPick={(p) =>
+                      setPlaceInfo({ name: p.name, address: p.kindLabel, lat: p.lat, lon: p.lon })
+                    }
+                    interactive={progressIs1}
+                    radar={radar}
+                    wLayers={wLayers}
+                    onLayerToggle={(k) => setWLayers((s) => ({ ...s, [k]: !s[k] }))}
+                    dark={dark}
+                    liveFix={fix}
+                    navigating={navigating}
+                  />
+                </Suspense>
+                )}
                 {navigating && navProgress && (
                   <NavigationOverlay
                     next={navProgress.next}
@@ -473,7 +563,7 @@ export default function App() {
                   />
                 )}
                 {farFromRoute && (
-                  <div className="absolute left-3 top-24 z-[1000] rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-amber-700 shadow dark:bg-slate-800/95 dark:text-amber-300">
+                  <div className="absolute left-3 top-24 z-[1000] rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-amber-700 shadow dark:bg-night-surface/95 dark:text-amber-300">
                     {t("farFromRoute")}
                   </div>
                 )}
@@ -498,20 +588,37 @@ export default function App() {
           </main>
         </motion.div>
 
-        {/* Home stage (progress -> 0): headline + popular, with a gap for the floating pill. */}
+        {/* Home stage (progress -> 0): headline + popular, with a gap for the floating pill.
+            overflow-y-auto is the phone fix: the stage is `absolute inset-0` inside an
+            `overflow-hidden` sticky box and the page scroll is spent on the morph, so
+            anything past one viewport used to be unreachable for good — at 390x844 the
+            fourth popular trip started 5px below the fold and the whole HomeShortcuts
+            block (saved places, recents) lived past it. Content that fits still produces
+            no scroller at all, so nothing changes on a laptop. */}
         <motion.div
-          className="absolute inset-0 z-10"
+          // The map stage owns the document's only <main> element; while the home is the
+          // stage on screen that one is inert, so the landmark moves here instead of
+          // leaving the visible screen without one. Never both: the two conditions are
+          // exact opposites.
+          role={progressIs1 ? undefined : "main"}
+          className="absolute inset-0 z-10 overflow-y-auto overflow-x-hidden pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
           style={{ opacity: homeOpacity, y: homeY, pointerEvents: progressIs1 ? "none" : "auto" }}
+          {...inertUnless(!progressIs1)}
         >
           <HomeAurora dark={dark} />
           {/* Theme and language switches reachable from the home too (the header only
-              exists on the map stage). */}
-          <div className="absolute right-4 top-4 flex items-center gap-2">
+              exists on the map stage). z-10 is load-bearing: the headline <section>
+              below is `relative` and comes later in the DOM, so at z-index auto it
+              painted over this corner and swallowed both clicks on every window too
+              narrow for max-w-4xl to clear the buttons (under ~1050px) — the home had
+              no working language switch at all there. The inset offsets keep the pair
+              clear of a notch/status bar now that the page paints under it. */}
+          <div className="absolute right-[calc(1rem+env(safe-area-inset-right))] top-[calc(1rem+env(safe-area-inset-top))] z-10 flex items-center gap-2">
             <button
               type="button"
               aria-label={t("switchLanguage")}
               onClick={toggleLang}
-              className="rounded-full border border-white/60 bg-white/70 px-3 py-2 text-xs font-semibold leading-[20px] text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-emerald-300 dark:hover:bg-white/20"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 px-3 text-xs font-semibold leading-[20px] text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-emerald-300 dark:hover:bg-white/20"
             >
               {lang === "en" ? "NL" : "EN"}
             </button>
@@ -520,7 +627,7 @@ export default function App() {
               aria-label={dark ? t("switchToLight") : t("switchToDark")}
               aria-pressed={dark}
               onClick={toggleTheme}
-              className="rounded-full border border-white/60 bg-white/70 p-2 text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-emerald-300 dark:hover:bg-white/20"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-emerald-300 dark:hover:bg-white/20"
             >
               <span aria-hidden="true" className="material-symbols-rounded block text-[20px] leading-none">
                 {dark ? "light_mode" : "dark_mode"}
@@ -528,17 +635,17 @@ export default function App() {
             </button>
           </div>
           <section className="relative mx-auto max-w-4xl px-6 pt-20 text-center">
-            <h1 className="text-4xl font-bold leading-tight text-gray-900 dark:text-slate-100 sm:text-5xl">
+            <h1 className="text-4xl font-bold leading-tight text-gray-900 dark:text-night-text sm:text-5xl">
               {t("headlineTop")}
               <br />
               <span className={TEXT_GRADIENT}>{t("headlineBottom")}</span>
             </h1>
-            <p className="mx-auto mt-5 max-w-2xl text-base text-gray-600 dark:text-slate-300 sm:text-lg">
+            <p className="mx-auto mt-5 max-w-2xl text-base text-gray-600 dark:text-night-muted sm:text-lg">
               {t("subtitle")}
             </p>
           </section>
           <section className="mx-auto mt-[7.5rem] w-full max-w-4xl px-6 text-left">
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-slate-100">{t("popularTrips")}</h2>
+            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-night-text">{t("popularTrips")}</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {POPULAR.map((trip, i) => {
                 // Clean frosted card. Colour is confined to one small accent (the
@@ -570,8 +677,8 @@ export default function App() {
                       </span>
                     </span>
                     <div>
-                      <p className="truncate text-[15px] font-semibold text-slate-900 dark:text-slate-100">{trip.from}</p>
-                      <p className="truncate text-sm text-slate-500 dark:text-slate-400">{t("toX", { x: trip.to })}</p>
+                      <p className="truncate text-[15px] font-semibold text-slate-900 dark:text-night-text">{trip.from}</p>
+                      <p className="truncate text-sm text-slate-500 dark:text-night-subtle">{t("toX", { x: trip.to })}</p>
                     </div>
                   </button>
                 );
@@ -587,12 +694,24 @@ export default function App() {
           />
         </motion.div>
 
-        {/* Top bar chrome (progress -> 1): wordmark (Home) + Menu, behind the search pill. */}
+        {/* Top bar chrome (progress -> 1): wordmark (Home) + Menu, behind the search pill.
+            Deliberately WITHOUT a z-index: a positioned z-20 header is a stacking context,
+            which trapped the menu dropdown's z-50 inside the z-20 layer and let the z-30
+            search pill paint over it (below lg the pill's own buttons sat on top of the
+            menu's first row and ate its clicks). At z-index auto the header still paints
+            above the z-0 map stage by tree order, the pill still flies over the bar, and
+            the dropdown's z-50 finally outranks it. The home stage (z-10) now paints over
+            the header, which is inert: the two never share a visible moment (homeOpacity
+            hits 0 at progress 0.5, chromeOpacity only leaves 0 from there on). */}
         <motion.header
-          className="absolute inset-x-0 top-0 z-20 flex h-14 items-center justify-between border-b border-gray-100 bg-white/95 px-4 dark:border-white/10 dark:bg-[#23272B]/95 sm:px-6 lg:h-20"
+          className="absolute inset-x-0 top-0 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center justify-between border-b border-gray-100 bg-white/95 pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] dark:border-white/10 dark:bg-night-bg/95 sm:pl-[calc(1.5rem+env(safe-area-inset-left))] sm:pr-[calc(1.5rem+env(safe-area-inset-right))] lg:h-[calc(5rem+env(safe-area-inset-top))]"
           style={{ opacity: chromeOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
+          {...inertUnless(progressIs1)}
         >
-          <button onClick={goHome} className="text-xl font-bold text-brand dark:text-emerald-300">
+          <button
+            onClick={goHome}
+            className="flex min-h-[44px] items-center text-xl font-bold text-brand dark:text-emerald-300"
+          >
             Fiets of OV
           </button>
           <HeaderMenu
@@ -607,10 +726,11 @@ export default function App() {
             On phones it keeps a side margin and drops the decorative bits ("Now", the
             divider) so the two fields and the button always fit. */}
         <motion.div
-          className="absolute inset-x-0 top-0 z-30 mx-auto flex w-[calc(100%-1.5rem)] max-w-2xl items-center gap-1 rounded-full border border-gray-200 bg-white p-1.5 shadow-md dark:border-white/15 dark:bg-[#2A2F34] sm:gap-2 sm:p-2 xl:max-w-3xl"
+          role="search"
+          className="absolute inset-x-0 top-0 z-30 mx-auto flex w-[calc(100%-1.5rem)] max-w-2xl items-center gap-0.5 rounded-full border border-gray-200 bg-white p-1.5 shadow-md dark:border-night-border dark:bg-night-surface sm:gap-2 sm:p-2 xl:max-w-3xl"
           style={{ y: searchY }}
         >
-          <div className="flex min-w-0 flex-1 items-center px-2 sm:px-3">
+          <div className="flex min-w-0 flex-1 items-center sm:px-3">
             <EndpointField
               value={fromText}
               placeholder={t("from")}
@@ -626,11 +746,11 @@ export default function App() {
             type="button"
             aria-label={t("swapStartEnd")}
             onClick={swap}
-            className="flex-shrink-0 px-1 text-gray-400 hover:text-brand sm:px-2"
+            className="flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center text-gray-400 hover:text-brand dark:hover:text-emerald-300"
           >
             &#8646;
           </button>
-          <div className="flex min-w-0 flex-1 items-center px-2 sm:px-3">
+          <div className="flex min-w-0 flex-1 items-center sm:px-3">
             <EndpointField
               value={toText}
               placeholder={t("to")}
@@ -642,20 +762,27 @@ export default function App() {
               onPickHistory={pickHistoryTo}
             />
           </div>
-          <span className="hidden h-7 w-px bg-gray-200 dark:bg-white/15 sm:block" />
-          <span className="hidden px-3 text-sm text-gray-500 dark:text-slate-400 sm:inline">{t("now")}</span>
+          <span className="hidden h-7 w-px bg-gray-200 dark:bg-night-border sm:block" />
+          <span className="hidden px-3 text-sm text-gray-500 dark:text-night-subtle sm:inline">{t("now")}</span>
           <button
             aria-label={t("search")}
             onClick={commitSearch}
-            className={`rounded-full px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-110 sm:px-6 sm:py-3 ${PRIMARY_GRADIENT}`}
+            className={`flex min-h-[44px] flex-shrink-0 items-center rounded-full px-4 text-sm font-semibold text-white shadow-md transition hover:brightness-110 sm:px-6 ${PRIMARY_GRADIENT}`}
           >
             {t("search")}
           </button>
         </motion.div>
       </div>
 
+      {/* Plan results are painted into a pane the user may not be looking at (on a phone
+          the map takes the top half and the panel scrolls under it), and a failed plan
+          replaces them silently. One polite region says which of the two happened. */}
+      <p aria-live="polite" className="sr-only">
+        {liveStatus}
+      </p>
+
       {!isLive() && (
-        <div className="pointer-events-none fixed bottom-3 left-3 rounded-full bg-brand px-3 py-1 text-xs text-white">
+        <div className="pointer-events-none fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))] rounded-full bg-brand px-3 py-1 text-xs text-white">
           mock
         </div>
       )}

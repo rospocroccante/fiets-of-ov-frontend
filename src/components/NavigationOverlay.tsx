@@ -48,7 +48,7 @@ export function NavigationOverlay({
   const arrived = next === null;
   const glyph = arrived ? "sports_score" : (GLYPH[next.direction] ?? "straight");
   return (
-    <div className="absolute left-3 right-3 top-3 z-[1000] rounded-card border border-slate-100 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-white/10 dark:bg-[#2A2F34]/95">
+    <div className="absolute left-3 right-3 top-3 z-[1000] rounded-card border border-slate-100 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-white/10 dark:bg-night-raised/95">
       <div className="flex items-center gap-3">
         <span
           aria-hidden="true"
@@ -57,25 +57,25 @@ export function NavigationOverlay({
           {glyph}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-lg font-semibold leading-tight text-slate-900 dark:text-slate-100">
+          <p className="text-lg font-semibold leading-tight text-slate-900 dark:text-night-text">
             {arrived ? t("youHaveArrived") : formatM(toNext)}
           </p>
           {!arrived && next.street && (
-            <p className="truncate text-sm text-slate-500 dark:text-slate-400">{next.street}</p>
+            <p className="truncate text-sm text-slate-500 dark:text-night-subtle">{next.street}</p>
           )}
         </div>
         <button
           type="button"
           aria-label={t("exitNavigation")}
           onClick={onExit}
-          className="shrink-0 rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 dark:hover:bg-white/10"
+          className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 dark:hover:bg-night-hover"
         >
           <span aria-hidden="true" className="material-symbols-rounded text-[20px] leading-none">
             close
           </span>
         </button>
       </div>
-      <div className="mt-2 flex items-center gap-1.5 border-t border-slate-100 pt-2 text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">
+      <div className="mt-2 flex items-center gap-1.5 border-t border-slate-100 pt-2 text-xs text-slate-500 dark:border-white/10 dark:text-night-subtle">
         <span>{formatM(remaining)}</span>
         <span aria-hidden="true">·</span>
         <span>~{etaMinutes} min</span>

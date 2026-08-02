@@ -8,11 +8,32 @@ export default defineConfig({
       output: {
         // Split the two heaviest, rarely-changing stacks out of the app chunk so a
         // code change does not invalidate the whole bundle in users' caches.
-        // leaflet-velocity stays out of the list: it is dynamically imported and
-        // must keep its own lazy chunk.
-        manualChunks: {
-          leaflet: ["leaflet", "react-leaflet"],
-          motion: ["framer-motion"],
+        // leaflet-velocity is deliberately unlisted: it is dynamically imported from
+        // WeatherLive and must keep its own lazy chunk.
+        //
+        // The function form matters. With the object form (`{ leaflet: ["leaflet",
+        // "react-leaflet"] }`) Rollup put react-leaflet's *dependencies* in that chunk
+        // too, React among them - so the entry chunk had to `import {r} from
+        // "./leaflet-<hash>.js"` to get React, index.html carried a modulepreload for
+        // it, and the whole 88 kB stack was pulled down on the home screen no matter
+        // how carefully App lazy-loaded MapView. Matching on the package directory
+        // instead keeps the chunk to leaflet's own files and lets React stay where the
+        // entry can reach it without dragging a map along.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          // Trailing slashes are load-bearing: "leaflet/" must not swallow
+          // "leaflet-velocity/", which owns a lazy chunk of its own.
+          if (/node_modules\/(leaflet|react-leaflet|@react-leaflet)\//.test(id)) {
+            return "leaflet";
+          }
+          if (/node_modules\/framer-motion\//.test(id)) return "motion";
+          // React needs a chunk of its own, and this is the line that actually makes
+          // the map lazy. Left unassigned, React is a dependency of both the entry and
+          // the (manual) leaflet chunk, and Rollup resolves that by parking React
+          // *inside* leaflet - so the entry statically imported the whole map stack to
+          // get React back. Naming it gives both chunks something neutral to import.
+          if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) return "react";
+          return undefined;
         },
       },
     },

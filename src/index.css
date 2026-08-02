@@ -5,11 +5,48 @@
 html, body, #root { height: 100%; margin: 0; }
 body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; color: #111; }
 
-/* Dark theme base: anthracite backdrop, off-white text. Components refine on top
+/* iOS inflates text in landscape unless told not to; the layout is already responsive,
+   so the inflation only breaks it. */
+html { -webkit-text-size-adjust: 100%; }
+
+/* The home is the resting scroll position, so on a phone every downward swipe on it
+   sits exactly where pull-to-refresh lives: without this, half the gestures that mean
+   "go back to the top of the home" reload the app instead. Vertical page scrolling
+   (which drives the morph) is unaffected. */
+html { overscroll-behavior-y: contain; }
+
+/* Touch: no double-tap-to-zoom delay on controls. Buttons are 44px targets, so the
+   browser's tap-zoom heuristic has nothing to offer here. */
+button, [role="button"], a, input, select, textarea { touch-action: manipulation; }
+
+/* Keyboard focus. Several controls carry outline-none (the search inputs) or sit on a
+   frosted background where the UA ring disappears, and no component styled focus
+   itself. focus-visible only, so a mouse/touch press never shows a ring. */
+button:focus-visible,
+[role="button"]:focus-visible,
+[role="option"]:focus-visible,
+a:focus-visible,
+input:focus-visible,
+summary:focus-visible {
+  outline: 2px solid #0D4A73;
+  outline-offset: 2px;
+}
+.dark button:focus-visible,
+.dark [role="button"]:focus-visible,
+.dark [role="option"]:focus-visible,
+.dark a:focus-visible,
+.dark input:focus-visible,
+.dark summary:focus-visible {
+  outline-color: #34D399;
+}
+
+/* Dark theme base: the night palette's page step, warm ivory text. Both come from the
+   tokens in tailwind.config.js via @apply, so the theme has exactly one source of
+   truth — see the `night` block there for the hue rationale. Components refine on top
    with dark: variants; this catches everything else (and native form controls via
    color-scheme). */
 .dark { color-scheme: dark; }
-.dark body { background: #23272B; color: #ECEAE6; }
+.dark body { @apply bg-night-bg text-night-text; }
 
 /* Home<->map morph: the page scroll drives the transition, and resting between the
    two ends leaves a half-faded, half-interactive UI. Proximity snap (with the two
@@ -53,14 +90,54 @@ html { scroll-snap-type: y proximity; }
   filter: brightness(1.6) saturate(1.15);
 }
 
-/* On the dark basemap the halo flips: light text, dark glow. */
+/* On the dark basemap the halo flips: light text, dark glow. The pair is the night
+   palette's own — ivory label, and a glow one step below the page background so the
+   labels sit in the same family as the app chrome around the map. */
 .dark .poi-name {
-  color: #E2E8F0;
+  color: theme("colors.night.text");
   text-shadow:
-    0 1px 2px #0f172a,
-    0 -1px 2px #0f172a,
-    1px 0 2px #0f172a,
-    -1px 0 2px #0f172a;
+    0 1px 2px theme("colors.night.shade"),
+    0 -1px 2px theme("colors.night.shade"),
+    1px 0 2px theme("colors.night.shade"),
+    -1px 0 2px theme("colors.night.shade");
+}
+
+/* Leaflet ships 30x30 zoom controls, which is well under the 44px a finger needs.
+   .leaflet-touch is only present when Leaflet detected a touch device, so pointer
+   users keep the compact original. */
+.leaflet-touch .leaflet-bar a,
+.leaflet-touch .leaflet-bar a:first-child,
+.leaflet-touch .leaflet-bar a:last-child {
+  width: 44px;
+  height: 44px;
+  line-height: 44px;
+  font-size: 22px;
+}
+
+/* Leaflet's own zoom chrome is white with black glyphs and a translucent black ring —
+   at 44px that is the brightest thing on a dark basemap, and the ring disappears into
+   it. In dark mode the buttons join the night ramp instead: raised surface, ivory
+   glyphs, and the ring lightened so the control still has an edge against the map.
+   Specificity is deliberate. leaflet.css ships `.leaflet-bar a:hover` and
+   `.leaflet-touch .leaflet-bar a` at (0,2,1) and arrives *after* this file (it is
+   imported from the lazily-loaded MapView), so the hover/focus rules are written one
+   class deeper to win outright rather than on source order. */
+.dark .leaflet-bar a,
+.dark .leaflet-bar a:first-child,
+.dark .leaflet-bar a:last-child {
+  @apply bg-night-raised text-night-text border-b-night-border;
+}
+.dark .leaflet-bar a:hover,
+.dark .leaflet-bar a:focus {
+  @apply bg-night-hover text-night-text;
+}
+.dark .leaflet-bar a.leaflet-disabled,
+.dark .leaflet-bar a.leaflet-disabled:hover {
+  @apply bg-night-surface text-night-faint;
+}
+.dark .leaflet-touch .leaflet-bar,
+.dark .leaflet-bar {
+  border-color: rgba(236, 234, 230, 0.14);
 }
 
 /* When picking a point on the map, the crosshair must beat Leaflet's own grab cursor

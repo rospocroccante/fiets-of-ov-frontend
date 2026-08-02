@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Circle,
   CircleMarker,
@@ -12,6 +12,10 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
+// Leaflet's stylesheet belongs to this module, not to the app entry: App code-splits
+// MapView, and importing the CSS from main.tsx would keep shipping it (and the render-
+// blocking <link> for it) to a home screen that never draws a map.
+import "leaflet/dist/leaflet.css";
 import type { Itinerary, PlanLeg, Stop } from "../api/types";
 import { declutterPois, usePois, POI_MIN_ZOOM } from "../hooks/usePois";
 import type { Poi, Viewport } from "../hooks/usePois";
@@ -70,8 +74,16 @@ function ViewportTracker({ onChange }: { onChange: (v: Viewport) => void }) {
   return null;
 }
 
+// Single quotes are escaped too: the divIcon HTML below is assembled with double
+// quotes today, but an OSM name like Jack's Bar would break out of any attribute a
+// future edit puts it in.
 function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 const POI_COLOR: Record<Poi["kind"], string> = {
@@ -286,9 +298,13 @@ export function MapView({
 }) {
   const { t } = useI18n();
   const legs = route?.legs ?? [];
-  // Fresh array per render would re-fire FitRoute's fitBounds on every render (snapping
-  // the viewport back mid-pan); tie it to route identity instead.
-  const allCoords = useMemo(() => (route?.legs ?? []).flatMap(legCoords), [route]);
+  // Decoding happens once per leg per route, not once per leg per render: the two
+  // Polyline passes below (casing + coloured line) each need the same path, and during
+  // navigation this component re-renders about once a second. A fresh array per render
+  // would also re-fire FitRoute's fitBounds (snapping the viewport back mid-pan), so
+  // both this and allCoords are tied to route identity.
+  const legPaths = useMemo(() => (route?.legs ?? []).map(legCoords), [route]);
+  const allCoords = useMemo(() => legPaths.flat(), [legPaths]);
   const [menu, setMenu] = useState<MenuState | null>(null);
   // Weather layers pause entirely while the map is not interactive (scrolled back to
   // the home view, mid-morph): the map stays mounted at opacity 0 there, and the
@@ -299,7 +315,7 @@ export function MapView({
   // Maps-style POI labels: fetched for the visible area once the user is zoomed in
   // enough for names to be useful (the hook gates on POI_MIN_ZOOM).
   const [viewport, setViewport] = useState<Viewport | null>(null);
-  const { pois, error: poisError } = usePois(interactive ? viewport : null);
+  const { pois, error: poisError, partial: poisPartial } = usePois(interactive ? viewport : null);
   // Zoom-dependent label thinning: the raw fetch can drop 60 names in one dense
   // corner; only the ones that keep their distance get drawn.
   const visiblePois = useMemo(
@@ -307,16 +323,48 @@ export function MapView({
     [pois, viewport],
   );
   const mapRef = useRef<L.Map | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  // Clamped position of the context menu, once it can be measured.
+  const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
 
   const handleMenu = (m: MenuState) => {
     if (m.x < 0) setMenu(null);
     else setMenu(m);
   };
 
+  // A right-click near the pane's right or bottom edge would hang the menu outside the
+  // map (clipped, or off-screen entirely on a phone): measure it and pull it back in.
+  // Layout effect, so the correction lands before paint instead of as a visible jump.
+  useLayoutEffect(() => {
+    setMenuPos(null);
+    if (!menu) return;
+    const box = wrapRef.current?.getBoundingClientRect();
+    const el = menuRef.current?.getBoundingClientRect();
+    // No layout to work with (jsdom, or a pane not measured yet): keep the raw point.
+    if (!box?.width || !el?.width) return;
+    const pad = 8;
+    setMenuPos({
+      left: Math.max(pad, Math.min(menu.x, box.width - el.width - pad)),
+      top: Math.max(pad, Math.min(menu.y, box.height - el.height - pad)),
+    });
+  }, [menu]);
+
+  // Escape dismisses the menu: the other way out is clicking the map, which also drops
+  // a pin when a pick is armed.
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menu]);
+
   return (
     // The picking cursor lives on the wrapper (see .map-picking in index.css):
     // MapContainer's className is frozen at mount, so it cannot carry a toggling class.
-    <div className={`relative h-full w-full ${picking ? "map-picking" : ""}`}>
+    <div ref={wrapRef} className={`relative h-full w-full ${picking ? "map-picking" : ""}`}>
       <MapContainer
         ref={mapRef}
         center={AMS}
@@ -340,8 +388,8 @@ export function MapView({
         <FollowCamera target={liveFix} active={navigating} />
 
       {/* White casing under the route for contrast on the light basemap. */}
-      {legs.map((leg, i) => {
-        const coords = legCoords(leg);
+      {legs.map((_leg, i) => {
+        const coords = legPaths[i];
         if (coords.length < 2) return null;
         return (
           <Polyline
@@ -355,7 +403,7 @@ export function MapView({
       {/* The route itself: solid lines throughout, one colour per transport mode
           (see lib/modeColors, shared with the step-by-step chips). */}
       {legs.map((leg, i) => {
-        const coords = legCoords(leg);
+        const coords = legPaths[i];
         if (coords.length < 2) return null;
         return (
           <Polyline
@@ -439,15 +487,24 @@ export function MapView({
             const m = mapRef.current;
             if (m && typeof m.setZoom === "function") m.setZoom(POI_MIN_ZOOM);
           }}
-          className="absolute bottom-3 right-3 z-[1000] rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 shadow transition hover:bg-white dark:bg-slate-800/90 dark:text-slate-200 dark:hover:bg-slate-800"
+          // px-3, not wider: the chip is already ~200px across on a phone and it sits on
+          // top of the map pane, so every extra pixel is one more place where a pan
+          // gesture starts on a button instead of on the map.
+          className="absolute bottom-3 right-3 z-[1000] inline-flex min-h-[44px] items-center rounded-full bg-white/90 px-3 text-xs font-medium text-slate-600 shadow transition hover:bg-white dark:bg-night-surface/90 dark:text-night-text dark:hover:bg-night-hover"
         >
           {t("zoomInForPlaces")}
         </button>
       )}
-      {/* A dead POI feed must say so, or an Overpass outage reads as "no places". */}
-      {interactive && poisError && (
-        <span className="absolute bottom-3 right-3 z-[1000] rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-red-600 shadow dark:bg-slate-800/90">
-          {t("placesUnavailable")}
+      {/* A dead POI feed must say so, or an Overpass outage reads as "no places". The
+          amber variant is the half-dead case: part of the view loaded, so the labels on
+          screen are real but incomplete — worth a softer warning than "unavailable". */}
+      {interactive && (poisError || poisPartial) && (
+        <span
+          className={`absolute bottom-3 right-3 z-[1000] rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold shadow dark:bg-night-surface/90 ${
+            poisError ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"
+          }`}
+        >
+          {poisError ? t("placesUnavailable") : t("placesPartial")}
         </span>
       )}
       {showWeather && (
@@ -461,12 +518,13 @@ export function MapView({
 
       {menu && (
         <div
-          className="absolute z-[1000] overflow-hidden rounded-lg border border-slate-200 bg-white text-sm shadow-lg dark:border-white/10 dark:bg-[#2A2F34]"
-          style={{ left: menu.x, top: menu.y }}
+          ref={menuRef}
+          className="absolute z-[1000] overflow-hidden rounded-lg border border-slate-200 bg-white text-sm shadow-lg dark:border-white/10 dark:bg-night-raised"
+          style={{ left: menuPos?.left ?? menu.x, top: menuPos?.top ?? menu.y }}
         >
           <button
             type="button"
-            className="block w-full px-4 py-2 text-left hover:bg-slate-100 dark:hover:bg-white/10"
+            className="flex min-h-[44px] w-full items-center px-4 text-left hover:bg-slate-100 dark:hover:bg-night-hover"
             onClick={() => {
               onContextPick?.("start", { lat: menu.lat, lon: menu.lon });
               setMenu(null);
@@ -476,7 +534,7 @@ export function MapView({
           </button>
           <button
             type="button"
-            className="block w-full px-4 py-2 text-left hover:bg-slate-100 dark:hover:bg-white/10"
+            className="flex min-h-[44px] w-full items-center px-4 text-left hover:bg-slate-100 dark:hover:bg-night-hover"
             onClick={() => {
               onContextPick?.("end", { lat: menu.lat, lon: menu.lon });
               setMenu(null);
@@ -486,7 +544,7 @@ export function MapView({
           </button>
           <button
             type="button"
-            className="block w-full border-t border-slate-100 px-4 py-2 text-left hover:bg-slate-100 dark:border-white/10 dark:hover:bg-white/10"
+            className="flex min-h-[44px] w-full items-center border-t border-slate-100 px-4 text-left hover:bg-slate-100 dark:border-white/10 dark:hover:bg-night-hover"
             onClick={() => {
               onWhatsHere?.({ lat: menu.lat, lon: menu.lon });
               setMenu(null);

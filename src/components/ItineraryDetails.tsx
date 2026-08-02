@@ -21,10 +21,10 @@ function legTitle(leg: PlanLeg, lang: Lang): string {
 export function ItineraryDetails({ itinerary }: { itinerary: Itinerary }) {
   const { lang, t } = useI18n();
   return (
-    <div className="rounded-card border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#2A2F34]">
+    <div className="rounded-card border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-night-surface">
       <div className="mb-3 flex items-baseline justify-between">
-        <h4 className="font-semibold dark:text-slate-100">{t("stepByStep")}</h4>
-        <span className="text-sm text-gray-500 dark:text-slate-400">
+        <h4 className="font-semibold dark:text-night-text">{t("stepByStep")}</h4>
+        <span className="text-sm text-gray-500 dark:text-night-subtle">
           {hhmm(itinerary.start_time)} – {hhmm(itinerary.end_time)} · {itinerary.minutes} min
         </span>
       </div>
@@ -40,15 +40,15 @@ export function ItineraryDetails({ itinerary }: { itinerary: Itinerary }) {
                 {legTitle(leg, lang)}
               </span>
               {i < itinerary.legs.length - 1 && (
-                <span className="my-1 w-px flex-1 bg-gray-200 dark:bg-white/15" />
+                <span className="my-1 w-px flex-1 bg-gray-200 dark:bg-night-border" />
               )}
             </div>
             <div className="pb-1">
-              <p className="text-sm font-medium dark:text-slate-200">
-                {leg.from.name || t("start")} <span className="text-gray-400 dark:text-slate-500">→</span>{" "}
+              <p className="text-sm font-medium dark:text-night-text">
+                {leg.from.name || t("start")} <span className="text-gray-400 dark:text-night-faint">→</span>{" "}
                 {leg.to.name || t("destination")}
               </p>
-              <p className="text-xs text-gray-500 dark:text-slate-400">
+              <p className="text-xs text-gray-500 dark:text-night-subtle">
                 {hhmm(leg.start_time)}–{hhmm(leg.end_time)} · {leg.minutes} min
                 {leg.distance_m != null && ` · ${Math.round(leg.distance_m)} m`}
                 {leg.headsign && ` · ${t("towardsX", { x: leg.headsign })}`}

@@ -6,6 +6,7 @@ import {
   __fireMapContextMenu,
   __fireMarkerDragEnd,
 } from "./__mocks__/react-leaflet";
+import { whenMapMounted } from "./test/mapReady";
 
 function renderApp() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -61,6 +62,7 @@ test("arming Start and clicking the map sets the From field to the reverse-geoco
 
   // Arm the start endpoint and click the map near Vondelpark (a KNOWN mock place).
   fireEvent.click(screen.getByRole("button", { name: /^start$/i }));
+  await whenMapMounted();
   __fireMapClick(52.3581, 4.8687);
 
   // reverseGeocode is async: the From field updates to the mock name.

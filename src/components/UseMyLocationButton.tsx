@@ -41,12 +41,16 @@ export function UseMyLocationButton({ onLocated, className }: Props): JSX.Elemen
 
   return (
     <div className={className}>
+      {/* The light-mode pair is brand navy on white. Left alone it would be 1.4:1 on a
+          night surface (invisible), and its hover would flash the near-white
+          brand-light; dark mode takes the emerald the rest of the app already
+          substitutes for the brand, over the night hover step. */}
       <button
         type="button"
         aria-label={t("useMyLocation")}
         disabled={busy}
         onClick={handleClick}
-        className="flex items-center justify-center rounded-full p-2 text-brand hover:bg-brand-light disabled:opacity-50"
+        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-brand hover:bg-brand-light disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-night-hover"
       >
         {busy ? (
           <span
@@ -67,12 +71,12 @@ export function UseMyLocationButton({ onLocated, className }: Props): JSX.Elemen
         )}
       </button>
       {status && status.kind === "error" && (
-        <p role="alert" className="mt-1 text-xs text-red-600">
+        <p role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">
           {status.text}
         </p>
       )}
       {status && status.kind === "warn" && (
-        <p role="status" className="mt-1 text-xs text-amber-600">
+        <p role="status" className="mt-1 text-xs text-amber-600 dark:text-amber-400">
           {status.text}
         </p>
       )}

@@ -59,3 +59,30 @@ test("t substitutes {name} placeholders from the params object", () => {
   expect(translate("nl", "toX", { x: "NDSM" })).toBe("naar NDSM");
   expect(translate("en", "leaveAtT", { t: "14:32" })).toBe("Leave at 14:32");
 });
+
+test("the document's lang attribute follows the switch, not just the strings", () => {
+  document.documentElement.lang = "";
+  render(
+    <I18nProvider>
+      <Probe />
+    </I18nProvider>,
+  );
+  // index.html ships lang="nl"; the provider owns the attribute from mount onwards, so
+  // an English session says so to screen readers and translation tools.
+  expect(document.documentElement).toHaveAttribute("lang", "en");
+  fireEvent.click(screen.getByRole("button", { name: "switch" }));
+  expect(document.documentElement).toHaveAttribute("lang", "nl");
+  fireEvent.click(screen.getByRole("button", { name: "switch" }));
+  expect(document.documentElement).toHaveAttribute("lang", "en");
+});
+
+test("a stored Dutch preference sets the document language on the very first render", () => {
+  document.documentElement.lang = "";
+  window.localStorage.setItem("fov.lang.v1", "nl");
+  render(
+    <I18nProvider>
+      <Probe />
+    </I18nProvider>,
+  );
+  expect(document.documentElement).toHaveAttribute("lang", "nl");
+});

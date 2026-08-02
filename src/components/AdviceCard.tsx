@@ -29,7 +29,7 @@ export function AdviceCard({
       className={`min-w-[7.5rem] flex-1 basis-0 rounded-card border p-3 text-left transition ${
         selected
           ? "border-brand bg-brand text-white shadow-md dark:border-emerald-500 dark:bg-emerald-600"
-          : "border-gray-200 bg-white text-slate-600 hover:border-gray-300 hover:shadow-sm dark:border-white/15 dark:bg-[#2A2F34] dark:text-slate-300 dark:hover:border-white/25"
+          : "border-gray-200 bg-white text-slate-600 hover:border-gray-300 hover:shadow-sm dark:border-night-border dark:bg-night-surface dark:text-night-muted dark:hover:border-white/25"
       }`}
     >
       <span className="flex items-center gap-1.5">
@@ -40,7 +40,7 @@ export function AdviceCard({
         <h3 className="truncate text-[13px] font-semibold">{option.title}</h3>
       </span>
       <span className="mt-1 flex items-baseline justify-between gap-2">
-        <span className={`text-lg font-bold ${selected ? "text-white" : "text-slate-900 dark:text-slate-100"}`}>
+        <span className={`text-lg font-bold ${selected ? "text-white" : "text-slate-900 dark:text-night-text"}`}>
           {option.minutes} min
         </span>
         {option.recommended && (

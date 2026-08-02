@@ -39,7 +39,7 @@ export function HomeShortcuts({
               key={p.id}
               onClick={() => onPickSaved(p)}
               title={t("directionsToX", { x: p.name })}
-              className="flex items-center gap-1.5 rounded-full border border-white/60 bg-white/70 px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm backdrop-blur-md transition hover:bg-white/90 hover:shadow dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
+              className="flex min-h-[44px] items-center gap-1.5 rounded-full border border-white/60 bg-white/70 px-3 text-sm font-medium text-slate-700 shadow-sm backdrop-blur-md transition hover:bg-white/90 hover:shadow dark:border-white/10 dark:bg-white/10 dark:text-night-text dark:hover:bg-white/15"
             >
               <span
                 aria-hidden="true"
@@ -61,7 +61,7 @@ export function HomeShortcuts({
             </span>
             <button
               onClick={onClearRecents}
-              className="text-[11px] font-medium text-slate-400 transition hover:text-slate-600"
+              className="-mr-2 inline-flex min-h-[44px] items-center px-2 text-[11px] font-medium text-slate-400 transition hover:text-slate-600"
             >
               {t("clear")}
             </button>
@@ -71,7 +71,7 @@ export function HomeShortcuts({
               <li key={`${trip.fromQuery}-${trip.toQuery}`}>
                 <button
                   onClick={() => onPickRecent(trip)}
-                  className="flex w-full items-center gap-2.5 px-4 py-2 text-left transition hover:bg-white/80 dark:hover:bg-white/10"
+                  className="flex min-h-[44px] w-full items-center gap-2.5 px-4 text-left transition hover:bg-white/80 dark:hover:bg-white/10"
                 >
                   <span
                     aria-hidden="true"
@@ -79,7 +79,7 @@ export function HomeShortcuts({
                   >
                     history
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-sm text-slate-800 dark:text-slate-200">
+                  <span className="min-w-0 flex-1 truncate text-sm text-slate-800 dark:text-night-text">
                     {trip.fromLabel} <span className="text-slate-400">{"→"}</span> {trip.toLabel}
                   </span>
                   <span className="shrink-0 text-[11px] text-slate-400">{timeAgo(trip.at, now, t)}</span>
