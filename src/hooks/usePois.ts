@@ -237,32 +237,50 @@ export async function prefetchAmsterdamPois(): Promise<void> {
   }
 }
 
-// Label decluttering, Maps-style: at each zoom keep only POIs a minimum distance
-// apart, so names never pile into an unreadable heap; zooming in reveals more.
+// Label decluttering, Maps-style: a label is not a point but a box on screen -
+// a dot with the name running to its right - so two POIs a fair ground distance
+// apart still collide when they sit side by side at city zoom. Collision is
+// checked between those boxes in CSS pixels, which makes the filter anisotropic
+// exactly like Google's: stacked names pack tight, east-west neighbours need
+// room for the text. Zooming in stretches metres into more pixels, so more
+// labels fit with no per-zoom tuning table.
 // Museums win over bars, bars over snack corners, when they compete for a spot.
 const KIND_PRIORITY: Record<PoiKind, number> = { culture: 0, drink: 1, food: 2, other: 3 };
 
-function minSeparationM(zoom: number): number {
-  if (zoom >= 17) return 0;
-  if (zoom >= 16) return 40;
-  if (zoom >= 15) return 80;
-  return 150;
+// Mirrors the .poi-marker CSS: 9px dot + border + 4px gap, 11px semibold text
+// capped at 130px, one line high; CHAR_W is that font's average glyph width.
+const LABEL_DOT_W = 17;
+const LABEL_MAX_TEXT_W = 130;
+const LABEL_CHAR_W = 6.5;
+const LABEL_H = 20;
+const LABEL_PAD = 4;
+
+function labelWidthPx(p: Poi): number {
+  return LABEL_DOT_W + Math.min(p.name.length * LABEL_CHAR_W, LABEL_MAX_TEXT_W);
 }
 
-function poiDistM(a: Poi, b: Poi): number {
+// Web Mercator ground resolution at the given latitude and zoom.
+function metersPerPixel(lat: number, zoom: number): number {
+  return (156543.03392 * Math.cos((lat * Math.PI) / 180)) / 2 ** zoom;
+}
+
+// Both boxes are anchored at the dot and extend rightwards, vertically centred.
+function labelsCollide(a: Poi, b: Poi, zoom: number): boolean {
+  const mpp = metersPerPixel(a.lat, zoom);
   const mLon = 111_320 * Math.cos((a.lat * Math.PI) / 180);
-  const dx = (a.lon - b.lon) * mLon;
-  const dy = (a.lat - b.lat) * 110_574;
-  return Math.hypot(dx, dy);
+  const dxPx = ((b.lon - a.lon) * mLon) / mpp;
+  const dyPx = ((b.lat - a.lat) * 110_574) / mpp;
+  const xOverlap = dxPx < labelWidthPx(a) + LABEL_PAD && dxPx + labelWidthPx(b) > -LABEL_PAD;
+  const yOverlap = Math.abs(dyPx) < LABEL_H + LABEL_PAD;
+  return xOverlap && yOverlap;
 }
 
 export function declutterPois(pois: Poi[], zoom: number): Poi[] {
-  const sep = minSeparationM(zoom);
-  if (sep === 0) return pois;
+  if (zoom >= 17) return pois;
   const ranked = [...pois].sort((a, b) => KIND_PRIORITY[a.kind] - KIND_PRIORITY[b.kind]);
   const kept: Poi[] = [];
   for (const p of ranked) {
-    if (kept.every((k) => poiDistM(k, p) >= sep)) kept.push(p);
+    if (kept.every((k) => !labelsCollide(k, p, zoom))) kept.push(p);
   }
   return kept;
 }

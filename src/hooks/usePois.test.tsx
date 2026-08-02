@@ -91,6 +91,30 @@ test("declutterPois thins crowded labels by zoom and lets culture win the spot",
   expect(declutterPois(cluster, 17)).toHaveLength(4);
 });
 
+test("declutterPois collides on label boxes: east-west neighbours drop, north-south survive", () => {
+  const at = (name: string, kind: Poi["kind"], lat: number, lon: number): Poi => ({
+    id: name,
+    name,
+    kind,
+    kindLabel: kind,
+    lat,
+    lon,
+  });
+  // Two long names 250 m apart. At zoom 14 that is ~43 px: far more than the
+  // ~20 px label height, far less than the ~150 px label width. Side by side the
+  // boxes overlap and the museum wins; stacked vertically both fit, like Google.
+  const eastWest = [
+    at("Museum Van Loon Annex", "culture", 52.37, 4.89),
+    at("Home Couture by De Ys", "food", 52.37, 4.8936779),
+  ];
+  expect(declutterPois(eastWest, 14).map((p) => p.name)).toEqual(["Museum Van Loon Annex"]);
+  const northSouth = [
+    at("Museum Van Loon Annex", "culture", 52.37, 4.89),
+    at("Home Couture by De Ys", "food", 52.3722609, 4.89),
+  ];
+  expect(declutterPois(northSouth, 14)).toHaveLength(2);
+});
+
 test("toPoi maps OSM tags to kinds and drops unnamed elements", () => {
   expect(toPoi({ id: 1, lat: 52, lon: 4, tags: { amenity: "bar", name: "Bruin Cafe" } })).toMatchObject({
     kind: "drink",
