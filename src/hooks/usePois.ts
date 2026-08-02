@@ -27,6 +27,10 @@ export interface Poi {
   name: string;
   kind: PoiKind;
   kindLabel: string;
+  // Raw OSM tag value (cafe, pub, museum...) so the marker can pick a per-category
+  // glyph. Optional because POIs persisted by poiStore before this field existed
+  // come back without it; consumers must fall back per kind.
+  tag?: string | null;
   lat: number;
   lon: number;
 }
@@ -78,6 +82,7 @@ export function toPoi(el: OverpassElement): Poi | null {
     name,
     kind,
     kindLabel: kindTag ? label(kindTag) : "Place",
+    tag: kindTag,
     lat: el.lat,
     lon: el.lon,
   };
@@ -85,10 +90,10 @@ export function toPoi(el: OverpassElement): Poi | null {
 
 // Offline fixture around the Amsterdam centre for mock mode and tests.
 const MOCK_POIS: Poi[] = [
-  { id: "m1", name: "Cafe de Sluis", kind: "drink", kindLabel: "Cafe", lat: 52.374, lon: 4.892 },
-  { id: "m2", name: "Bar Noord", kind: "drink", kindLabel: "Bar", lat: 52.4, lon: 4.9 },
-  { id: "m3", name: "Pizzeria Amstel", kind: "food", kindLabel: "Restaurant", lat: 52.366, lon: 4.898 },
-  { id: "m4", name: "Museum Het Schip", kind: "culture", kindLabel: "Museum", lat: 52.385, lon: 4.877 },
+  { id: "m1", name: "Cafe de Sluis", kind: "drink", kindLabel: "Cafe", tag: "cafe", lat: 52.374, lon: 4.892 },
+  { id: "m2", name: "Bar Noord", kind: "drink", kindLabel: "Bar", tag: "bar", lat: 52.4, lon: 4.9 },
+  { id: "m3", name: "Pizzeria Amstel", kind: "food", kindLabel: "Restaurant", tag: "restaurant", lat: 52.366, lon: 4.898 },
+  { id: "m4", name: "Museum Het Schip", kind: "culture", kindLabel: "Museum", tag: "museum", lat: 52.385, lon: 4.877 },
 ];
 
 interface Bbox {
@@ -247,9 +252,10 @@ export async function prefetchAmsterdamPois(): Promise<void> {
 // Museums win over bars, bars over snack corners, when they compete for a spot.
 const KIND_PRIORITY: Record<PoiKind, number> = { culture: 0, drink: 1, food: 2, other: 3 };
 
-// Mirrors the .poi-marker CSS: 9px dot + border + 4px gap, 11px semibold text
-// capped at 130px, one line high; CHAR_W is that font's average glyph width.
-const LABEL_DOT_W = 17;
+// Mirrors the .poi-marker CSS: 16px glyph badge (border-box) + 4px gap, 11px
+// semibold text capped at 130px, one line high; CHAR_W is that font's average
+// glyph width.
+const LABEL_DOT_W = 20;
 const LABEL_MAX_TEXT_W = 130;
 const LABEL_CHAR_W = 6.5;
 const LABEL_H = 20;

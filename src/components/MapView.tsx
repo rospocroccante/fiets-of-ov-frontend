@@ -93,7 +93,49 @@ const POI_COLOR: Record<Poi["kind"], string> = {
   other: "#d97706",
 };
 
-// Maps-style labelled POI dots. Names come from OSM, so they are escaped before
+// Google-style category glyphs: the raw OSM tag picks the icon, because a cafe
+// cup is not a cocktail glass even though both kinds are "drink". Every name here
+// must exist in the frozen icon-font subset — regeneration note in index.html.
+const POI_GLYPH_TAG: Record<string, string> = {
+  restaurant: "restaurant",
+  fast_food: "fastfood",
+  ice_cream: "icecream",
+  cafe: "local_cafe",
+  bar: "local_bar",
+  pub: "sports_bar",
+  museum: "museum",
+  attraction: "attractions",
+  gallery: "palette",
+};
+
+// Per-kind fallback for POIs persisted by poiStore before Poi carried the tag:
+// an old cache must degrade to a sensible icon, never to a blank badge.
+const POI_GLYPH_KIND: Record<Poi["kind"], string> = {
+  food: "restaurant",
+  drink: "local_cafe",
+  culture: "museum",
+  other: "location_on",
+};
+
+// Exported for tests along with poiMarkerHtml: the react-leaflet mock never
+// renders real divIcons, so this pure string seam is the only place the badge
+// markup can be asserted.
+export function poiGlyph(p: Pick<Poi, "kind" | "tag">): string {
+  return (p.tag && POI_GLYPH_TAG[p.tag]) || POI_GLYPH_KIND[p.kind];
+}
+
+// aria-hidden because the glyph is a ligature: without it, screen readers and
+// find-in-page would see the literal text "local_cafe" next to every cafe.
+export function poiMarkerHtml(p: Poi): string {
+  return (
+    `<span class="poi-badge" style="background:${POI_COLOR[p.kind]}">` +
+    `<span class="material-symbols-rounded poi-glyph" aria-hidden="true">${poiGlyph(p)}</span>` +
+    `</span>` +
+    `<span class="poi-name">${escapeHtml(p.name)}</span>`
+  );
+}
+
+// Maps-style labelled POI badges. Names come from OSM, so they are escaped before
 // being embedded in the divIcon HTML.
 function PoiMarkers({ pois, onPick }: { pois: Poi[]; onPick?: (p: Poi) => void }) {
   return (
@@ -105,11 +147,11 @@ function PoiMarkers({ pois, onPick }: { pois: Poi[]; onPick?: (p: Poi) => void }
           title={p.name}
           icon={L.divIcon({
             className: "poi-marker",
-            html:
-              `<span class="poi-dot" style="background:${POI_COLOR[p.kind]}"></span>` +
-              `<span class="poi-name">${escapeHtml(p.name)}</span>`,
+            html: poiMarkerHtml(p),
             iconSize: [0, 0],
-            iconAnchor: [4, 4],
+            // Centre of the 16px badge, so the badge — not the label text —
+            // sits on the POI's true coordinate.
+            iconAnchor: [8, 8],
           })}
           eventHandlers={{ click: () => onPick?.(p) }}
         />

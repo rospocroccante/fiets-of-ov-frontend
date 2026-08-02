@@ -54,8 +54,9 @@ summary:focus-visible {
    closer, so releasing the wheel always lands on a fully working screen. */
 html { scroll-snap-type: y proximity; }
 
-/* Maps-style POI labels: a coloured dot with the place name beside it, white halo so
-   the text stays readable over any basemap. Rendered as Leaflet divIcons. */
+/* Maps-style POI labels: a coloured category badge with the place name beside it,
+   white halo so the text stays readable over any basemap. Rendered as Leaflet
+   divIcons. */
 .poi-marker {
   display: flex;
   align-items: center;
@@ -63,13 +64,29 @@ html { scroll-snap-type: y proximity; }
   white-space: nowrap;
   cursor: pointer;
 }
-.poi-dot {
-  width: 9px;
-  height: 9px;
+/* The badge: kind colour underneath, filled white Material glyph on top, like
+   Google Maps' category pins. 16px border-box — the declutter maths in usePois
+   (LABEL_DOT_W) mirrors this size, keep them in sync. */
+.poi-badge {
+  width: 16px;
+  height: 16px;
   border-radius: 9999px;
-  border: 2px solid #fff;
+  border: 1.5px solid #fff;
   box-shadow: 0 0 3px rgba(0, 0, 0, 0.35);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Overrides the 24px default from index.html; FILL 1 because a hollow outline
+   glyph at 10px on a coloured disc is unreadable. */
+.poi-glyph {
+  font-size: 10px;
+  color: #fff;
+  font-variation-settings:
+    "FILL" 1,
+    "opsz" 20,
+    "wght" 500;
 }
 .poi-name {
   font-size: 11px;

@@ -26,7 +26,7 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <!-- Icon font, self-hosted. This is byte-for-byte the file the Google Fonts css2 URL
-         below resolves to: a 25 kB subset holding only the glyphs the app uses, with the
+         below resolves to: a 36 kB subset holding only the glyphs the app uses, with the
          opsz/wght/FILL/GRAD axes intact (the full variable font is 336 kB). Serving it
          ourselves takes two cross-origin connections and one render-blocking third-party
          stylesheet off the critical path, which is the part a phone on a slow network
@@ -37,7 +37,7 @@
          as an icon. Fetch the CSS with a browser User-Agent, follow the src: url() in the
          response, and overwrite public/fonts/material-symbols-rounded-subset.woff2:
 
-         https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,0&icon_names=bedtime,close,cloud,dark_mode,foggy,history,light_mode,location_on,my_location,partly_cloudy_day,partly_cloudy_night,progress_activity,rainy,roundabout_left,roundabout_right,sports_score,star,straight,sunny,thunderstorm,tram,turn_left,turn_right,turn_slight_left,turn_slight_right,u_turn_left,u_turn_right,weather_snowy&display=block
+         https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,0&icon_names=attractions,bedtime,close,cloud,dark_mode,fastfood,foggy,history,icecream,light_mode,local_bar,local_cafe,location_on,museum,my_location,palette,partly_cloudy_day,partly_cloudy_night,progress_activity,rainy,restaurant,roundabout_left,roundabout_right,sports_bar,sports_score,star,straight,sunny,thunderstorm,tram,turn_left,turn_right,turn_slight_left,turn_slight_right,u_turn_left,u_turn_right,weather_snowy&display=block
 
          Keep that icon_names list alphabetical (the API requires it) and in sync with the
          usages of material-symbols-rounded in src/. font-display: block is deliberate and
