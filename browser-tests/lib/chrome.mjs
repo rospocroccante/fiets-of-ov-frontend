@@ -191,15 +191,23 @@ class Connection {
   }
 }
 
-// One emulated phone: a page target with device metrics, touch, and a theme.
+// One emulated device: a page target with device metrics, a theme, and by default a
+// touch screen.
+//
+// `touch: false` is a real pointer device instead: a mouse, `(pointer: fine)`, no touch
+// events. It matters because every page this suite opened until now was a touch screen,
+// including the ones at 1280x900 called "desktop" — those measured a wide tablet. Any
+// layout that keys on the pointer type was invisible here, and would go on being
+// invisible in exactly the direction that hurts: a control shrunk for the mouse would
+// have been measured against the finger's standard and passed.
 export class Page {
-  static async open(browser, { width, height, deviceScaleFactor = 2, seed = null, theme = "light", lang = "en" }) {
+  static async open(browser, { width, height, deviceScaleFactor = 2, seed = null, theme = "light", lang = "en", touch = true }) {
     const { targetId } = await browser.send("Target.createTarget", { url: "about:blank" });
     const { sessionId } = await browser.send("Target.attachToTarget", { targetId, flatten: true });
     const page = new Page(browser, targetId, sessionId);
     await page.send("Page.enable");
     await page.send("Runtime.enable");
-    await page.setViewport({ width, height, deviceScaleFactor });
+    await page.setViewport({ width, height, deviceScaleFactor, touch });
     await page.send("Emulation.setEmulatedMedia", {
       features: [{ name: "prefers-color-scheme", value: theme }],
     });
@@ -224,20 +232,26 @@ export class Page {
     return this.browser.send(method, params, this.sessionId);
   }
 
-  async setViewport({ width, height, deviceScaleFactor = 2 }) {
+  async setViewport({ width, height, deviceScaleFactor = 2, touch = this.touch ?? true }) {
+    this.touch = touch;
     await this.send("Emulation.setDeviceMetricsOverride", {
       width,
       height,
       deviceScaleFactor,
-      mobile: true,
+      mobile: touch,
       screenWidth: width,
       screenHeight: height,
     });
     // Touch emulation is not decoration: `(pointer: coarse)` decides the phone layout,
     // and a hit test with a mouse event would take a different code path through the
-    // compositor than the finger this suite is standing in for.
-    await this.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
-    await this.send("Emulation.setEmitTouchEventsForMouse", { enabled: true, configuration: "mobile" });
+    // compositor than the finger this suite is standing in for. Turned off, the page is
+    // a mouse: `(pointer: fine)` and `(hover: hover)` both match instead.
+    // maxTouchPoints is validated as 1..16 even when the emulation is being turned off.
+    await this.send("Emulation.setTouchEmulationEnabled", { enabled: touch, maxTouchPoints: touch ? 5 : 1 });
+    await this.send("Emulation.setEmitTouchEventsForMouse", {
+      enabled: touch,
+      configuration: touch ? "mobile" : "desktop",
+    });
   }
 
   async goto(url) {
@@ -288,6 +302,17 @@ export class Page {
     });
     await sleep(50);
     await this.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await sleep(260);
+  }
+
+  // A mouse click, for pages opened with `touch: false`. tap() dispatches touch events,
+  // which a pointer device does not have, and calling .click() on the element instead
+  // skips the hit test that half the point of this suite is to run.
+  async click(x, y) {
+    await this.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none", buttons: 0 });
+    await this.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", buttons: 1, clickCount: 1 });
+    await sleep(40);
+    await this.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", buttons: 0, clickCount: 1 });
     await sleep(260);
   }
 

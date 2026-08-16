@@ -49,8 +49,8 @@ function pct(n) {
   return `${(n * 100).toFixed(1)}%`;
 }
 
-async function bootMap(ctx, { width, height, theme = "light", lang = "en" }) {
-  const page = await ctx.openPhone({ width, height, theme, lang, seed: TRIP_SEED });
+async function bootMap(ctx, { width, height, theme = "light", lang = "en", touch = true }) {
+  const page = await ctx.openPhone({ width, height, theme, lang, seed: TRIP_SEED, touch });
   await page.goto(ctx.url);
   await page.waitFor(`document.querySelector('${PILL}')`, { label: "the app to render its search pill" });
   await page.eval(PROBE);
@@ -61,7 +61,11 @@ async function bootMap(ctx, { width, height, theme = "light", lang = "en" }) {
     return window.__fov.rect(b);
   `);
   if (!row) throw new Error("the seeded recent trip is not on the home screen");
-  await page.tap(row.x + row.w / 2, row.y + row.h / 2);
+  // A mouse page has no touch events to dispatch, so the same journey is driven with the
+  // pointer it actually has.
+  const [cx, cy] = [Math.round(row.x + row.w / 2), Math.round(row.y + row.h / 2)];
+  if (touch) await page.tap(cx, cy);
+  else await page.click(cx, cy);
   await page.waitFor(`document.querySelectorAll('[data-fov="option"]').length >= 3`, { label: "three travel options" });
   await sleep(900); // the morph, and the map chunk settling under it
   await page.eval(PROBE);
@@ -998,3 +1002,83 @@ scenarios.push(
     },
   },
 );
+
+// Everything that a cursor may have and a fingertip may not.
+//
+// The bar was 74px tall on a 1280x900 desktop whatever was pointing at it, because every
+// control on it carries the fingertip's 44px floor. The floor is right for a finger and
+// is not about legibility: a cursor lands on a 36px pill exactly as reliably, and the
+// difference is 16px of window that the map was not getting.
+//
+// This is also the first scenario in the suite to open a page that is not a touch screen.
+// Every "desktop" measurement before it ran with touch emulation on, so it was measuring
+// a wide tablet, and a control shrunk for the mouse would have been checked against the
+// finger's standard and passed.
+const BAR_MIN_MOUSE = 32;
+
+scenarios.push({
+  name: "1280x900 the filter bar is shorter under a cursor and unchanged under a finger",
+  async run(ctx) {
+    const { checks } = ctx;
+    const seen = {};
+    for (const touch of [true, false]) {
+      const who = touch ? "finger" : "mouse";
+      const page = await bootMap(ctx, { width: 1280, height: 900, lang: "en", touch });
+      try {
+        const m = await page.eval(`
+          const F = window.__fov;
+          const bar = document.querySelector('${BAR}');
+          const main = document.querySelector('#fov-map-main');
+          const map = document.querySelector('.leaflet-container');
+          return {
+            fine: matchMedia('(pointer: fine)').matches,
+            coarse: matchMedia('(pointer: coarse)').matches,
+            bar: F.rect(bar),
+            controls: [...bar.querySelectorAll('button')].map((b) => ({
+              text: (b.textContent || '').trim().slice(0, 12) || b.getAttribute('aria-label'),
+              ...F.shown(b), ...F.rect(b),
+            })),
+            mainTop: +main.getBoundingClientRect().top.toFixed(2),
+            mapH: map ? +map.getBoundingClientRect().height.toFixed(2) : null,
+            ih: innerHeight,
+          };
+        `);
+        seen[who] = m;
+
+        // The page really is the input device it claims to be. Without this the rest of
+        // the scenario would compare two identical touch pages and pass on both.
+        checks.ok(`${who}: the page is a ${who}`, touch ? m.coarse && !m.fine : m.fine && !m.coarse,
+          `pointer: fine ${m.fine}, pointer: coarse ${m.coarse}`);
+
+        const floor = touch ? 44 : BAR_MIN_MOUSE;
+        for (const c of m.controls) {
+          checks.atLeast(`${who}: "${c.text}" is at least ${floor}px tall`, c.h, floor, `${round(c.h)}px`);
+          checks.ok(`${who}: "${c.text}" is painted and a click at its centre reaches it`, c.painted,
+            `${round(c.w)}x${round(c.h)}, elementFromPoint(${c.x}, ${c.y}) = ${c.hit}`);
+        }
+        checks.atMost(`${who}: the bar stays one row`, m.bar.h, touch ? 80 : 64, `${round(m.bar.h)}px`);
+      } finally {
+        await page.close();
+      }
+    }
+
+    // The contract, as the difference between the two runs.
+    if (seen.finger && seen.mouse) {
+      checks.equal("the finger keeps every control at 44px",
+        Math.min(...seen.finger.controls.map((c) => round(c.h))), 44,
+        seen.finger.controls.map((c) => `${c.text} ${round(c.h)}`).join(", "));
+      checks.atMost("the cursor gets a shorter bar",
+        seen.mouse.bar.h, seen.finger.bar.h - 12,
+        `${round(seen.mouse.bar.h)}px against ${round(seen.finger.bar.h)}px; it was 74 for both`);
+      checks.atLeast("and the map gets what the bar gave up",
+        seen.mouse.mapH - seen.finger.mapH, seen.finger.bar.h - seen.mouse.bar.h - 0.5,
+        `map ${round(seen.finger.mapH)} -> ${round(seen.mouse.mapH)}, bar ${round(seen.finger.bar.h)} -> ${round(seen.mouse.bar.h)}`);
+      checks.atMost("with less chrome above the content",
+        seen.mouse.mainTop, seen.finger.mainTop - 12,
+        `${round(seen.mouse.mainTop)}px against ${round(seen.finger.mainTop)}px of a ${seen.mouse.ih}px window`);
+      checks.equal("and the same controls on it",
+        seen.mouse.controls.length, seen.finger.controls.length,
+        seen.mouse.controls.map((c) => c.text).join(", "));
+    }
+  },
+});

@@ -47,16 +47,22 @@ export function FilterBar({
   // Two button treatments, both with a constant box so toggling never resizes the bar:
   // standalone chips keep a border in every state (transparent when filled), segments
   // inside the map-tools group are borderless (the group carries the border).
-  // Both treatments carry min-h-[44px]: at py-1.5/py-1 they measured 34px and 28px, and
-  // this bar is the phone's main control surface (mode filters, map pickers, radar).
+  //
+  // Both carry min-h-[44px]: at py-1.5/py-1 they measured 34px and 28px, and this bar is
+  // the phone's main control surface (mode filters, map pickers, radar). 36px under
+  // `mouse:` is the same row for a cursor, which does not need a fingertip's margin. The
+  // bar measured 74px tall on a 1280x900 desktop, 170px of chrome above the map on a
+  // 900px window; this and the padding below take it to 58px and hand the 16px to the
+  // map. The finger's 44px is untouched, and the browser suite measures both pointer
+  // types so that stays true.
   const chip = (pressed: boolean) =>
-    `inline-flex min-h-[44px] shrink-0 items-center rounded-full border px-3 text-sm font-medium transition sm:px-4 ${
+    `inline-flex min-h-[44px] shrink-0 items-center rounded-full border px-3 text-sm font-medium transition mouse:min-h-[36px] sm:px-4 ${
       pressed
         ? "border-transparent bg-brand text-white dark:bg-emerald-600"
         : "border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-night-border dark:text-night-muted dark:hover:bg-night-hover"
     }`;
   const segment = (pressed: boolean) =>
-    `inline-flex min-h-[44px] items-center rounded-full px-3 text-sm transition ${
+    `inline-flex min-h-[44px] items-center rounded-full px-3 text-sm transition mouse:min-h-[36px] ${
       pressed
         ? "bg-brand text-white dark:bg-emerald-600"
         : "text-gray-600 hover:bg-gray-100 dark:text-night-muted dark:hover:bg-night-hover"
@@ -73,7 +79,9 @@ export function FilterBar({
     </button>
   );
 
-  const pad = compact ? "py-1.5" : "py-3";
+  // compact is the landscape phone, already down to py-1.5 and always a finger, so the
+  // mouse step only applies to the standing case.
+  const pad = compact ? "py-1.5" : "py-3 mouse:py-2";
 
   if (phone) {
     return (
@@ -143,7 +151,7 @@ export function FilterBar({
             button would nudge the whole right cluster on every toggle. */}
         <button
           onClick={onToggleMap}
-          className="inline-flex min-h-[44px] min-w-[6.5rem] items-center justify-center rounded-full border border-gray-200 px-4 text-center text-sm dark:border-night-border dark:text-night-muted dark:hover:bg-night-hover"
+          className="inline-flex min-h-[44px] min-w-[6.5rem] items-center justify-center rounded-full border border-gray-200 px-4 text-center text-sm mouse:min-h-[36px] dark:border-night-border dark:text-night-muted dark:hover:bg-night-hover"
         >
           {hideMap ? t("showMap") : t("hideMap")}
         </button>

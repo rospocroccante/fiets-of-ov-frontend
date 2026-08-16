@@ -1,3 +1,5 @@
+import plugin from "tailwindcss/plugin";
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
@@ -51,5 +53,21 @@ export default {
       borderRadius: { card: "1.25rem" },
     },
   },
-  plugins: [],
+  plugins: [
+    // `mouse:` is (pointer: fine), the primary input being a mouse or a trackpad.
+    //
+    // It exists so a control can be shorter for a cursor than for a finger. 44px is the
+    // finger's floor and this app holds to it, but it is a floor about fingertips, not
+    // about legibility: a pointer lands on a 36px pill as reliably as on a 44px one, and
+    // the 8px is 8px the map does not get. Everything gated on this must therefore be
+    // decoration - size, padding, density - never whether a control exists or can be
+    // reached, because a laptop with a touchscreen answers both queries and a mouse
+    // plugged into a tablet changes the answer mid-session.
+    //
+    // Tailwind 3.4 has no pointer variants of its own; 4.x ships them under these names.
+    plugin(({ addVariant }) => {
+      addVariant("mouse", "@media (pointer: fine)");
+      addVariant("finger", "@media (pointer: coarse)");
+    }),
+  ],
 };
