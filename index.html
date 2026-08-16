@@ -23,58 +23,91 @@
          the page on a phone. -->
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#20282E" />
-    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <!-- Icon font, self-hosted. This is byte-for-byte the file the Google Fonts css2 URL
-         below resolves to: a 24 kB subset holding only the glyphs the app uses, with the
-         opsz/wght/FILL/GRAD axes intact (the full variable font is 336 kB). Serving it
-         ourselves takes two cross-origin connections and one render-blocking third-party
-         stylesheet off the critical path, which is the part a phone on a slow network
-         feels.
-
-         To add an icon you must regenerate the file — the subset is frozen, and a glyph
-         that is not in it renders as its literal ligature name ("dark_mode") rather than
-         as an icon. Fetch the CSS with a browser User-Agent, follow the src: url() in the
-         response, and overwrite public/fonts/material-symbols-rounded-subset.woff2:
-
-         https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,0&icon_names=bedtime,close,cloud,dark_mode,foggy,history,light_mode,my_location,partly_cloudy_day,partly_cloudy_night,progress_activity,rainy,roundabout_left,roundabout_right,sports_score,star,straight,sunny,thunderstorm,tram,turn_left,turn_right,turn_slight_left,turn_slight_right,u_turn_left,u_turn_right,weather_snowy&display=block
-
-         Keep that icon_names list alphabetical (the API requires it) and in sync with the
-         usages of material-symbols-rounded in src/. The map POI badges are NOT in this
-         font: they are Maki svgs inlined by MapView.tsx. font-display: block is deliberate
-         and matches what the CSS used to say: an icon font's fallback is the ligature name
-         in readable text, so a flash of it is worse than a flash of nothing. -->
-    <style>
-      @font-face {
-        font-family: "Material Symbols Rounded";
-        font-style: normal;
-        font-weight: 400 700;
-        font-display: block;
-        src: url(/fonts/material-symbols-rounded-subset.woff2) format("woff2");
-      }
-      .material-symbols-rounded {
-        font-family: "Material Symbols Rounded";
-        font-weight: normal;
-        font-style: normal;
-        font-size: 24px;
-        line-height: 1;
-        letter-spacing: normal;
-        text-transform: none;
-        display: inline-block;
-        white-space: nowrap;
-        word-wrap: normal;
-        direction: ltr;
-        text-rendering: optimizeLegibility;
-        -webkit-font-smoothing: antialiased;
-      }
-    </style>
-    <link
-      rel="preload"
-      href="/fonts/material-symbols-rounded-subset.woff2"
-      as="font"
-      type="font/woff2"
-      crossorigin
+    <!-- Link previews: Teams, Slack, WhatsApp, Mastodon and every mail client read og:*,
+         and X reads twitter:*. Without them a shared link renders as a bare URL.
+         og:image must be an absolute URL for most scrapers, which is why og:url and the
+         image carry the production host rather than a root-relative path; change both
+         together if the app ever moves. The image is 1200x630, the size that gets the
+         large card everywhere, and it is generated from public/og.svg. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Fiets of OV" />
+    <meta property="og:locale" content="nl_NL" />
+    <meta property="og:locale:alternate" content="en_GB" />
+    <meta property="og:title" content="Fiets of OV" />
+    <meta
+      property="og:description"
+      content="Fiets of OV weegt regen, wind en reistijd tegen elkaar af en zegt of je in Amsterdam beter kunt fietsen of het OV kunt nemen."
     />
+    <meta property="og:url" content="https://fiets-of-ov-frontend.pages.dev/" />
+    <meta property="og:image" content="https://fiets-of-ov-frontend.pages.dev/og.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Het logo van Fiets of OV: een tram boven een fiets, met de tekst Regenbewust reisadvies voor Amsterdam."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Fiets of OV" />
+    <meta
+      name="twitter:description"
+      content="Fiets of OV weegt regen, wind en reistijd tegen elkaar af en zegt of je in Amsterdam beter kunt fietsen of het OV kunt nemen."
+    />
+    <meta name="twitter:image" content="https://fiets-of-ov-frontend.pages.dev/og.png" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <!-- iOS ignores the manifest for "Add to Home Screen" and takes this file, or a
+         screenshot of the page if it is missing. 180x180 is the size current iPhones
+         ask for; iOS scales it down for everything else and rounds the corners itself.
+         The PNGs under public/ are all generated from the SVGs beside them, none of
+         which are fetched at runtime except icon.svg. To regenerate after editing a
+         source SVG (macOS, no image tooling required beyond Chrome):
+
+         The output size must come from the SVG root. Headless Chrome will not open a
+         window smaller than about 500x500: ask for 192 and it lays the page out at the
+         clamped size and then crops the top-left 192x192 out of it. icon.svg and
+         apple-touch-icon.svg carry only a viewBox, so at 192 and 180 they scaled to the
+         clamped window and both files shipped as zoomed fragments (icon-192.png came
+         out 42.6% non-transparent, the apple icon a flat blue rectangle). The sizes at
+         512 and 1200x630 are above the clamp, which is why only the small two broke.
+         The sed below writes width and height onto the root for the target being built,
+         which pins the layout regardless of the window; --force-device-scale-factor
+         would be the other way to do it.
+
+           CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+           # <source.svg> <output.png> <width> <height> [ARGB backdrop]
+           shot() { sed "s|<svg |<svg width=\"$3\" height=\"$4\" |" "public/$1" > "/tmp/$1"
+             "$CHROME" --headless --disable-gpu --hide-scrollbars \
+               --default-background-color="${5:-00000000}" --screenshot="public/$2" \
+               --window-size="$3,$4" "file:///tmp/$1"; }
+           shot icon.svg              icon-192.png            192  192
+           shot icon.svg              icon-512.png            512  512
+           shot icon-maskable.svg     icon-maskable-512.png   512  512
+           # Opaque backdrop for iOS, which composites any transparency onto black.
+           # The blue is the badge colour in the mark, so a hairline at the rounded
+           # edge lands on brand blue rather than on a black seam.
+           shot apple-touch-icon.svg  apple-touch-icon.png    180  180  ff0D4A73
+
+         og.svg already carries width and height on its root (which is why og.png was
+         never affected), so do not run it through shot(): a second width attribute
+         makes the file invalid XML and Chrome renders nothing.
+
+           "$CHROME" --headless --disable-gpu --hide-scrollbars \
+             --default-background-color=00000000 --screenshot=public/og.png \
+             --window-size=1200,630 "file://$PWD/public/og.svg"
+
+         Then look at the pixels, not at the file listing. src/publicAssets.test.ts
+         decodes every icon and fails one that is blank, flat or mostly transparent,
+         which is the shape all three of these mistakes take.
+    -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- The icon font used to be declared here, with a <link rel="preload"> for it. Both
+         moved to src/index.css, where the @font-face now points at src/fonts/ with a
+         relative url() so Vite emits the file content-hashed. Nothing about the font
+         belongs in this document any more, and in particular do not add a preload back:
+         the hashed filename is only known to the build, a hardcoded href points at a URL
+         that does not exist, and the icon_names list and the regeneration procedure live
+         next to the @font-face in src/index.css. The reasoning is written out there. -->
   </head>
   <body>
     <div id="root"></div>

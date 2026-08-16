@@ -218,3 +218,51 @@ test("programmatic value change (e.g. a suggested trip) does not open suggestion
   await new Promise((r) => setTimeout(r, 300));
   expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
 });
+
+test("ariaLabel becomes the combobox's accessible name; without it there is none", () => {
+  const { rerender } = render(
+    <PlaceInput value="" placeholder="From" onChange={() => {}} onSelect={() => {}} />
+  );
+  // The point of the prop: a placeholder contributes nothing to the accessible name of
+  // an element with role="combobox", so the field is anonymous until one is supplied.
+  expect(screen.getByRole("combobox")).not.toHaveAccessibleName();
+
+  rerender(
+    <PlaceInput
+      value=""
+      placeholder="From"
+      ariaLabel="From"
+      onChange={() => {}}
+      onSelect={() => {}}
+    />
+  );
+  expect(screen.getByRole("combobox")).toHaveAccessibleName("From");
+});
+
+test("listAnchor decides which box the suggestions are as wide as", async () => {
+  // Default: this component is the positioning context, so the list is exactly the
+  // width of the input. On the desktop pill that is right — the input *is* the control.
+  const { rerender, container } = render(
+    <PlaceInput value="" placeholder="From" onChange={() => {}} onSelect={() => {}} />,
+  );
+  expect(container.firstElementChild).toHaveClass("relative");
+  fireEvent.change(screen.getByPlaceholderText("From"), { target: { value: "vondel" } });
+  const list = await screen.findByRole("listbox");
+  expect(container.firstElementChild!.contains(list)).toBe(true);
+  expect(list).toHaveClass("absolute", "left-0", "right-0", "top-full");
+
+  // Anchored to a container, the positioning context is dropped, so left-0/right-0
+  // resolve against whatever positioned ancestor wraps the field. That is what makes
+  // the phone screen's suggestions the width of the whole card (352px at 390) instead
+  // of the width of one field minus its buttons (63px in the old pill).
+  rerender(
+    <PlaceInput
+      value=""
+      placeholder="From"
+      listAnchor="container"
+      onChange={() => {}}
+      onSelect={() => {}}
+    />,
+  );
+  expect(container.firstElementChild).not.toHaveClass("relative");
+});

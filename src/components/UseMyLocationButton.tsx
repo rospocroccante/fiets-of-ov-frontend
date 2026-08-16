@@ -8,6 +8,10 @@ import type { Endpoint } from "../trip";
 interface Props {
   onLocated: (ep: Endpoint) => void;
   className?: string;
+  // Draw the name next to the icon. The desktop pill has room for an icon and nothing
+  // else; the phone search screen puts this button in a row of its own, where an
+  // unlabelled crosshair next to an unlabelled swap arrow is a guessing game.
+  withLabel?: boolean;
 }
 
 type StatusState =
@@ -15,7 +19,7 @@ type StatusState =
   | { kind: "error"; text: string }
   | null;
 
-export function UseMyLocationButton({ onLocated, className }: Props): JSX.Element {
+export function UseMyLocationButton({ onLocated, className, withLabel = false }: Props): JSX.Element {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<StatusState>(null);
@@ -50,7 +54,9 @@ export function UseMyLocationButton({ onLocated, className }: Props): JSX.Elemen
         aria-label={t("useMyLocation")}
         disabled={busy}
         onClick={handleClick}
-        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-brand hover:bg-brand-light disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-night-hover"
+        className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-brand hover:bg-brand-light disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-night-hover${
+          withLabel ? " gap-1.5 px-3 text-sm font-medium" : ""
+        }`}
       >
         {busy ? (
           <span
@@ -67,6 +73,13 @@ export function UseMyLocationButton({ onLocated, className }: Props): JSX.Elemen
             style={{ fontVariationSettings: "'FILL' 1" }}
           >
             my_location
+          </span>
+        )}
+        {/* aria-hidden: the button already carries the same words as its accessible
+            name, and a screen reader should hear them once. */}
+        {withLabel && (
+          <span aria-hidden="true" className="whitespace-nowrap">
+            {t("useMyLocation")}
           </span>
         )}
       </button>

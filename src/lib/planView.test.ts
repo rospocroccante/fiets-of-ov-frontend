@@ -75,6 +75,38 @@ test("carries the rain fields through", () => {
   expect(v.rainExpected).toBeNull();
 });
 
+test("each option keeps its own rain exposure, not just the trip-level banner", () => {
+  const v = buildPlanView(mockPlanFor("A", "Bijlmer rain"));
+  const transit = v.options.find((o) => o.mode === "transit");
+  const bike = v.options.find((o) => o.mode === "bike");
+  // Same trip, same forecast: 22 minutes of it are spent in the rain on a bike and
+  // none of it in a metro carriage. Dropping this made both options look identical.
+  expect(transit?.rainMinutes).toBe(0);
+  expect(bike?.rainMinutes).toBe(22);
+});
+
+test("rain exposure is null, not zero, when the forecast is unavailable", () => {
+  // The backend still sends rain_minutes: 0 here, but that is "we do not know",
+  // not "you will stay dry". Rendering it as zero would invent a promise.
+  const v = buildPlanView(mockPlanFor("A", "Unknown spot"));
+  expect(v.rainExpected).toBeNull();
+  expect(v.options.every((o) => o.rainMinutes === null)).toBe(true);
+});
+
+test("every option carries its own fare, calories and CO2", () => {
+  const v = buildPlanView(mockPlanFor("A", "Bijlmer rain"));
+  const transit = v.options.find((o) => o.mode === "transit")!;
+  const bike = v.options.find((o) => o.mode === "bike")!;
+  expect(transit.metrics.fareEur).toBeGreaterThan(0);
+  expect(bike.metrics.fareEur).toBe(0);
+  // Metro and tram in Amsterdam run on Dutch green power, so on the 2026 factors both
+  // options emit nothing. The euros and the calories are what separate them here.
+  expect(transit.metrics.co2Grams).toBe(0);
+  expect(bike.metrics.co2Grams).toBe(0);
+  // The bike wins the calorie count on the same trip; that is the point of showing it.
+  expect(bike.metrics.kcal).toBeGreaterThan(transit.metrics.kcal);
+});
+
 test("backend reasons become plain sentences", () => {
   expect(friendlyReason("dry during your 16-min ride -> bike")).toBe(
     "It should stay dry for your 16-minute ride. Take the bike.",

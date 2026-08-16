@@ -7,6 +7,7 @@ import {
   __fireMapContextMenu,
   __fireMarkerDragEnd,
   __mapCalls,
+  __mapContainerProps,
   __wheelZoom,
 } from "../__mocks__/react-leaflet";
 import type { Itinerary } from "../api/types";
@@ -279,4 +280,28 @@ test("while navigating, the route refit is suppressed and the camera follows the
   rerender(view({ lat: 52.3785, lon: 4.899, accuracy: 10 }));
   expect(__mapCalls.panTo).toBe(panBefore + 1);
   expect(__mapCalls.setView).toBe(setViewBefore + 1);
+});
+
+test("no tile or data credit is drawn on or beside the map", () => {
+  // The owner asked for the basemap credit gone from the map, twice. Leaflet's own
+  // control puts one back the moment attributionControl stops being false, so the option
+  // is asserted rather than the control: this suite runs against the react-leaflet mock,
+  // which renders a plain div and never builds a control, so querying the DOM for one
+  // passes whether the option is there or not. It is the browser suite that reads the
+  // real map (browser-tests/specs/basemap.checks.mjs), and this is the same guard at the
+  // level jsdom can see.
+  //
+  // MapLibre's own control is NOT a second way in, whatever it looks like:
+  // @maplibre/maplibre-gl-leaflet forces attributionControl: false onto every GL map it
+  // builds (leaflet-maplibre-gl.js:156), so `.maplibregl-ctrl-attrib` cannot appear
+  // through this bridge and an assertion against it would guard nothing. The option in
+  // lib/basemapGL is still worth setting: it is also what stops the bridge harvesting
+  // source attributions into Leaflet's control.
+  const { container } = renderMap(
+    <MapView origin={null} destination={null} stops={[]} route={null} />
+  );
+  expect(__mapContainerProps.last?.attributionControl).toBe(false);
+  expect(screen.queryByRole("note", { name: /map data sources/i })).toBeNull();
+  expect(container.querySelector(".leaflet-control-attribution")).toBeNull();
+  expect(container.textContent).not.toMatch(/OpenStreetMap|CARTO|OpenFreeMap|OpenMapTiles/i);
 });

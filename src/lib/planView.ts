@@ -1,6 +1,8 @@
 import type { Itinerary, Mode, Option, Plan } from "../api/types";
 import { translate } from "./i18n";
 import type { Lang, StringKey } from "./i18n";
+import { tripMetrics } from "./tripMetrics";
+import type { TripMetrics } from "./tripMetrics";
 
 // View-model for the results panel: one OptionView per available mode, recommended first.
 export interface OptionView {
@@ -10,6 +12,14 @@ export interface OptionView {
   distanceKm: number | null;
   recommended: boolean;
   summary: string; // e.g. "Metro 52 -> Tram 1" or "4.8 km"
+  // Minutes of this particular option spent exposed to rain, as scored by the backend.
+  // Trip-level rain (PlanView.rainExpected) says the sky is wet; this says how much of
+  // it you actually ride through, which is the whole difference between the options.
+  // null when the forecast itself is unavailable: the backend still sends 0 in that
+  // case, and showing that as "no rain" would turn missing data into a promise.
+  rainMinutes: number | null;
+  // Fare, calories and CO2 for this option, all computed client-side (see tripMetrics).
+  metrics: TripMetrics;
   itinerary: Itinerary;
 }
 
@@ -107,7 +117,7 @@ export function departureLabel(it: Itinerary, nowMs: number, lang: Lang = "en"):
   return translate(lang, "leaveAtT", { t });
 }
 
-function toOptionView(option: Option, lang: Lang): OptionView {
+function toOptionView(option: Option, lang: Lang, rainKnown: boolean): OptionView {
   const it = option.itinerary;
   return {
     mode: option.kind,
@@ -116,6 +126,8 @@ function toOptionView(option: Option, lang: Lang): OptionView {
     distanceKm: option.kind === "bike" ? km(bikeDistanceM(it)) : null,
     recommended: option.recommended,
     summary: summarise(option.kind, it, lang),
+    rainMinutes: rainKnown ? option.rain_minutes : null,
+    metrics: tripMetrics(it),
     itinerary: it,
   };
 }
@@ -195,7 +207,7 @@ export function friendlyReason(reason: string, lang: Lang = "en"): string {
 
 export function buildPlanView(plan: Plan, lang: Lang = "en"): PlanView {
   // Backend returns options ranked, recommended first; preserve that order.
-  const options = plan.options.map((o) => toOptionView(o, lang));
+  const options = plan.options.map((o) => toOptionView(o, lang, plan.rain_expected !== null));
   return {
     recommendation: plan.recommendation,
     reason: friendlyReason(plan.reason, lang),

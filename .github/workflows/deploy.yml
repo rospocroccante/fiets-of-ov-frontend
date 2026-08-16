@@ -1,0 +1,124 @@
+name: Deploy
+
+# Publishes the built site to Cloudflare Pages, together with the /api proxy function
+# in functions/. What gets deployed - the offline demo or a live build pointed at the
+# backend - is decided by the repository variables read in the build step below.
+#
+# On a fork or a fresh clone there are no Cloudflare credentials, so the guard job
+# below reports "not configured" and the deploy job is skipped. Nothing fails.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-pages
+  cancel-in-progress: true
+
+jobs:
+  # Secrets are not available to a job-level `if`, so the decision is made in a step
+  # and handed on as an output.
+  configured:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "No Cloudflare credentials on this repository, so nothing was deployed." \
+              >> "$GITHUB_STEP_SUMMARY"
+            echo "Add the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets to enable it." \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  deploy:
+    needs: configured
+    if: needs.configured.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # Unset means the offline demo: fixtures, no backend, nothing to pay for. Set the
+      # VITE_API_MODE repository variable to "live" once a backend is reachable.
+      VITE_API_MODE: ${{ vars.VITE_API_MODE || 'mock' }}
+      VITE_API_BASE: ${{ vars.VITE_API_BASE || '/api' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Read the Pages project name
+        id: project
+        run: |
+          name=$(sed -n 's/^name *= *"\(.*\)".*/\1/p' wrangler.toml | head -1)
+          if [ -z "$name" ]; then
+            echo "::error::wrangler.toml has no project name"
+            exit 1
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      # First run on a new account would otherwise fail on a project that does not
+      # exist yet. Creating it here keeps wrangler.toml the only place the name lives.
+      - name: Create the Pages project if it is not there yet
+        run: |
+          name='${{ steps.project.outputs.name }}'
+          # Exact name, from the machine-readable listing. A substring or word match
+          # would accept an unrelated project called "$name-2" - a hyphen is not a word
+          # boundary as far as grep -w is concerned - and then deploy this site into it.
+          if npx --yes wrangler@4 pages project list --json 2>/dev/null \
+              | jq -e --arg n "$name" 'any(.name == $n)' >/dev/null; then
+            echo "Pages project $name already exists."
+          else
+            npx --yes wrangler@4 pages project create "$name" --production-branch=main
+          fi
+
+      - name: Deploy
+        run: npx --yes wrangler@4 pages deploy --branch=main
+
+      # A proxy nobody calls is worse than no proxy, because it reads as finished. This
+      # asks the deployed site for the function's own probe endpoint: an answer proves
+      # Cloudflare is routing /api into functions/api/[[path]].js, and a 404 or the
+      # site's HTML proves it is not.
+      - name: Check that the deployed host really serves /api
+        run: |
+          url="https://${{ steps.project.outputs.name }}.pages.dev/api/__proxy"
+          body=""
+          for attempt in 1 2 3 4 5 6; do
+            body=$(curl -fsS -m 20 "$url" || true)
+            case "$body" in *pages-function*) break ;; esac
+            echo "attempt $attempt: no answer yet from $url"
+            sleep 10
+          done
+          case "$body" in
+            *pages-function*) echo "The /api proxy is live: $body" ;;
+            *)
+              echo "::error::$url did not answer as the proxy function. Response: ${body:-<empty>}"
+              exit 1
+              ;;
+          esac
+          if [ "$VITE_API_MODE" = "live" ]; then
+            case "$body" in
+              *'"backend":"configured"'*) echo "BACKEND_ORIGIN is set on the Pages project." ;;
+              *)
+                echo "::error::This is a live build, but the Pages project has no BACKEND_ORIGIN set, so every route request would fail."
+                exit 1
+                ;;
+            esac
+          fi

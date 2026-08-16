@@ -1,12 +1,15 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { motion, useTransform, useMotionValueEvent } from "framer-motion";
 import { EndpointField } from "./components/EndpointField";
+import { MobileSearchSheet, SearchEntryButton } from "./components/MobileSearch";
 import type { HistoryEntry } from "./components/PlaceInput";
 import { FilterBar } from "./components/FilterBar";
 import type { KindFilter } from "./components/FilterBar";
 import { HeaderMenu } from "./components/HeaderMenu";
 import { HomeAurora } from "./components/HomeAurora";
 import { HomeShortcuts } from "./components/HomeShortcuts";
+import { AdviceAttribution } from "./components/Attribution";
+import { PrivacyNotice } from "./components/PrivacyNotice";
 import { NavigationOverlay } from "./components/NavigationOverlay";
 import { PlaceInfoCard } from "./components/PlaceInfoCard";
 import type { PlaceInfo } from "./components/PlaceInfoCard";
@@ -65,6 +68,43 @@ interface PopularTrip {
   to: string;
 }
 
+// Where the home stage finishes fading. homeOpacity below is interpolated to 0 over
+// exactly this range, and the pointer-events/inert gate uses the same number so the
+// two can never disagree again.
+const HOME_FADED_AT = 0.5;
+
+// Phone geometry, in one place. The floating pill is not part of the home's flow (it
+// belongs to the morph, not to either stage), so the home has to leave it a hole: the
+// hero ends, HOME_PILL_GAP of air, the pill, HOME_PILL_CLEAR of air, and only then the
+// region the user scrolls. Both halves are measured rather than guessed — the hero is
+// two lines of headline in English and can be three in Dutch, and the pill's height is
+// whatever its content makes it.
+const HOME_PILL_GAP = 20;
+const HOME_PILL_CLEAR = 16;
+// The pill's resting offset on anything wider: unchanged, and unmeasured.
+const DESKTOP_PILL_TOP = 260;
+
+// Height of an element, live. Used for the two boxes the phone home has to fit around
+// each other. Returns 0 where there is no layout (jsdom) or while disabled, and the
+// callers fall back to the desktop constants in that case.
+function useLiveHeight(ref: React.RefObject<HTMLElement>, enabled: boolean): number {
+  const [height, setHeight] = useState(0);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!enabled || !el) {
+      setHeight(0);
+      return;
+    }
+    const read = () => setHeight(el.offsetHeight);
+    read();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref, enabled]);
+  return height;
+}
+
 const POPULAR: PopularTrip[] = [
   { from: "Amsterdam Centraal", to: "Vondelpark" },
   { from: "De Pijp", to: "Rijksmuseum" },
@@ -92,10 +132,21 @@ export default function App() {
   // Turn-by-turn mode: drives the live-location watch, the wake lock, the maneuver
   // overlay and the follow camera. The whole nav chain derives from this one flag.
   const [navigating, setNavigating] = useState(false);
+  // The privacy notice opens over whichever stage is on screen, so it is state here
+  // rather than inside the header menu (which only exists on the map stage).
+  const [privacyOpen, setPrivacyOpen] = useState(false);
 
   // progressIs1 gates map interactivity and pointer-events so mid-morph clicks
   // don't misfire. Tracked via a motion value event (no re-render on every frame).
   const [progressIs1, setProgressIs1] = useState(false);
+  // …and homeLive is the same gate for the other stage. It has to be a *separate*
+  // threshold: the home fades out over the first half of the morph (homeOpacity hits 0
+  // at progress 0.5) but used to keep pointer-events and stay out of `inert` until
+  // progress reached 1. In between, the home was invisible and still took taps — a
+  // real touch at the middle of the screen at 0.6 hit a popular-trip button nobody
+  // could see and planned that trip. Invisible now means untouchable, at the same
+  // number the fade uses.
+  const [homeLive, setHomeLive] = useState(true);
   // Whether the map subtree may render at all. It starts false so a visitor who never
   // leaves the home never downloads leaflet; the morph moving off zero is the last
   // possible moment to turn it on, and by then WARM_EVENTS has normally had the chunk
@@ -104,6 +155,7 @@ export default function App() {
   const [mapWanted, setMapWanted] = useState(isMapLoaded);
   useMotionValueEvent(progress, "change", (v) => {
     setProgressIs1(v > 0.99);
+    setHomeLive(v < HOME_FADED_AT);
     if (v > 0) setMapWanted(true);
   });
 
@@ -200,6 +252,7 @@ export default function App() {
     setRadar(false);
     setPlaceInfo(null);
     setNavigating(false);
+    setSearchOpen(false);
     toHome();
   }
   function commitSearch() {
@@ -213,7 +266,20 @@ export default function App() {
     setDestination(destination && destination.label === to ? destination : { label: to, query: to });
     setSelectedMode(null);
     submitted();
-    toMap();
+    // Searching from the phone sheet cannot start the morph here. toMap() is a *smooth*
+    // scroll, and the sheet's scroll-restore — the cleanup of the effect that locks the
+    // body, which fires as it unmounts — is an instant window.scrollTo(0, y) with the
+    // offset the sheet was opened at. The instant one lands second and cancels the
+    // smooth one: the plan ran, three options rendered, and the app sat on the home
+    // stage indefinitely. So the sheet closes first and the morph waits for it to be
+    // gone; the effect below is what runs after that. Every other caller (the desktop
+    // pill, the popular trips, a saved place) has no sheet mounted and goes straight.
+    if (searchOpen) {
+      mapAfterSheet.current = true;
+      setSearchOpen(false);
+    } else {
+      toMap();
+    }
   }
   function pickPopular(t: PopularTrip) {
     setFromText(t.from);
@@ -442,9 +508,9 @@ export default function App() {
   // Morph transforms (progress 0 = home, 1 = map). jsdom has no layout, so these
   // only affect visuals at runtime; they are inert in unit tests. The search pill is a
   // single shared element that flies from a centered hero pill to the map's top bar.
-  const homeOpacity = useTransform(progress, [0, 0.5], [1, 0]);
+  const homeOpacity = useTransform(progress, [0, HOME_FADED_AT], [1, 0]);
   const homeY = useTransform(progress, [0, 1], [0, -30]);
-  const chromeOpacity = useTransform(progress, [0.5, 1], [0, 1]);
+  const chromeOpacity = useTransform(progress, [HOME_FADED_AT, 1], [0, 1]);
   const mapOpacity = useTransform(progress, [0.35, 1], [0, 1]);
   // Wide screens: 9px lands the ~62px pill vertically centred in the 80px (h-20)
   // header, between the wordmark and the menu. Below lg there is no room for all
@@ -452,7 +518,93 @@ export default function App() {
   // its own row tight underneath (y=60) instead of covering the wordmark. The map
   // stage's top padding follows the same breakpoint (pt-[8.25rem] vs lg:pt-24).
   const wideChrome = useMediaQuery("(min-width: 1024px)", true);
-  const searchY = useTransform(progress, [0, 1], [260, wideChrome ? 9 : 60]);
+  // A phone on its side: 390px of height, of which the header, the resting search pill
+  // and the filter bar took 194 before the results column got a pixel — 49.7% of the
+  // screen. The three boxes above the content are sized for a portrait phone and there
+  // is no reason they should be here, so on a short viewport the header comes down to a
+  // 48px bar (the back control is still 44px inside it), the pill loses a padding step,
+  // and the stage's headroom follows both down. Not on a wide short window: there the
+  // pill flies into the top bar instead of resting under it, and shrinking that bar
+  // would leave it hanging out of the bottom.
+  const shortChrome = useMediaQuery("(max-height: 500px)") && !wideChrome;
+  // The phone layout. Two conditions, because width alone described the wrong set of
+  // devices: a phone turned on its side is 844px wide and fell through to the desktop
+  // pill, which put a floating search field over a home that scrolls underneath it —
+  // at 844x390 a touch at the centre of a popular-trip card landed in the From input.
+  // The second clause is that phone: short and touched, whatever its width. It cannot
+  // catch a laptop, which is `pointer: fine` however short the window gets, and it does
+  // not touch the 640-1024px desktop band at all. jsdom's matchMedia answers false to
+  // both, which keeps every existing test — and the desktop layout it describes — on
+  // the unchanged path.
+  const isPhone = useMediaQuery("(max-width: 639.98px), (max-height: 500px) and (pointer: coarse)");
+  // A phone on its side, and only that: `shortChrome` alone also describes a laptop
+  // window dragged short, where the pill still holds two inputs, a swap and a Search
+  // button and could not share a 56px bar with the wordmark and the menu.
+  //
+  // On this one layout the pill flies *into* the header instead of resting under it.
+  // The arithmetic left no other option: two thirds of a 390px screen is 260px, which
+  // leaves 130px for everything above it, and a 48px header with a 54px pill on its own
+  // row underneath already spends 106 before the filter bar's 44px targets get a pixel.
+  // The phone pill carries one control (SearchEntryButton), so at 844 wide it fits in
+  // the 567px of bar between the wordmark and the menu with room either side — which is
+  // exactly the arrangement the app already uses from `lg` up.
+  const landscapePhone = isPhone && shortChrome;
+  const heroRef = useRef<HTMLDivElement>(null);
+  const pillRef = useRef<HTMLDivElement>(null);
+  const heroHeight = useLiveHeight(heroRef, isPhone);
+  const pillHeight = useLiveHeight(pillRef, isPhone);
+  // On a phone the pill rests just under the hero instead of at a fixed 260px. At 260
+  // it covered the last line of the subtitle on every portrait phone (23px of a 24px
+  // line), and a tap aimed at the end of that sentence landed in the To field.
+  const pillTop = isPhone && heroHeight > 0 ? heroHeight + HOME_PILL_GAP : DESKTOP_PILL_TOP;
+  // Every number here is an offset inside the pill's own containing block, whose top is
+  // env(safe-area-inset-top) — so 60 means "60px below the notch", not 60px below the
+  // physical edge, and the header (3.5rem + the same inset) is cleared on any phone.
+  // 3 centres the 50px landscape pill in its 56px header.
+  const searchY = useTransform(
+    progress,
+    [0, 1],
+    [pillTop, wideChrome ? 9 : landscapePhone ? 3 : shortChrome ? 52 : 60],
+  );
+  // The hole the home's scroller leaves for the pill.
+  const pillSlot =
+    pillHeight > 0 ? HOME_PILL_GAP + pillHeight + HOME_PILL_CLEAR : HOME_PILL_GAP + 58 + HOME_PILL_CLEAR;
+
+  // The phone search screen, and the control that opened it: focus has to go back
+  // there when the screen closes, or a keyboard user is dropped at the top of the page.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchFocusField, setSearchFocusField] = useState<"from" | "to">("from");
+  const searchTriggerRef = useRef<HTMLButtonElement>(null);
+  const searchWasOpen = useRef(false);
+  // Set by commitSearch when the search came from the sheet: the morph it asked for is
+  // owed once the sheet has unmounted. React runs an unmounting component's effect
+  // cleanups before it runs anyone's effects for that same commit, so by the time this
+  // fires the sheet's scroll-restore has already happened and the smooth scroll below
+  // is the last word on where the page goes.
+  const mapAfterSheet = useRef(false);
+  useEffect(() => {
+    if (searchWasOpen.current && !searchOpen) {
+      searchTriggerRef.current?.focus();
+      if (mapAfterSheet.current) {
+        mapAfterSheet.current = false;
+        toMap();
+      }
+    }
+    searchWasOpen.current = searchOpen;
+  }, [searchOpen, toMap]);
+  // While the phone search screen is up it is the only thing on the page. It says so
+  // (aria-modal), and this is what makes that true: both morph stages and the chrome
+  // between them go inert and hidden, so Tab cannot walk behind the sheet, a screen
+  // reader cannot read the map out from under it, and a stray touch cannot reach the
+  // home. The scroll lock that goes with it lives in MobileSearchSheet.
+  const searchBlocking = isPhone && searchOpen;
+  const behindSheet = searchBlocking ? { "aria-hidden": true as const } : {};
+  function openSearch() {
+    // The keyboard opens on the field that still needs something. With a whole trip
+    // already entered the reason to come back is nearly always a new destination.
+    setSearchFocusField(fromText.trim() ? "to" : "from");
+    setSearchOpen(true);
+  }
 
   return (
     <div
@@ -460,6 +612,19 @@ export default function App() {
       className={reduced ? "relative h-dvh" : "relative h-[200dvh]"}
       data-reduced={reduced ? "true" : "false"}
     >
+      {/* Skip link. Tab order starts with the header wordmark and menu and then the
+          search pill's two fields, swap and Search button, so without this a keyboard
+          user pays six stops before reaching the advice. The target follows the morph:
+          only one of the two stages is ever the live main landmark, and pointing at
+          the inert one would land focus somewhere nobody can see. `fixed`, not
+          `absolute`: the container is two viewports tall and the map stage rests at
+          the bottom of it. */}
+      <a
+        href={progressIs1 ? "#fov-map-main" : "#fov-home-main"}
+        className="sr-only focus:not-sr-only focus:fixed focus:left-[calc(0.75rem+env(safe-area-inset-left))] focus:top-[calc(0.75rem+env(safe-area-inset-top))] focus:z-[3000] focus:inline-flex focus:min-h-[44px] focus:items-center focus:rounded-full focus:bg-white focus:px-4 focus:text-sm focus:font-semibold focus:text-brand focus:shadow-lg dark:focus:bg-night-raised dark:focus:text-emerald-300"
+      >
+        {t("skipToContent")}
+      </a>
       {/* Scroll snap sentinels: resting mid-morph leaves a half-faded, half-dead UI, so
           proximity snap (see index.css) resolves the scroll to whichever stage is closer. */}
       {!reduced && (
@@ -479,10 +644,23 @@ export default function App() {
             the morph completes: it is fully rendered from the first paint, so without
             this a screen reader on the home reads out the whole map/results UI, and Tab
             walks into controls nobody can see. */}
+        {/* The top padding clears the header and the search pill resting under it. On a
+            landscape phone that headroom was 52.8% of a 390px-tall screen before the
+            results column got any of it, then 49.7%, then 43.6% — still nowhere near
+            leaving the map and the advice two thirds of the screen. With the pill inside
+            the header on that layout there is nothing under the bar to clear any more,
+            so the headroom is the 56px bar plus 8px of air, and the whole stack above
+            the content comes to 120px of 390 (30.8%). Every other tier is unchanged. */}
         <motion.div
-          className="absolute inset-0 z-0 flex flex-col bg-white pt-[calc(8.25rem+env(safe-area-inset-top))] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] dark:bg-night-bg lg:pt-[calc(6rem+env(safe-area-inset-top))]"
-          style={{ opacity: mapOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
-          {...inertUnless(progressIs1)}
+          data-fov="map-stage"
+          className={`absolute inset-0 z-0 flex flex-col bg-white pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] dark:bg-night-bg ${
+            landscapePhone
+              ? "pt-[calc(4rem+env(safe-area-inset-top))]"
+              : "pt-[calc(8.25rem+env(safe-area-inset-top))] [@media(max-height:500px)]:pt-[calc(6rem+env(safe-area-inset-top))] lg:pt-[calc(6rem+env(safe-area-inset-top))]"
+          }`}
+          style={{ opacity: mapOpacity, pointerEvents: progressIs1 && !searchBlocking ? "auto" : "none" }}
+          {...inertUnless(progressIs1 && !searchBlocking)}
+          {...behindSheet}
         >
           <div className="px-4 md:px-6">
             <FilterBar
@@ -495,27 +673,66 @@ export default function App() {
               onToggleRadar={() => setRadar((r) => !r)}
               kinds={kinds}
               onToggleKind={(m) => setKinds((s) => ({ ...s, [m]: !s[m] }))}
+              phone={isPhone}
+              compact={landscapePhone}
             />
           </div>
           {/* Below md the two panes stack, map first (Maps-style: map on top, results
               scrolling under it); from md up they sit side by side, results left. */}
-          <main className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:flex-row md:gap-4 md:px-6 md:pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+          {/* tabIndex -1 so the skip link can put focus here; without it the browser
+              scrolls to the anchor but focus stays where it was and the next Tab
+              starts again from the top. */}
+          <main
+            id="fov-map-main"
+            tabIndex={-1}
+            className={`flex min-h-0 flex-1 flex-col gap-3 px-4 focus:outline-none md:flex-row md:gap-4 md:px-6 ${
+              // 24px of floor is a portrait margin. On a phone turned sideways it is the
+              // last 16px between the advice and two thirds of the screen.
+              landscapePhone
+                ? "pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
+                : "pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+            }`}
+          >
             <section
+              data-fov="results-column"
               className={`order-2 min-h-0 flex-1 overflow-y-auto md:order-1 md:flex-none ${
                 hideMap ? "md:w-full" : "md:w-1/2"
               }`}
             >
-              <WeatherStrip
-                lat={view.origin?.lat ?? AMS_CENTER.lat}
-                lon={view.origin?.lon ?? AMS_CENTER.lon}
-              />
+              {/* On a phone turned sideways the column is ~262px tall and this strip's
+                  55px is the difference between one readable option row and two. The
+                  forecast still reaches the rider there — in the banner under the list,
+                  with the Open-Meteo credit beside it. Everywhere else the strip leads
+                  the column as before. */}
+              {!landscapePhone && (
+                <WeatherStrip
+                  lat={view.origin?.lat ?? AMS_CENTER.lat}
+                  lon={view.origin?.lon ?? AMS_CENTER.lon}
+                  compact={isPhone}
+                />
+              )}
               <ResultsPanel
                 state={panel}
                 onStartNav={route ? () => setNavigating(true) : undefined}
+                narrow={isPhone}
               />
+              {/* Weather and OpenStreetMap credit for the advice itself, which stays on
+                  screen whether or not the map is showing. Open-Meteo's CC BY 4.0 terms
+                  ask for a link next to where its data is shown, and the forecast strip
+                  is at the top of this column. */}
+              <AdviceAttribution />
             </section>
+            {/* The phone split. 40dvh of map left the results column 246px on a 360x800
+                phone, which is not enough for the option rows to arrive on screen
+                whatever is above them: the map took 40% of the window, the chrome above
+                it 29%, and the product got the 31% left over. 32dvh puts the column at
+                310px against 256px of map — the larger half now belongs to the advice,
+                and the map is still bigger than the whole column used to be. From `md`
+                up the two panes are side by side and this height does not apply at all.
+                "Hide map" in the filter bar remains the way to give the column the
+                whole screen. */}
             {!hideMap && (
-              <section className="relative order-1 h-[40dvh] shrink-0 md:order-2 md:h-auto md:w-1/2">
+              <section className="relative order-1 h-[32dvh] shrink-0 md:order-2 md:h-auto md:w-1/2">
                 {armed && (
                   <div className="absolute left-3 top-3 z-[1000] rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow dark:bg-emerald-600">
                     {armed === "start" ? t("clickMapSetStart") : t("clickMapSetEnd")}
@@ -588,6 +805,20 @@ export default function App() {
           </main>
         </motion.div>
 
+        {/* The home's background, in a layer of its own between the map stage (z-0) and
+            the home (z-10). It fades on exactly the same curve as the home and never
+            moves: the home lifts 30px through the morph and clips whatever it holds, so
+            an aurora inside it was cut off at the foot of the screen for as long as the
+            fade lasted. Decorative, aria-hidden and untouchable, so it needs nothing
+            else from either stage. */}
+        <motion.div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-[5]"
+          style={{ opacity: homeOpacity }}
+        >
+          <HomeAurora dark={dark} />
+        </motion.div>
+
         {/* Home stage (progress -> 0): headline + popular, with a gap for the floating pill.
             overflow-y-auto is the phone fix: the stage is `absolute inset-0` inside an
             `overflow-hidden` sticky box and the page scroll is spent on the morph, so
@@ -598,14 +829,28 @@ export default function App() {
         <motion.div
           // The map stage owns the document's only <main> element; while the home is the
           // stage on screen that one is inert, so the landmark moves here instead of
-          // leaving the visible screen without one. Never both: the two conditions are
-          // exact opposites.
-          role={progressIs1 ? undefined : "main"}
-          className="absolute inset-0 z-10 overflow-y-auto overflow-x-hidden pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
-          style={{ opacity: homeOpacity, y: homeY, pointerEvents: progressIs1 ? "none" : "auto" }}
-          {...inertUnless(!progressIs1)}
+          // leaving the visible screen without one. Never both.
+          role={homeLive ? "main" : undefined}
+          id="fov-home-main"
+          data-fov="home-stage"
+          tabIndex={-1}
+          // pt as well as the other three: the hero's own headline used to start 48px
+          // down, which is under the status bar on a notched phone now that the page
+          // paints there. The pill's containing block starts at the same inset, so
+          // pillTop (measured from the hero's height) still lands it under the hero.
+          className={`absolute inset-0 z-10 overflow-x-hidden pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)] focus:outline-none ${
+            // On a phone the stage is a column: a hero that does not move, a hole for
+            // the floating pill, and a scroller below it. It used to be one scroller
+            // with the pill hanging over its middle, which meant the content passed
+            // *under* the pill as you scrolled — at the bottom of the home the first
+            // popular trip sat behind it and the tap that looked like it opened that
+            // trip focused the To field instead. Nothing scrolls under the pill now.
+            isPhone ? "flex flex-col overflow-y-hidden" : "overflow-y-auto"
+          }`}
+          style={{ opacity: homeOpacity, y: homeY, pointerEvents: homeLive && !searchBlocking ? "auto" : "none" }}
+          {...inertUnless(homeLive && !searchBlocking)}
+          {...behindSheet}
         >
-          <HomeAurora dark={dark} />
           {/* Theme and language switches reachable from the home too (the header only
               exists on the map stage). z-10 is load-bearing: the headline <section>
               below is `relative` and comes later in the DOM, so at z-index auto it
@@ -634,17 +879,31 @@ export default function App() {
               </span>
             </button>
           </div>
-          <section className="relative mx-auto max-w-4xl px-6 pt-20 text-center">
-            <h1 className="text-4xl font-bold leading-tight text-gray-900 dark:text-night-text sm:text-5xl">
-              {t("headlineTop")}
-              <br />
-              <span className={TEXT_GRADIENT}>{t("headlineBottom")}</span>
-            </h1>
-            <p className="mx-auto mt-5 max-w-2xl text-base text-gray-600 dark:text-night-muted sm:text-lg">
-              {t("subtitle")}
-            </p>
-          </section>
-          <section className="mx-auto mt-[7.5rem] w-full max-w-4xl px-6 text-left">
+          {/* The measured hero. Its height is what tells the pill where to rest on a
+              phone, so the wrapper is the thing observed, not the section inside it. */}
+          <div ref={heroRef} data-fov="home-hero" className={isPhone ? "shrink-0" : undefined}>
+            {/* Less headroom on a phone: every pixel above the hero is a pixel the
+                popular trips below the pill do not get. Unchanged from `sm` up. */}
+            <section className="relative mx-auto max-w-4xl px-6 pt-12 text-center sm:pt-20">
+              <h1 className="text-4xl font-bold leading-tight text-gray-900 dark:text-night-text sm:text-5xl">
+                {t("headlineTop")}
+                <br />
+                <span className={TEXT_GRADIENT}>{t("headlineBottom")}</span>
+              </h1>
+              <p className="mx-auto mt-5 max-w-2xl text-base text-gray-600 dark:text-night-muted sm:text-lg">
+                {t("subtitle")}
+              </p>
+            </section>
+          </div>
+          {/* The hole the pill floats in. Only on a phone: above `sm` the pill rests at
+              a fixed 260px and the popular section's own top margin already clears it. */}
+          {isPhone && (
+            <div aria-hidden="true" className="shrink-0" style={{ height: pillSlot }} />
+          )}
+          {/* Everything the user scrolls. `contents` above `sm` so the desktop home is
+              byte-for-byte the single flow it has always been. */}
+          <div className={isPhone ? "min-h-0 flex-1 overflow-y-auto overflow-x-hidden" : "contents"}>
+          <section className="mx-auto mt-6 w-full max-w-4xl px-6 text-left sm:mt-[7.5rem]">
             <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-night-text">{t("popularTrips")}</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {POPULAR.map((trip, i) => {
@@ -655,6 +914,7 @@ export default function App() {
                 return (
                   <button
                     key={`${trip.from}-${trip.to}`}
+                    data-fov="popular-trip"
                     onClick={() => pickPopular(trip)}
                     aria-label={`${trip.from} → ${trip.to}`}
                     className="group flex flex-col gap-3 rounded-card border border-white/60 bg-white/70 p-5 text-left shadow-sm ring-1 ring-slate-900/5 backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-white/90 hover:shadow-lg dark:border-white/10 dark:bg-white/10 dark:ring-white/5 dark:hover:bg-white/15"
@@ -692,6 +952,18 @@ export default function App() {
             onPickRecent={pickRecent}
             onClearRecents={clearRecents}
           />
+          {/* The home has no header, so the notice needs its own way in here. It is the
+              last thing on the page, where a footer link belongs. */}
+          <div className="mx-auto mt-8 flex w-full max-w-4xl justify-center px-6 pb-6">
+            <button
+              type="button"
+              onClick={() => setPrivacyOpen(true)}
+              className="inline-flex min-h-[44px] items-center rounded-full px-4 text-sm text-slate-500 underline underline-offset-4 transition hover:text-slate-800 dark:text-night-subtle dark:hover:text-night-text"
+            >
+              {t("privacy")}
+            </button>
+          </div>
+          </div>
         </motion.div>
 
         {/* Top bar chrome (progress -> 1): wordmark (Home) + Menu, behind the search pill.
@@ -704,19 +976,65 @@ export default function App() {
             the header, which is inert: the two never share a visible moment (homeOpacity
             hits 0 at progress 0.5, chromeOpacity only leaves 0 from there on). */}
         <motion.header
-          className="absolute inset-x-0 top-0 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center justify-between border-b border-gray-100 bg-white/95 pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] dark:border-white/10 dark:bg-night-bg/95 sm:pl-[calc(1.5rem+env(safe-area-inset-left))] sm:pr-[calc(1.5rem+env(safe-area-inset-right))] lg:h-[calc(5rem+env(safe-area-inset-top))]"
-          style={{ opacity: chromeOpacity, pointerEvents: progressIs1 ? "auto" : "none" }}
-          {...inertUnless(progressIs1)}
+          className={`absolute inset-x-0 top-0 flex items-center justify-between border-b border-gray-100 bg-white/95 pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] dark:border-white/10 dark:bg-night-bg/95 sm:pl-[calc(1.5rem+env(safe-area-inset-left))] sm:pr-[calc(1.5rem+env(safe-area-inset-right))] ${
+            // Decided in JS rather than by a media variant: the short tier has to beat
+            // `lg` on a wide short window, and which of two arbitrary variants wins is
+            // a question about the generated stylesheet's order, not about the design.
+            // A phone on its side gets 8px more than the plain short tier because the
+            // pill lives inside this bar there rather than under it.
+            landscapePhone
+              ? "h-[calc(3.5rem+env(safe-area-inset-top))]"
+              : shortChrome
+                ? "h-[calc(3rem+env(safe-area-inset-top))]"
+                : "h-[calc(3.5rem+env(safe-area-inset-top))] lg:h-[calc(5rem+env(safe-area-inset-top))]"
+          }`}
+          style={{ opacity: chromeOpacity, pointerEvents: progressIs1 && !searchBlocking ? "auto" : "none" }}
+          {...inertUnless(progressIs1 && !searchBlocking)}
+          {...behindSheet}
         >
-          <button
-            onClick={goHome}
-            className="flex min-h-[44px] items-center text-xl font-bold text-brand dark:text-emerald-300"
-          >
-            Fiets of OV
-          </button>
+          <div className="flex min-w-0 items-center gap-1">
+            {/* Getting off the map. On a phone the only way back used to be the wordmark,
+                which is a 5px-tall word in the corner reading as branding rather than as
+                a control, and nothing else on the stage said the home was still there.
+                This is the arrow every map app puts in that corner. It walks back to the
+                stage the user came from and leaves the trip alone; the wordmark next to
+                it still means "home, and start again".
+                The arrow is inline SVG, not the icon font: that subset is frozen and a
+                glyph missing from it paints as the word "ARROW_BACK" across the bar. */}
+            {isPhone && (
+              <button
+                type="button"
+                data-fov="map-back"
+                aria-label={t("backToHome")}
+                onClick={toHome}
+                className="-ml-2 flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 dark:text-night-muted dark:hover:bg-night-hover"
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="h-6 w-6"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M19 12H5" />
+                  <path d="M12 19l-7-7 7-7" />
+                </svg>
+              </button>
+            )}
+            <button
+              onClick={goHome}
+              className="flex min-h-[44px] items-center truncate text-xl font-bold text-brand dark:text-emerald-300"
+            >
+              Fiets of OV
+            </button>
+          </div>
           <HeaderMenu
             onClearRecents={clearRecents}
             onClearSaved={clearSaved}
+            onOpenPrivacy={() => setPrivacyOpen(true)}
             dark={dark}
             onToggleTheme={toggleTheme}
           />
@@ -725,11 +1043,48 @@ export default function App() {
         {/* Shared morphing search pill: usable in both stages, flies center -> top bar.
             On phones it keeps a side margin and drops the decorative bits ("Now", the
             divider) so the two fields and the button always fit. */}
+        {/* The pill's box, spelled out rather than assembled from conflicting utilities:
+            which of two same-specificity Tailwind classes wins is a question about the
+            generated stylesheet's order, and left/right/width is not a question to leave
+            to that.
+
+            Portrait and desktop: 12px in from each edge plus whatever the device's own
+            left/right inset is, centred, capped at max-w-2xl — identical geometry to the
+            `w-[calc(100%-1.5rem)]` it replaces whenever the insets are 0.
+
+            Landscape phone: the pill is in the header row, so it stops short of the
+            wordmark on its left (which ends at 166px) and the menu on its right (which
+            starts at 733px), with ~9px of air either side. */}
         <motion.div
+          ref={pillRef}
           role="search"
-          className="absolute inset-x-0 top-0 z-30 mx-auto flex w-[calc(100%-1.5rem)] max-w-2xl items-center gap-0.5 rounded-full border border-gray-200 bg-white p-1.5 shadow-md dark:border-night-border dark:bg-night-surface sm:gap-2 sm:p-2 xl:max-w-3xl"
-          style={{ y: searchY }}
+          data-fov="search-pill"
+          data-rest-y={pillTop}
+          className={`absolute top-[env(safe-area-inset-top)] z-30 mx-auto flex w-auto items-center gap-0.5 rounded-full border border-gray-200 bg-white shadow-md dark:border-night-border dark:bg-night-surface sm:gap-2 ${
+            landscapePhone
+              ? "left-[calc(11rem+env(safe-area-inset-left))] right-[calc(7.5rem+env(safe-area-inset-right))] max-w-none p-0.5"
+              : `left-[calc(0.75rem+env(safe-area-inset-left))] right-[calc(0.75rem+env(safe-area-inset-right))] max-w-2xl xl:max-w-3xl ${
+                  shortChrome ? "p-1" : "p-1.5 sm:p-2"
+                }`
+          }`}
+          style={{ y: searchY, pointerEvents: searchBlocking ? "none" : "auto" }}
+          // The pill opened the sheet, so it is behind it now — including for the focus
+          // ring, which is why inert leaves before the close handler puts focus back on
+          // the trigger (React commits the DOM, then runs the effect).
+          {...inertUnless(!searchBlocking)}
+          {...behindSheet}
         >
+          {isPhone ? (
+            // One target, full width, unmistakable. The form it stands for lives in
+            // MobileSearchSheet, which owns the whole screen.
+            <SearchEntryButton
+              ref={searchTriggerRef}
+              fromText={fromText}
+              toText={toText}
+              onOpen={openSearch}
+            />
+          ) : (
+          <>
           <div className="flex min-w-0 flex-1 items-center sm:px-3">
             <EndpointField
               value={fromText}
@@ -771,6 +1126,8 @@ export default function App() {
           >
             {t("search")}
           </button>
+          </>
+          )}
         </motion.div>
       </div>
 
@@ -780,6 +1137,31 @@ export default function App() {
       <p aria-live="polite" className="sr-only">
         {liveStatus}
       </p>
+
+      {/* Outside both morph stages: one of the two is always inert, and a dialog
+          opened from the inert one would be unreachable. The phone search screen is
+          here for the same reason — it opens from the pill, which belongs to neither. */}
+      {isPhone && searchOpen && (
+        <MobileSearchSheet
+          fromText={fromText}
+          toText={toText}
+          onFromText={setFromText}
+          onToText={setToText}
+          onSelectFrom={selectFrom}
+          onSelectTo={selectTo}
+          onLocateFrom={locateFrom}
+          onLocateTo={locateTo}
+          savedPlaces={savedPlaces}
+          history={endpointHistory}
+          onPickHistoryFrom={pickHistoryFrom}
+          onPickHistoryTo={pickHistoryTo}
+          onSwap={swap}
+          onSubmit={commitSearch}
+          onClose={() => setSearchOpen(false)}
+          focusField={searchFocusField}
+        />
+      )}
+      {privacyOpen && <PrivacyNotice onClose={() => setPrivacyOpen(false)} />}
 
       {!isLive() && (
         <div className="pointer-events-none fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))] rounded-full bg-brand px-3 py-1 text-xs text-white">

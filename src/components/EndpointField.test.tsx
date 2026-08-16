@@ -113,3 +113,81 @@ describe("EndpointField", () => {
     });
   });
 });
+
+describe("EndpointField accessible name", () => {
+  it("gives the combobox an accessible name, which a placeholder alone never is", () => {
+    render(
+      <EndpointField
+        value=""
+        placeholder="From"
+        onText={vi.fn()}
+        onSelect={vi.fn()}
+        onLocate={vi.fn()}
+      />
+    );
+
+    // getByRole matches on the computed accessible name, and a placeholder does not
+    // contribute one for an element carrying role="combobox": drop the aria-label and
+    // this query finds nothing. The name matching the visible hint is deliberate
+    // (WCAG 2.5.3, label in name), so the assertion is on the attribute as well.
+    const input = screen.getByRole("combobox", { name: "From" });
+    expect(input).toHaveAttribute("aria-label", "From");
+    expect(input).toHaveAttribute("placeholder", "From");
+  });
+});
+
+test("clear is only drawn when there is something to clear, and does not blur the field", () => {
+  const onText = vi.fn();
+  const { rerender } = render(
+    <EndpointField
+      value=""
+      placeholder="From"
+      onText={onText}
+      onSelect={() => {}}
+      onLocate={() => {}}
+      onClear={() => onText("")}
+      clearLabel="Clear From"
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Clear From" })).toBeNull();
+
+  rerender(
+    <EndpointField
+      value="Amsterdam Centraal"
+      placeholder="From"
+      onText={onText}
+      onSelect={() => {}}
+      onLocate={() => {}}
+      onClear={() => onText("")}
+      clearLabel="Clear From"
+    />,
+  );
+  const clear = screen.getByRole("button", { name: "Clear From" });
+  // A fingertip target, not a 20px glyph.
+  expect(clear).toHaveClass("min-h-[44px]", "min-w-[44px]");
+
+  // mousedown is what would blur the input and close the suggestion list under it, so
+  // it has to be swallowed: on a phone that blur also drops the keyboard.
+  const field = screen.getByPlaceholderText("From");
+  field.focus();
+  const mousedown = fireEvent.mouseDown(clear);
+  expect(mousedown).toBe(false); // preventDefault() was called
+  expect(document.activeElement).toBe(field);
+
+  fireEvent.click(clear);
+  expect(onText).toHaveBeenCalledWith("");
+});
+
+test("without onClear the field is exactly what it always was", () => {
+  render(
+    <EndpointField
+      value="Amsterdam Centraal"
+      placeholder="From"
+      onText={() => {}}
+      onSelect={() => {}}
+      onLocate={() => {}}
+    />,
+  );
+  expect(screen.getAllByRole("button")).toHaveLength(1);
+  expect(screen.getByRole("button", { name: /use my location/i })).toBeInTheDocument();
+});

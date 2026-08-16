@@ -80,7 +80,10 @@ test("dragging the end pin re-plans and updates the To field to the reverse-geoc
     if (text.startsWith("0")) throw new Error("plan still loading");
   });
 
-  // Drag the B pin to Vondelpark; App reverse-geocodes and re-plans.
+  // Drag the B pin to Vondelpark; App reverse-geocodes and re-plans. The map has to be
+  // mounted first: the pin is a Marker inside it, and the mock only knows a marker's
+  // drag handler once that Marker has rendered.
+  await whenMapMounted();
   __fireMarkerDragEnd("end", 52.358, 4.8686);
 
   const toField = await screen.findByDisplayValue(/vondelpark/i);
@@ -91,6 +94,7 @@ test("right-click 'Directions from here' sets the From field", async () => {
   renderApp();
   startTrip();
 
+  await whenMapMounted();
   act(() => __fireMapContextMenu(52.358, 4.8686));
   fireEvent.click(await screen.findByRole("button", { name: /directions from here/i }));
 
@@ -102,6 +106,7 @@ test("right-click 'Directions to here' sets the To field", async () => {
   renderApp();
   startTrip();
 
+  await whenMapMounted();
   act(() => __fireMapContextMenu(52.358, 4.8686));
   fireEvent.click(await screen.findByRole("button", { name: /directions to here/i }));
 
@@ -110,11 +115,11 @@ test("right-click 'Directions to here' sets the To field", async () => {
 });
 
 test("What's here shows the place card; saving adds a home chip; From here fills the field", async () => {
-  window.localStorage.clear();
   renderApp();
   startTrip();
 
   // Right-click near Vondelpark (a KNOWN mock place) and ask what's there.
+  await whenMapMounted();
   act(() => __fireMapContextMenu(52.3581, 4.8687));
   fireEvent.click(await screen.findByRole("button", { name: /what's here/i }));
 
@@ -129,7 +134,6 @@ test("What's here shows the place card; saving adds a home chip; From here fills
 });
 
 test("a successful search is recorded in recents (persisted locally)", async () => {
-  window.localStorage.clear();
   renderApp();
   startTrip();
   await waitFor(() => {
@@ -156,7 +160,6 @@ test("mode filter chips hide options for real: Transit off removes the transit c
 });
 
 test("menu clears recent searches", async () => {
-  window.localStorage.clear();
   renderApp();
   startTrip();
   await waitFor(() => {
@@ -169,7 +172,6 @@ test("menu clears recent searches", async () => {
 });
 
 test("Start begins navigation with the overlay up, recents untouched; Exit ends it", async () => {
-  window.localStorage.clear();
   renderApp();
   startTrip();
 
@@ -195,12 +197,12 @@ test("Start begins navigation with the overlay up, recents untouched; Exit ends 
 });
 
 test("Search keeps coordinates for endpoints set via the map (no free-text downgrade)", async () => {
-  window.localStorage.clear();
   renderApp();
   startTrip();
 
   // Set the start from the map: the origin is now a coordinate endpoint whose label
   // fills the From field.
+  await whenMapMounted();
   act(() => __fireMapContextMenu(52.3581, 4.8687));
   fireEvent.click(await screen.findByRole("button", { name: /directions from here/i }));
   await screen.findByDisplayValue(/vondelpark/i);

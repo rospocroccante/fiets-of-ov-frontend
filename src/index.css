@@ -2,6 +2,69 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Icon font, self-hosted. This is byte-for-byte the file the Google Fonts css2 URL
+   below resolves to: a 25 kB subset holding only the glyphs the app uses, with the
+   opsz/wght/FILL/GRAD axes intact (the full variable font is 336 kB). Serving it
+   ourselves takes two cross-origin connections and one render-blocking third-party
+   stylesheet off the critical path, which is the part a phone on a slow network feels.
+
+   The file lives in src/fonts/, not in public/. public/ is copied verbatim, so the URL
+   never changes and a browser holding yesterday's copy keeps it: the day location_on
+   was added to the subset, a warm cache still rendered the word "LOCATION_ON" across
+   the map, and on Cloudflare Pages (long max-age on static assets) it would have kept
+   doing so for a long time. Referenced from here with a relative url(), the font goes
+   through Vite's asset pipeline and is emitted with its content hash in the filename,
+   so new bytes mean a new URL and no cache can serve the old glyph set.
+
+   There is deliberately no <link rel="preload"> for it. Vite does not rewrite a
+   hardcoded href in index.html to the hashed name, so a preload could only be kept by
+   having a build plugin inject it — and a preload whose URL misses the emitted one by a
+   character costs a second download instead of saving a round trip. The price of doing
+   without: the font is now discovered when this stylesheet is parsed rather than from
+   the HTML itself, roughly one extra round trip on the icons. font-display: block is
+   what makes that acceptable — the icons hold blank space and then appear, and no
+   ligature name is ever painted.
+
+   To add an icon you must regenerate the file — the subset is frozen, and a glyph that
+   is not in it renders as its literal ligature name ("dark_mode") rather than as an
+   icon. Fetch the CSS with a browser User-Agent, follow the src: url() in the response,
+   and overwrite src/fonts/material-symbols-rounded-subset.woff2:
+
+   https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,0&icon_names=bedtime,close,cloud,dark_mode,foggy,history,light_mode,location_on,my_location,partly_cloudy_day,partly_cloudy_night,progress_activity,rainy,roundabout_left,roundabout_right,sports_score,star,straight,sunny,thunderstorm,tram,turn_left,turn_right,turn_slight_left,turn_slight_right,u_turn_left,u_turn_right,weather_snowy&display=block
+
+   Keep that icon_names list alphabetical (the API requires it) and in sync with the
+   usages of material-symbols-rounded in src/. src/iconFont.test.ts enforces all three:
+   it reads this list, scans src/ for the glyph names actually rendered, and reads the
+   ligatures back out of the .woff2 itself, so a list edited without regenerating the
+   font fails as loudly as a glyph nobody added. The start pin shipped as the word
+   "LOCATION_ON" across the map before that test existed. The map POI badges are NOT in
+   this font: they are Maki svgs inlined by MapView.tsx. font-display: block is
+   deliberate and matches what the Google stylesheet says: an icon font's fallback is
+   the ligature name in readable text, so a flash of it is worse than a flash of
+   nothing. */
+@font-face {
+  font-family: "Material Symbols Rounded";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: block;
+  src: url("./fonts/material-symbols-rounded-subset.woff2") format("woff2");
+}
+.material-symbols-rounded {
+  font-family: "Material Symbols Rounded";
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
 html, body, #root { height: 100%; margin: 0; }
 body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; color: #111; }
 
@@ -54,6 +117,30 @@ summary:focus-visible {
    closer, so releasing the wheel always lands on a fully working screen. */
 html { scroll-snap-type: y proximity; }
 
+/* The phone search screen arrives over the app rather than replacing it in place, so
+   it gets the one cue that says "this is a new surface, and it came from below": a
+   short rise and fade. 180ms is under the threshold where a transition starts to feel
+   like waiting. Reduced motion drops it entirely — the screen still appears, just
+   without the travel. */
+@keyframes fov-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.fov-sheet {
+  animation: fov-sheet-in 180ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fov-sheet {
+    animation: none;
+  }
+}
+
 /* Maps-style POI labels: a coloured category badge with the place name beside it,
    white halo so the text stays readable over any basemap. Rendered as Leaflet
    divIcons. */
@@ -99,10 +186,40 @@ html { scroll-snap-type: y proximity; }
     1px 0 2px #fff,
     -1px 0 2px #fff;
 }
-/* CARTO dark_matter is near-black out of the box; lift it so streets, water and
-   labels read while staying clearly "dark". */
-.dark .basemap-tiles {
-  filter: brightness(1.6) saturate(1.15);
+/* The two rules the MapLibre basemap needs out of its 70 kB stylesheet, which is not
+   imported (components/Basemap says why): the GL container has to be a positioned,
+   clipping box, because its canvas is absolutely positioned inside it and is drawn
+   deliberately larger than the map. Everything else in that file styles controls this
+   map does not create. */
+.leaflet-container .maplibregl-map {
+  position: relative;
+  overflow: hidden;
+}
+.leaflet-container .maplibregl-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* What Leaflet paints where no tile does. leaflet.css ships
+   `.leaflet-container { background: #ddd }` (leaflet.css:261), and at minimum zoom the
+   strip above the top of the world is exactly that: a #dddddd band across the top of a
+   night-theme card. In dark the container joins the night ramp instead, one step below
+   the page like every other backdrop.
+   This also means a basemap that never painted no longer shows up as a bright rectangle
+   in dark, so the guard against a dead map at night is the colour count in
+   browser-tests/specs/basemap.checks.mjs ("a map drawn in it, not just a background
+   colour"), not the luminance floors. Keep it. */
+.dark .leaflet-container {
+  background: theme("colors.night.shade");
+}
+
+/* Only the raster fallback (no WebGL, PDOK BRT-A) is filtered. PDOK serves a grey
+   daytime map and no night one, so night has to be made: inverting a greyscale map is
+   the one filter that gets dark surfaces with light roads out of it. The vector basemap
+   above needs none of this: its dark theme is a style, not a filter. */
+.dark .basemap-raster {
+  filter: invert(1) brightness(0.92) contrast(0.9);
 }
 
 /* On the dark basemap the halo flips: light text, dark glow. The pair is the night

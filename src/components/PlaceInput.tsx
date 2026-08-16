@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { searchPlaces } from "../api/client";
 import type { Place } from "../api/types";
 
@@ -11,6 +11,11 @@ export interface HistoryEntry {
 interface Props {
   value: string;
   placeholder?: string;
+  // The combobox's accessible name. A placeholder is not one: it is a hint, screen
+  // readers are not obliged to announce it, and it disappears the moment there is a
+  // value. The field has no visible label to point at (the search pill is a single
+  // row of two fields and a button), so the name is carried here.
+  ariaLabel?: string;
   onChange: (text: string) => void;
   onSelect: (place: Place) => void;
   // Locally saved places: matches rank above remote suggestions, marked with a star.
@@ -18,6 +23,17 @@ interface Props {
   // Recently used endpoints, shown when the field is focused while (nearly) empty.
   history?: HistoryEntry[];
   onPickHistory?: (h: HistoryEntry) => void;
+  // Where the dropdown hangs from. "field" (the default) makes this component its own
+  // positioning context, so the list is exactly as wide as the input — right on a
+  // desktop pill where the input is the whole control. "container" drops the
+  // positioning context so the list resolves against the nearest positioned ancestor
+  // instead: the phone search screen hangs both lists off the whole two-field card, so
+  // a suggestion gets the full width of the screen rather than the width of one field
+  // minus its buttons. At 390px that is 352px instead of 63px, which is the difference
+  // between one readable line and seven wrapped ones.
+  listAnchor?: "field" | "container";
+  // Extra classes for the input itself (the phone screen types larger than the pill).
+  inputClassName?: string;
 }
 
 // Two entries are the same place when they share an id, or when the same name sits a
@@ -27,6 +43,11 @@ interface Props {
 // exactly on the remote result's node, so both have to agree.
 const SAME_PLACE_M = 250;
 const M_LAT = 110_574;
+
+// Breathing room under a list that ends at the bottom of the screen, and the least
+// height one is allowed to have when the field it belongs to is near that bottom.
+const LIST_BOTTOM_GAP = 12;
+const LIST_MIN_HEIGHT = 160;
 
 function samePlace(a: Place, b: Place): boolean {
   if (a.id === b.id) return true;
@@ -39,11 +60,14 @@ function samePlace(a: Place, b: Place): boolean {
 export function PlaceInput({
   value,
   placeholder,
+  ariaLabel,
   onChange,
   onSelect,
   savedPlaces,
   history,
   onPickHistory,
+  listAnchor = "field",
+  inputClassName,
 }: Props) {
   const [suggestions, setSuggestions] = useState<Place[]>([]);
   const [open, setOpen] = useState(false);
@@ -163,6 +187,45 @@ export function PlaceInput({
     (history?.length ?? 0) > 0;
   const showSuggestions = open && !dismissed && suggestions.length > 0 && !showHistory;
   const listOpen = showHistory || showSuggestions;
+
+  // How much room there is between the top of the list and the bottom of the screen.
+  // Only the container anchor (the phone sheet) uses it; see listClass below for why.
+  //
+  // visualViewport, not innerHeight: on iOS the on-screen keyboard does not change
+  // innerHeight, so a list sized against it would run a keyboard's worth of rows under
+  // the keyboard — exactly the rows a user is reaching for while typing.
+  const listRef = useRef<HTMLUListElement>(null);
+  const [listMaxHeight, setListMaxHeight] = useState<number | undefined>(undefined);
+  // Layout effect, not a plain one: measured after paint, a long list would show at its
+  // full height for a frame and then snap to the room it has.
+  useLayoutEffect(() => {
+    if (listAnchor !== "container" || !listOpen) return;
+    const measure = () => {
+      const el = listRef.current;
+      if (!el) return;
+      const viewport = window.visualViewport?.height ?? window.innerHeight;
+      const room = viewport - el.getBoundingClientRect().top - LIST_BOTTOM_GAP;
+      // A floor, so a field pushed near the bottom of a short landscape screen still
+      // offers a usable list rather than a sliver.
+      setListMaxHeight(Math.max(LIST_MIN_HEIGHT, Math.round(room)));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    window.visualViewport?.addEventListener("resize", measure);
+    // Two events that move the list without resizing anything. The sheet arrives with a
+    // 14px rise (.fov-sheet in index.css), and a list opened during it — which is every
+    // list, since the recents appear the moment the field takes focus — would otherwise
+    // keep the height it had 14px lower for as long as it stayed open. Scrolling the
+    // form under it is the same problem, slower.
+    window.addEventListener("animationend", measure, true);
+    window.addEventListener("scroll", measure, true);
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.visualViewport?.removeEventListener("resize", measure);
+      window.removeEventListener("animationend", measure, true);
+      window.removeEventListener("scroll", measure, true);
+    };
+  }, [listAnchor, listOpen]);
   // One keyboard model for both dropdowns: whichever is on screen is the listbox the
   // input drives, so the arrow keys, Enter and aria-activedescendant need not care
   // which of the two it is.
@@ -197,8 +260,22 @@ export function PlaceInput({
     }
   }
 
+  // One list class for both dropdowns. left/right/top-full resolve against whatever
+  // the anchor left as the positioning context (this component, or its container).
+  //
+  // The 18rem cap belongs to the desktop pill, where the list hangs into the page over
+  // the content below it and must not swallow the screen. On the phone the list is the
+  // screen: the sheet is a full-viewport surface with nothing underneath to protect, and
+  // the cap stopped the list at y=452 of 844 with 390px of white below it — a suggestion
+  // list that scrolls internally while half the screen sits empty. There the height is
+  // measured instead (listMaxHeight below), so the list ends where the sheet does.
+  const listClass = `absolute left-0 right-0 top-full z-20 mt-1 overflow-auto rounded-2xl border border-gray-100 bg-white shadow-lg dark:border-white/10 dark:bg-night-raised${
+    listAnchor === "container" ? "" : " max-h-72"
+  }`;
+  const listStyle = listAnchor === "container" ? { maxHeight: listMaxHeight } : undefined;
+
   return (
-    <div className="relative w-full">
+    <div className={listAnchor === "container" ? "w-full" : "relative w-full"}>
       {/* WAI-ARIA combobox: without the role and the expanded/activedescendant pair a
           screen reader announces a plain text field and never mentions that a list of
           suggestions appeared underneath it. */}
@@ -209,8 +286,11 @@ export function PlaceInput({
         // The condition is the pointer, not a width breakpoint - an iPhone in landscape
         // is wider than `sm` and zooms just the same. min-h-[44px] makes the field a
         // finger-sized target in its own right.
-        className="w-full min-h-[44px] bg-transparent px-2 py-2 text-sm outline-none [@media(pointer:coarse)]:text-base dark:text-night-text dark:placeholder:text-night-subtle"
+        className={`w-full min-h-[44px] bg-transparent px-2 py-2 text-sm outline-none [@media(pointer:coarse)]:text-base dark:text-night-text dark:placeholder:text-night-subtle${
+          inputClassName ? ` ${inputClassName}` : ""
+        }`}
         placeholder={placeholder}
+        aria-label={ariaLabel}
         value={query}
         role="combobox"
         aria-expanded={listOpen}
@@ -232,9 +312,11 @@ export function PlaceInput({
       />
       {showHistory && (
         <ul
+          ref={listRef}
           id={listId}
           role="listbox"
-          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-2xl border border-gray-100 bg-white shadow-lg dark:border-white/10 dark:bg-night-raised"
+          className={listClass}
+          style={listStyle}
         >
           {(history ?? []).map((h, i) => (
             <li
@@ -264,9 +346,11 @@ export function PlaceInput({
       )}
       {showSuggestions && (
         <ul
+          ref={listRef}
           id={listId}
           role="listbox"
-          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-2xl border border-gray-100 bg-white shadow-lg dark:border-white/10 dark:bg-night-raised"
+          className={listClass}
+          style={listStyle}
         >
           {suggestions.map((p, i) => (
             <li

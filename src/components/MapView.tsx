@@ -6,7 +6,6 @@ import {
   Marker,
   Polyline,
   Popup,
-  TileLayer,
   useMap,
   useMapEvents,
 } from "react-leaflet";
@@ -37,6 +36,7 @@ import { useWindField } from "../hooks/useWindField";
 import { useI18n } from "../lib/i18n";
 import { modeColor } from "../lib/modeColors";
 import { decodePolyline } from "../lib/polyline";
+import { Basemap } from "./Basemap";
 import { RadarOverlay, RadarReadout } from "./RainRadar";
 import type { WeatherLayersState } from "./RainRadar";
 import { WindVelocityLayer } from "./WeatherLive";
@@ -436,23 +436,31 @@ export function MapView({
   return (
     // The picking cursor lives on the wrapper (see .map-picking in index.css):
     // MapContainer's className is frozen at mount, so it cannot carry a toggling class.
+    // It is also the positioning context for every absolute chip below, and the box the
+    // context menu is clamped against.
     <div ref={wrapRef} className={`relative h-full w-full ${picking ? "map-picking" : ""}`}>
       <MapContainer
         ref={mapRef}
         center={AMS}
         zoom={13}
+        // Leaflet takes its zoom ceiling from the tile layers on the map, and the basemap
+        // is no longer one: a GL layer is an L.Layer, not a grid, so getMaxZoom() answers
+        // Infinity and the + button never stops. 19 is where the vector tiles stop adding
+        // detail (the OpenMapTiles source is z14, overzoomed above that) and the ceiling
+        // the raster fallback serves.
+        maxZoom={19}
         className="h-full w-full rounded-card"
         scrollWheelZoom={interactive}
+        // No tile or data credit is drawn on or beside the map. The sources are named
+        // in the About panel in the header menu (aboutText) and in the privacy notice.
         attributionControl={false}
       >
         <MapInteraction interactive={interactive} />
         <ViewportTracker onChange={setViewport} />
-        {/* CARTO voyager by day, dark matter for the dark theme. The dark tiles are
-            near-black out of the box; .dark .basemap-tiles (index.css) lifts them. */}
-        <TileLayer
-          className="basemap-tiles"
-          url={`https://{s}.basemaps.cartocdn.com/rastertiles/${dark ? "dark_all" : "voyager"}/{z}/{x}/{y}{r}.png`}
-        />
+        {/* OpenFreeMap vector tiles: bright by day, the dark style at night. The layer
+            is MapLibre GL inside this Leaflet map, so both themes are real styles and
+            neither is a filter over the other (components/Basemap). */}
+        <Basemap dark={dark} />
         {showWeather && wLayers.rain && <RadarOverlay frames={rain.frames} />}
         {showWeather && wLayers.wind && <WindVelocityLayer data={wind.data} />}
         <MapEvents onPick={onPick} onContextMenu={handleMenu} />

@@ -1,10 +1,25 @@
 import React from "react";
 
+type MapContainerProps = {
+  children?: React.ReactNode;
+  className?: string;
+  attributionControl?: boolean;
+  maxZoom?: number;
+};
+
+// Test spy: the options the app asked the map for. This mock renders a plain div, so
+// anything Leaflet would build out of these options (the attribution control above all)
+// leaves no trace in the DOM to assert against, and a test that queried for it would
+// pass with the option gone. The props themselves are the only truth available here.
+export const __mapContainerProps: { last: MapContainerProps | null } = { last: null };
+
 // forwardRef so MapView's map ref (used by the zoom-to-POIs chip) attaches without
 // React warnings; the mock exposes no map instance, so the ref simply stays null and
 // callers must guard.
-export const MapContainer = React.forwardRef<never, { children?: React.ReactNode; className?: string }>(
-  function MapContainer({ children, className }, _ref) {
+export const MapContainer = React.forwardRef<never, MapContainerProps>(
+  function MapContainer(props, _ref) {
+    __mapContainerProps.last = props;
+    const { children, className } = props;
     return <div className={`leaflet-container ${className ?? ""}`.trim()}>{children}</div>;
   },
 );
@@ -61,7 +76,8 @@ export function Tooltip({ children }: { children?: React.ReactNode }) {
 export const __wheelZoom = { enabled: null as boolean | null };
 
 // Test spy: counts imperative camera calls (FitRoute vs FollowCamera assertions).
-// Tests should compare before/after deltas; counters are never reset.
+// Tests should compare before/after deltas taken inside the test; __resetMapMock zeroes
+// them between tests, so an absolute value only means anything within one case.
 export const __mapCalls = { fitBounds: 0, setView: 0, panTo: 0 };
 
 // A single stable map object, like the real useMap: effects keyed on map identity
@@ -125,4 +141,20 @@ export function __fireMapContextMenu(lat: number, lng: number, x?: number, y?: n
 export function __fireMarkerDragEnd(which: string, lat: number, lng: number): void {
   const handlers = _markerHandlers.get(which);
   handlers?.dragend?.({ target: { getLatLng: () => ({ lat, lng }) } });
+}
+
+// Handlers are registered on render and never unregistered — a real Leaflet map drops
+// them with the map instance, this mock has nowhere to hang that. So after a test
+// unmounts, its closures are still in these two tables and __fireMapClick and friends
+// keep "working": they call into a tree that no longer exists, which produces no error
+// and no DOM change, so the next test's failure reads as a timeout somewhere else
+// entirely. The global beforeEach (src/test/setup.ts) empties them, which makes firing
+// an event before the map is mounted a visible no-op instead of a phantom hit.
+export function __resetMapMock(): void {
+  _handlers = {};
+  _markerHandlers.clear();
+  __wheelZoom.enabled = null;
+  __mapCalls.fitBounds = 0;
+  __mapCalls.setView = 0;
+  __mapCalls.panTo = 0;
 }

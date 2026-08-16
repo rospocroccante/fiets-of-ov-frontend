@@ -1,8 +1,77 @@
 import { defineConfig } from "vitest/config";
+import { loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
+// The path the bundled Cloudflare Pages Function answers on (functions/api/[[path]].js),
+// and the same path the dev-server proxy below rewrites. A relative VITE_API_BASE is
+// only honest if something actually serves it, so this is the only relative value the
+// build accepts.
+const PROXIED_BASE = "/api";
+
+const HELP = `
+  cp .env.example .env        # local development
+  VITE_API_MODE=mock npm run build    # offline demo build, no backend
+  VITE_API_MODE=live VITE_API_BASE=${PROXIED_BASE} npm run build    # deployed behind the proxy
+`;
+
+// A build with no configuration used to fall back to mock fixtures and ship them
+// looking exactly like real answers, badge aside. Nothing downstream can tell the two
+// apart, so the decision is forced here: name the mode or get no bundle. Build only -
+// `npm run dev` and the test run keep their mock default.
+function envGuard(): Plugin {
+  return {
+    name: "fov-env-guard",
+    apply: "build",
+    config(config, { mode }) {
+      // envDir first, for the same reason Vite reads it there: whatever directory the
+      // .env files are actually loaded from is the directory this has to check.
+      const env = loadEnv(mode, config.envDir ?? config.root ?? process.cwd(), "VITE_");
+      const apiMode = env.VITE_API_MODE;
+
+      if (!apiMode) {
+        throw new Error(
+          `VITE_API_MODE is not set, so this build has no data source.\n` +
+            `Set it to "mock" (offline fixtures) or "live" (real backend).\n${HELP}`,
+        );
+      }
+      if (apiMode !== "mock" && apiMode !== "live") {
+        throw new Error(`VITE_API_MODE must be "mock" or "live", not "${apiMode}".\n${HELP}`);
+      }
+      if (apiMode !== "live") return;
+
+      const base = env.VITE_API_BASE;
+      if (!base) {
+        throw new Error(
+          `VITE_API_MODE=live needs VITE_API_BASE to say where the backend is.\n` +
+            `Use "${PROXIED_BASE}" when the host proxies it (Cloudflare Pages Function),\n` +
+            `or an absolute https:// URL when the browser calls the backend directly.\n${HELP}`,
+        );
+      }
+      if (base.endsWith("/")) {
+        throw new Error(`VITE_API_BASE must not end with a slash: "${base}".`);
+      }
+      // https only, deliberately. A plain http:// backend is worse than a wrong one:
+      // the site itself is served over HTTPS, so the browser blocks the request as
+      // mixed content and every route fails at runtime with nothing in the build to
+      // warn you. Reaching an http-only backend is what the /api proxy is for.
+      if (base !== PROXIED_BASE && !/^https:\/\//.test(base)) {
+        const isHttp = /^http:\/\//.test(base);
+        throw new Error(
+          (isHttp
+            ? `VITE_API_BASE="${base}" is plain http, which a browser on an https site refuses\n` +
+              `to call: the request is blocked as mixed content and no route ever loads.\n`
+            : `VITE_API_BASE="${base}" is a relative path nothing serves in production.\n`) +
+            `Only "${PROXIED_BASE}" is proxied (see functions/api/[[path]].js), and it is also\n` +
+            `the way to reach a backend that has no certificate; anything else has to be an\n` +
+            `absolute https:// URL to the backend.`,
+        );
+      }
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [envGuard(), react()],
   build: {
     rollupOptions: {
       output: {
@@ -67,6 +136,21 @@ export default defineConfig({
     // Stubbed globals (fetch, geolocation) are reset after every test so one file's
     // stubs can never leak into another.
     unstubGlobals: true,
+    // Random order, files and tests alike, on every run including CI.
+    //
+    // The suite was order-dependent and nothing caught it: it passed in the fixed order
+    // for months while several tests only worked because an earlier one had warmed the
+    // map chunk, and one only worked because it ran before any that did. A green run in
+    // a fixed order cannot tell "these tests pass" from "these tests pass in this
+    // order", and the second is not what a test suite is for.
+    //
+    // The cost is real and worth naming: a failure here is not reproducible by rerunning
+    // the command, because the next run picks a new order. It is reproducible by seed —
+    // every run prints `Running tests with seed "N"`, and
+    //   npx vitest run --sequence.seed=N
+    // replays that exact order. `--sequence.shuffle=false` gives the old fixed order
+    // when bisecting something unrelated.
+    sequence: { shuffle: true },
     // Tests run fully offline against the mock data layer, regardless of any local
     // .env.local that points the dev server at the live backend.
     env: { VITE_API_MODE: "mock" },

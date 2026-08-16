@@ -7,10 +7,12 @@ import { act, waitFor } from "@testing-library/react";
 // The mocked MapContainer's .leaflet-container is the marker that the real (mock-backed)
 // MapView has taken the Suspense fallback's place.
 //
-// Note for anyone writing a test that asserts on the *placeholder*: the module-level
-// "already fetched" flag in lazyMap survives between tests in the same file, so once one
-// test has called this the rest render the map straight away. Assert the pre-intent
-// state in the same test that calls this, not in a later one.
+// Call it in every test that drives the map, including tests that follow one which
+// already did. It used to be optional-by-accident: lazyMap's "already fetched" flag is
+// module state, so the first call in a file made the map mount for all the rest, and
+// tests written after that one worked without asking. Under a shuffled order they
+// stopped working, so the flag is now reset before every test (test/setup.ts) and the
+// only test that gets a map is the one that asks for it. Calling it twice is free.
 export function whenMapMounted(): Promise<void> {
   // The listener flips React state, so the dispatch belongs inside act().
   act(() => {

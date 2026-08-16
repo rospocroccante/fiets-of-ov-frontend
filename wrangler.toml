@@ -1,0 +1,20 @@
+# Cloudflare Pages project configuration.
+#
+# `name` is the Pages project this repository deploys to. The deploy workflow creates
+# it on first run if it does not exist, so the name here is the single source of truth:
+# change it and the next deployment follows, no dashboard step needed.
+#
+# `pages_build_output_dir` is what `wrangler pages deploy` uploads. Having it here is
+# also what makes the repository root the project root, which is how the functions/
+# directory next to it is found and compiled into the deployment.
+name = "fiets-of-ov-frontend"
+pages_build_output_dir = "dist"
+# Kept a little behind today's date on purpose: `wrangler pages dev` runs a bundled
+# workerd that refuses a compatibility date newer than the binary knows about, so a
+# date set to "today" breaks local development of this function for everyone whose
+# wrangler is not brand new.
+compatibility_date = "2026-05-01"
+
+# The routing backend origin is deliberately not set here. It belongs to the Pages
+# project as an environment variable (BACKEND_ORIGIN), so that it can differ between
+# preview and production and so that it is never committed. See the README.
