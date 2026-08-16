@@ -70,8 +70,31 @@ function envGuard(): Plugin {
   };
 }
 
+// Regenerating the icon subset while the dev server is up used to leave the open tab
+// rendering the literal ligature name: a giant LOCATION_ON across the map the first
+// time, ZOOM_OUT_MAP the second. Nothing is wrong with the server, which serves the new
+// bytes under Cache-Control: no-cache, and nothing is wrong with the font. It is the
+// document: a FontFace the page has already loaded is never re-fetched, and HMR swapping
+// in a component that uses a new glyph does not change that. Only a reload does, and
+// there is no way for the page to know it needs one.
+//
+// So the file that cannot be hot-swapped asks for the reload itself. The production
+// build has its own answer to this and does not need the plugin: the font is imported
+// from src/, so Vite fingerprints it and a new subset is a new URL.
+function reloadOnFontChange(): Plugin {
+  return {
+    name: "fov-reload-on-font-change",
+    apply: "serve",
+    handleHotUpdate({ file, server }) {
+      if (!file.endsWith(".woff2")) return;
+      server.ws.send({ type: "full-reload" });
+      server.config.logger.info(`  the icon font changed, reloading the page: ${file}`);
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [envGuard(), react()],
+  plugins: [envGuard(), reloadOnFontChange(), react()],
   build: {
     rollupOptions: {
       output: {
