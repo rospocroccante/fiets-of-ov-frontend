@@ -910,7 +910,12 @@ scenarios.push(
   },
 
   {
-    name: "phones the reset-view button is reachable and shares its corner without collisions",
+    // The owner asked for it under the + and the -, so the assertion is that it is: a
+    // third button in the zoom column, aligned with the two above it, not overlapping
+    // them, and not a box drawn over the map somewhere near them. The gap between it
+    // and the zoom bar comes from Leaflet's own stylesheet, so it is read rather than
+    // stated.
+    name: "phones the reset-view button is a third control under the zoom column",
     async run(ctx) {
       const { checks } = ctx;
       for (const { width, height } of PHONES) {
@@ -922,7 +927,18 @@ scenarios.push(
             const b = document.querySelector('${RESET}');
             if (!b) return null;
             const map = document.querySelector('.leaflet-container');
-            return { ...F.shown(b), ...F.rect(b), map: F.rect(map), ih: innerHeight, iw: innerWidth };
+            const zoomBar = document.querySelector('.leaflet-control-zoom');
+            const zoomOut = document.querySelector('.leaflet-control-zoom-out');
+            const corner = document.querySelector('.leaflet-top.leaflet-left');
+            return {
+              ...F.shown(b), ...F.rect(b),
+              map: F.rect(map),
+              zoomBar: zoomBar ? F.rect(zoomBar) : null,
+              zoomOut: zoomOut ? F.rect(zoomOut) : null,
+              inCorner: !!corner && corner.contains(b),
+              pointerEvents: getComputedStyle(b).pointerEvents,
+              ih: innerHeight, iw: innerWidth,
+            };
           `);
           checks.ok(`${at}: the map offers a way back to the default view`, m != null, m ? "found" : `no ${RESET}`);
           if (!m) continue;
@@ -930,44 +946,51 @@ scenarios.push(
             `${round(m.w)}x${round(m.h)}, opacity ${m.opacity}, elementFromPoint(${m.x}, ${m.y}) = ${m.hit}`);
           checks.atLeast(`${at}: it is 44px tall`, m.h, 44, `${round(m.h)}px`);
           checks.atLeast(`${at}: it is 44px wide`, m.w, 44, `${round(m.w)}px`);
-          checks.atMost(`${at}: it stays inside the map pane`, m.right, m.map.right + 0.5,
-            `button ends ${round(m.right)}, pane ends ${round(m.map.right)}`);
-          checks.atMost(`${at}: and above the foot of the screen`, m.bottom, m.ih,
-            `button ends ${round(m.bottom)} on a ${m.ih}px screen`);
+          // A control in the corner inherits pointer-events: none from it unless it is
+          // one. This is the difference between a button and a picture of one.
+          checks.ok(`${at}: it is one of the map's controls`, m.inCorner, m.inCorner ? "inside the top-left corner" : "outside it");
+          checks.equal(`${at}: and it takes the touch`, m.pointerEvents, "auto");
 
-          // Zoom out until the app offers its zoom-in chip, which is the state where two
-          // things want the same corner. They used to be two siblings both pinned to
-          // bottom-3 right-3, so the second one drew straight over the first.
+          checks.ok(`${at}: the zoom column is there to sit under`, m.zoomOut != null, m.zoomOut ? "found" : "no zoom control");
+          if (!m.zoomOut) continue;
+          checks.atLeast(`${at}: it is below the minus button`, m.top, m.zoomOut.bottom,
+            `button starts ${round(m.top)}, the minus ends ${round(m.zoomOut.bottom)}`);
+          checks.near(`${at}: and left-aligned with the minus`, m.left, m.zoomOut.left, 0.5,
+            `button at x ${round(m.left)}, the minus at ${round(m.zoomOut.left)}`);
+          checks.near(`${at}: and the same width as it`, m.w, m.zoomOut.w, 0.5,
+            `button ${round(m.w)}px, the minus ${round(m.zoomOut.w)}px`);
+          checks.atMost(`${at}: with the column's own spacing, not a gap of its own`,
+            m.top - m.zoomBar.bottom, 14,
+            `${round(m.top - m.zoomBar.bottom)}px between the zoom bar and the button`);
+          checks.atMost(`${at}: it stays inside the map pane`, m.bottom, m.map.bottom + 0.5,
+            `button ends ${round(m.bottom)}, pane ends ${round(m.map.bottom)}`);
+
+          // Zoom out until the app offers its zoom-in chip. That chip and the POI-error
+          // chip were two siblings both pinned to bottom-3 right-3, so whenever both
+          // were true the second drew straight over the first.
           await page.eval(`
             const out = document.querySelector('.leaflet-control-zoom-out');
             if (out) for (let i = 0; i < 5; i++) out.click();
             return true;
           `);
           await sleep(900);
-          const pair = await page.eval(`
+          const after = await page.eval(`
             const F = window.__fov;
             const reset = document.querySelector('${RESET}');
-            const chips = [...document.querySelectorAll('${RESET}')].length;
-            const corner = reset ? reset.parentElement : null;
-            const others = corner
-              ? [...corner.children].filter((c) => c !== reset).map((c) => ({
-                  text: (c.textContent || '').trim().slice(0, 30), ...F.rect(c), ...F.shown(c),
-                }))
-              : [];
-            return { reset: reset ? { ...F.rect(reset), ...F.shown(reset) } : null, others, chips };
+            const zoomOut = document.querySelector('.leaflet-control-zoom-out');
+            return {
+              reset: reset ? { ...F.rect(reset), ...F.shown(reset) } : null,
+              zoomOut: zoomOut ? F.rect(zoomOut) : null,
+            };
           `);
-          checks.ok(`${at}: the corner is one column`, pair.reset != null && pair.others.length >= 1,
-            `${pair.others.length} sibling(s) beside the reset button: ${pair.others.map((o) => o.text).join(" | ") || "none"}`);
-          for (const o of pair.others) {
-            const overlapH = Math.max(0, Math.min(o.bottom, pair.reset.bottom) - Math.max(o.top, pair.reset.top));
-            const overlapW = Math.max(0, Math.min(o.right, pair.reset.right) - Math.max(o.left, pair.reset.left));
-            checks.equal(`${at}: "${o.text}" does not overlap the reset button`, round(overlapH * overlapW), 0,
-              `chip ${round(o.top)}..${round(o.bottom)}, button ${round(pair.reset.top)}..${round(pair.reset.bottom)}`);
-            checks.ok(`${at}: "${o.text}" is still reachable beside it`, o.painted,
-              `elementFromPoint(${o.x}, ${o.y}) = ${o.hit}`);
+          checks.ok(`${at}: the button survived five taps on the minus`, after.reset && after.reset.painted,
+            after.reset ? `elementFromPoint(${after.reset.x}, ${after.reset.y}) = ${after.reset.hit}` : "gone");
+          if (after.reset && after.zoomOut) {
+            const overlapH = Math.max(0, Math.min(after.zoomOut.bottom, after.reset.bottom) - Math.max(after.zoomOut.top, after.reset.top));
+            const overlapW = Math.max(0, Math.min(after.zoomOut.right, after.reset.right) - Math.max(after.zoomOut.left, after.reset.left));
+            checks.equal(`${at}: and still does not overlap the minus`, round(overlapH * overlapW), 0,
+              `minus ${round(after.zoomOut.top)}..${round(after.zoomOut.bottom)}, button ${round(after.reset.top)}..${round(after.reset.bottom)}`);
           }
-          checks.ok(`${at}: the reset button survived the zoom out`, pair.reset && pair.reset.painted,
-            pair.reset ? `elementFromPoint(${pair.reset.x}, ${pair.reset.y}) = ${pair.reset.hit}` : "gone");
         } finally {
           await page.close();
         }

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Circle,
   CircleMarker,
@@ -274,6 +275,14 @@ function FollowCamera({ target, active }: { target: LatLon | null; active: boole
   return null;
 }
 
+// Put a control in Leaflet's own corner when Leaflet built one, and leave it in the
+// React tree when it did not. The second case is the unit suite: the react-leaflet mock
+// renders a plain div, so there is no corner to portal into, and a control that only
+// exists inside a real Leaflet map is a control those tests cannot click.
+function renderIntoCorner(corner: HTMLElement | null, node: JSX.Element): JSX.Element {
+  return corner ? createPortal(node, corner) : node;
+}
+
 function toLatLon(ll: { lat: number; lng: number }): LatLon {
   return { lat: ll.lat, lon: ll.lng };
 }
@@ -424,6 +433,31 @@ export function MapView({
   const menuRef = useRef<HTMLDivElement | null>(null);
   // Clamped position of the context menu, once it can be measured.
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
+
+  // Leaflet's own top-left corner, the box holding the + and - buttons. The reset
+  // control is rendered into it rather than positioned beside it, so it stacks under
+  // the zoom bar on Leaflet's terms: the corner is a column, and the margins and the
+  // spacing between the two come from Leaflet's stylesheet instead of from a number
+  // written here that a change to either control would quietly break.
+  //
+  // It is not there in the unit suite, where the react-leaflet mock renders a plain div
+  // and Leaflet never runs. The button falls back to the map wrapper in that case, so
+  // those tests keep exercising it.
+  const [zoomCorner, setZoomCorner] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setZoomCorner(wrapRef.current?.querySelector<HTMLElement>(".leaflet-top.leaflet-left") ?? null);
+  }, [interactive]);
+
+  // The corner sits inside the map container, so a click on the button reaches the map
+  // underneath it: it would drop a pin with a pick armed, and a double click would zoom.
+  // Leaflet's own controls call this on themselves for the same reason.
+  const resetRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    const el = resetRef.current;
+    if (!el || typeof L.DomEvent?.disableClickPropagation !== "function") return;
+    L.DomEvent.disableClickPropagation(el);
+    L.DomEvent.disableScrollPropagation(el);
+  }, [zoomCorner]);
 
   const handleMenu = (m: MenuState) => {
     if (m.x < 0) setMenu(null);
@@ -583,11 +617,11 @@ export function MapView({
         </>
       )}
       </MapContainer>
-      {/* One column for everything that sits in the bottom-right corner. They used to be
-          two siblings both pinned to bottom-3 right-3, which was fine only because
-          nobody had hit the state where both are true: a dead Overpass at city zoom drew
-          the error chip straight on top of the zoom-in chip. Stacked, each one takes its
-          own line and the reset button below them keeps the corner nearest the thumb. */}
+      {/* One column for the two chips in the bottom-right corner. They used to be two
+          siblings both pinned to bottom-3 right-3, which was fine only because nobody
+          had hit the state where both are true: a dead Overpass at city zoom drew the
+          error chip straight on top of the zoom-in chip. Stacked, each takes its own
+          line. */}
       {interactive && (
         <div className="absolute bottom-3 right-3 z-[1000] flex flex-col items-end gap-2">
           {/* A dead POI feed must say so, or an Overpass outage reads as "no places". The
@@ -620,26 +654,50 @@ export function MapView({
               {t("zoomInForPlaces")}
             </button>
           )}
-          {/* Panning and zooming a map is easy to do and hard to undo: once the route is
-              off screen there is no gesture that brings it back, only a hunt. This is the
-              way back, and it is the same view the app picked when the plan arrived. */}
-          <button
-            type="button"
-            data-fov="map-reset-view"
-            aria-label={t("resetView")}
-            title={t("resetView")}
-            onClick={() => {
-              const m = mapRef.current;
-              if (m) applyDefaultView(m, allCoords, origin ?? destination, "city");
-            }}
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-white/90 text-slate-600 shadow transition hover:bg-white dark:bg-night-surface/90 dark:text-night-text dark:hover:bg-night-hover"
-          >
-            <span aria-hidden="true" className="material-symbols-rounded text-[22px] leading-none">
-              zoom_out_map
-            </span>
-          </button>
         </div>
       )}
+      {/* Panning and zooming a map is easy to do and hard to undo: once the route is off
+          screen there is no gesture that brings it back, only a hunt. This is the way
+          back, and it is the same view the app picked when the plan arrived. It belongs
+          under the + and the -, where it is a third button in the same column rather
+          than a stray control in another corner. */}
+      {interactive &&
+        renderIntoCorner(
+          zoomCorner,
+          // leaflet-bar leaflet-control, the same pair Leaflet's zoom control carries.
+          // leaflet-control is what makes this a control rather than a box drawn over
+          // one: the corner has pointer-events none, and the class turns them back on,
+          // supplies the corner's margins and puts the button next in the column.
+          // leaflet-bar is the border, the radius and the shadow, so this reads as a
+          // third button of the control above it instead of something bolted under it,
+          // and the two line up because they are the same box rather than because a
+          // number here says so. A round pill sat 2px left of the + and the -, which is
+          // Leaflet's 2px bar border, and there is no good number to write for that.
+          <div className={zoomCorner ? "leaflet-bar leaflet-control" : "absolute bottom-3 left-3 z-[1000]"}>
+            <button
+              ref={resetRef}
+              type="button"
+              data-fov="map-reset-view"
+              aria-label={t("resetView")}
+              title={t("resetView")}
+              onClick={() => {
+                const m = mapRef.current;
+                if (m) applyDefaultView(m, allCoords, origin ?? destination, "city");
+              }}
+              // The colours are the ones index.css already gives .leaflet-bar a, written
+              // out because those rules select the <a> Leaflet builds and this is a real
+              // button. h-11/w-11 is the 44px that same file sets for touch devices.
+              className="flex h-11 w-11 items-center justify-center rounded-[3px] bg-white text-slate-800 transition hover:bg-slate-100 dark:bg-night-raised dark:text-night-text dark:hover:bg-night-hover"
+            >
+              {/* near_me, not zoom_out_map: the four outward arrows read as "make the map
+                  bigger", which is a different button. This is the shape Google Maps uses
+                  for the same job, so it arrives already learnt. */}
+              <span aria-hidden="true" className="material-symbols-rounded text-[22px] leading-none">
+                near_me
+              </span>
+            </button>
+          </div>,
+        )}
       {showWeather && (
         <RadarReadout
           layers={wLayers}

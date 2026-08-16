@@ -121,8 +121,15 @@ async function launchOnce() {
       }
       browser.dispose();
       child.kill("SIGKILL");
-      // Chrome is still flushing its profile as it dies; retry rather than race it.
-      fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+      // Chrome is still flushing its profile as it dies; retry rather than race it. And
+      // if it is still writing after all of them, leave the directory: it is under the
+      // OS temp dir, and an ENOTEMPTY here used to throw out of close() and end a run
+      // that had already passed every assertion with exit code 2.
+      try {
+        fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+      } catch (e) {
+        process.stderr.write(`  (left ${profile} behind: ${e.code ?? e.message})\n`);
+      }
     },
   };
 }

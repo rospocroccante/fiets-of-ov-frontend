@@ -30,7 +30,7 @@
    icon. Fetch the CSS with a browser User-Agent, follow the src: url() in the response,
    and overwrite src/fonts/material-symbols-rounded-subset.woff2:
 
-   https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,0&icon_names=bedtime,close,cloud,dark_mode,foggy,history,light_mode,location_on,my_location,partly_cloudy_day,partly_cloudy_night,progress_activity,rainy,roundabout_left,roundabout_right,sports_score,star,straight,sunny,thunderstorm,tram,turn_left,turn_right,turn_slight_left,turn_slight_right,u_turn_left,u_turn_right,weather_snowy,zoom_out_map&display=block
+   https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,0&icon_names=bedtime,close,cloud,dark_mode,foggy,history,light_mode,location_on,my_location,near_me,partly_cloudy_day,partly_cloudy_night,progress_activity,rainy,roundabout_left,roundabout_right,sports_score,star,straight,sunny,thunderstorm,tram,turn_left,turn_right,turn_slight_left,turn_slight_right,u_turn_left,u_turn_right,weather_snowy&display=block
 
    Keep that icon_names list alphabetical (the API requires it) and in sync with the
    usages of material-symbols-rounded in src/. src/iconFont.test.ts enforces all three:
