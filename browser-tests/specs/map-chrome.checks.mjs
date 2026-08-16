@@ -799,3 +799,179 @@ export const scenarios = [
     },
   },
 ];
+
+// The two controls added after the pass above, both of them geometry the jsdom suite
+// cannot answer.
+//
+//   the pill    a failed location fix used to widen it. The message was a <p> in normal
+//               flow inside a single flex row, so "Location request timed out. Please
+//               try again." claimed width, wrapped to three lines, and pushed From, To
+//               and Search apart. jsdom lays nothing out: the same paragraph there is a
+//               0x0 box in a 0x0 row, and every unit test passed through the defect.
+//   the reset   a 44px target that has to be reachable and has to stop colliding with
+//               the two chips that share the bottom-right corner. Those two were both
+//               pinned to the same corner and drew on top of each other whenever an
+//               Overpass outage met a city-zoom map.
+
+const RESET = '[data-fov="map-reset-view"]';
+
+// Make the next fix fail the way the owner's did: a timeout, not a denial.
+const FAIL_GEOLOCATION = `
+  Object.defineProperty(navigator, "geolocation", {
+    configurable: true,
+    value: {
+      getCurrentPosition(_ok, err) {
+        err({ code: 3, PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 });
+      },
+    },
+  });
+  return true;
+`;
+
+// The pill and every control in it, as boxes.
+const READ_PILL = `
+  const F = window.__fov;
+  const pill = document.querySelector('${PILL}');
+  const parts = [...pill.querySelectorAll('input, button')].map((el) => ({
+    what: (el.getAttribute('placeholder') || el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 20),
+    ...F.rect(el),
+  }));
+  return { pill: F.rect(pill), parts, iw: innerWidth };
+`;
+
+scenarios.push(
+  {
+    name: "1280x900 a location failure reports itself without resizing the search pill",
+    async run(ctx) {
+      const { checks } = ctx;
+      for (const theme of THEMES) {
+        const page = await ctx.openPhone({ width: 1280, height: 900, theme, lang: "en" });
+        try {
+          await page.goto(ctx.url);
+          await page.waitFor(`document.querySelector('${PILL}')`, { label: "the app to render its search pill" });
+          await page.eval(PROBE);
+          const before = await page.eval(READ_PILL);
+          checks.atLeast(`${theme}: the desktop pill holds its fields inline`, before.parts.length, 4,
+            before.parts.map((p) => p.what).join(", "));
+
+          await page.eval(FAIL_GEOLOCATION);
+          // The second crosshair: the one in the To field, which is where the owner's
+          // screenshot came from. Driven through a DOM click, because what is under test
+          // is the geometry afterwards, not the hit test.
+          const clicked = await page.eval(`
+            const buttons = [...document.querySelectorAll('${PILL} button')]
+              .filter((b) => /use my location/i.test(b.getAttribute('aria-label') || ''));
+            const target = buttons[buttons.length - 1];
+            if (!target) return null;
+            target.click();
+            return buttons.length;
+          `);
+          checks.ok(`${theme}: the pill offers a locate button per field`, clicked === 2, `found ${clicked}`);
+          await page.waitFor(`document.querySelector('${PILL} [role="alert"]')`, { label: "the failure to be reported" });
+
+          const after = await page.eval(READ_PILL);
+          const alert = await page.eval(`
+            const F = window.__fov;
+            const el = document.querySelector('${PILL} [role="alert"]');
+            const cs = getComputedStyle(el);
+            return { ...F.rect(el), ...F.shown(el), ...F.contrast(el), position: cs.position,
+                     text: (el.textContent || '').trim() };
+          `);
+
+          // The report has to be readable. A fix that hides the message is not a fix.
+          checks.ok(`${theme}: the failure is painted, not just in the DOM`, alert.painted,
+            `"${alert.text}" ${round(alert.w)}x${round(alert.h)}, display ${alert.display}, opacity ${alert.opacity}`);
+          checks.equal(`${theme}: and it is out of the row's flow`, alert.position, "absolute",
+            "in flow it is the row's width that pays for the text");
+          checks.atLeast(`${theme}: it reads against what is behind it`, alert.ratio, 4.5,
+            `${alert.ratio}:1 of ${alert.fg} on ${alert.bg} at ${alert.px}px`);
+          checks.atLeast(`${theme}: it stays on screen`, alert.left, 0, `left edge ${round(alert.left)}`);
+          checks.atMost(`${theme}: it stays on screen`, alert.right, after.iw, `right edge ${round(alert.right)} of ${after.iw}`);
+
+          // And the pill is the box it was. This is the assertion the defect fails: it
+          // grew from 44 to 92px tall and shoved every control along its row.
+          checks.equal(`${theme}: the pill is the height it was before the failure`,
+            round(after.pill.h), round(before.pill.h), `${round(before.pill.h)}px before, ${round(after.pill.h)}px after`);
+          checks.equal(`${theme}: and the width it was`,
+            round(after.pill.w), round(before.pill.w), `${round(before.pill.w)}px before, ${round(after.pill.w)}px after`);
+          for (const [i, b] of before.parts.entries()) {
+            const a = after.parts[i];
+            if (!a) continue;
+            checks.near(`${theme}: "${b.what}" did not move`, a.left, b.left, 0.5,
+              `x ${round(b.left)} before, ${round(a.left)} after`);
+            checks.near(`${theme}: "${b.what}" kept its width`, a.w, b.w, 0.5,
+              `${round(b.w)}px before, ${round(a.w)}px after`);
+          }
+        } finally {
+          await page.close();
+        }
+      }
+    },
+  },
+
+  {
+    name: "phones the reset-view button is reachable and shares its corner without collisions",
+    async run(ctx) {
+      const { checks } = ctx;
+      for (const { width, height } of PHONES) {
+        const at = `${width}x${height}`;
+        const page = await bootMap(ctx, { width, height });
+        try {
+          const m = await page.eval(`
+            const F = window.__fov;
+            const b = document.querySelector('${RESET}');
+            if (!b) return null;
+            const map = document.querySelector('.leaflet-container');
+            return { ...F.shown(b), ...F.rect(b), map: F.rect(map), ih: innerHeight, iw: innerWidth };
+          `);
+          checks.ok(`${at}: the map offers a way back to the default view`, m != null, m ? "found" : `no ${RESET}`);
+          if (!m) continue;
+          checks.ok(`${at}: it is painted and a finger at its centre reaches it`, m.painted,
+            `${round(m.w)}x${round(m.h)}, opacity ${m.opacity}, elementFromPoint(${m.x}, ${m.y}) = ${m.hit}`);
+          checks.atLeast(`${at}: it is 44px tall`, m.h, 44, `${round(m.h)}px`);
+          checks.atLeast(`${at}: it is 44px wide`, m.w, 44, `${round(m.w)}px`);
+          checks.atMost(`${at}: it stays inside the map pane`, m.right, m.map.right + 0.5,
+            `button ends ${round(m.right)}, pane ends ${round(m.map.right)}`);
+          checks.atMost(`${at}: and above the foot of the screen`, m.bottom, m.ih,
+            `button ends ${round(m.bottom)} on a ${m.ih}px screen`);
+
+          // Zoom out until the app offers its zoom-in chip, which is the state where two
+          // things want the same corner. They used to be two siblings both pinned to
+          // bottom-3 right-3, so the second one drew straight over the first.
+          await page.eval(`
+            const out = document.querySelector('.leaflet-control-zoom-out');
+            if (out) for (let i = 0; i < 5; i++) out.click();
+            return true;
+          `);
+          await sleep(900);
+          const pair = await page.eval(`
+            const F = window.__fov;
+            const reset = document.querySelector('${RESET}');
+            const chips = [...document.querySelectorAll('${RESET}')].length;
+            const corner = reset ? reset.parentElement : null;
+            const others = corner
+              ? [...corner.children].filter((c) => c !== reset).map((c) => ({
+                  text: (c.textContent || '').trim().slice(0, 30), ...F.rect(c), ...F.shown(c),
+                }))
+              : [];
+            return { reset: reset ? { ...F.rect(reset), ...F.shown(reset) } : null, others, chips };
+          `);
+          checks.ok(`${at}: the corner is one column`, pair.reset != null && pair.others.length >= 1,
+            `${pair.others.length} sibling(s) beside the reset button: ${pair.others.map((o) => o.text).join(" | ") || "none"}`);
+          for (const o of pair.others) {
+            const overlapH = Math.max(0, Math.min(o.bottom, pair.reset.bottom) - Math.max(o.top, pair.reset.top));
+            const overlapW = Math.max(0, Math.min(o.right, pair.reset.right) - Math.max(o.left, pair.reset.left));
+            checks.equal(`${at}: "${o.text}" does not overlap the reset button`, round(overlapH * overlapW), 0,
+              `chip ${round(o.top)}..${round(o.bottom)}, button ${round(pair.reset.top)}..${round(pair.reset.bottom)}`);
+            checks.ok(`${at}: "${o.text}" is still reachable beside it`, o.painted,
+              `elementFromPoint(${o.x}, ${o.y}) = ${o.hit}`);
+          }
+          checks.ok(`${at}: the reset button survived the zoom out`, pair.reset && pair.reset.painted,
+            pair.reset ? `elementFromPoint(${pair.reset.x}, ${pair.reset.y}) = ${pair.reset.hit}` : "gone");
+        } finally {
+          await page.close();
+        }
+      }
+    },
+  },
+);

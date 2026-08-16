@@ -43,8 +43,19 @@ export function UseMyLocationButton({ onLocated, className, withLabel = false }:
     }
   }
 
+  // red-300 rather than the red-400 the rest of the night theme uses for errors: the
+  // bubble below sits on night-raised, the popover step, and red-400 on it measures
+  // 4.14:1 against the 4.5:1 that 12px text needs. red-300 is 6.03:1 there and higher on
+  // every other night surface this message can land on, so one colour covers both
+  // placements. Amber needs no such adjustment (6.86:1 at its worst).
+  const tone =
+    status?.kind === "error"
+      ? "text-red-600 dark:text-red-300"
+      : "text-amber-600 dark:text-amber-400";
+
   return (
-    <div className={className}>
+    // relative, because the compact button hangs its message out of flow (see below).
+    <div className={["relative", className].filter(Boolean).join(" ")}>
       {/* The light-mode pair is brand navy on white. Left alone it would be 1.4:1 on a
           night surface (invisible), and its hover would flash the near-white
           brand-light; dark mode takes the emerald the rest of the app already
@@ -83,13 +94,27 @@ export function UseMyLocationButton({ onLocated, className, withLabel = false }:
           </span>
         )}
       </button>
-      {status && status.kind === "error" && (
-        <p role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">
-          {status.text}
-        </p>
-      )}
-      {status && status.kind === "warn" && (
-        <p role="status" className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+      {/* Where the message goes depends on whether this button has a row to itself.
+          With a label it does (the phone search sheet), and normal flow is right: the
+          text pushes the rows under it down a line and nothing else moves.
+
+          Without a label it sits inside the desktop search pill, a single flex row of
+          fixed height. A paragraph in flow there is a layout change: it claims width,
+          the wrapper grows to hold it, and the pill stretches with it. "Location
+          request timed out. Please try again." wrapped to three lines and shoved From,
+          To and Search apart, which is what the owner saw. Out of flow it costs the row
+          nothing, so the pill keeps the geometry it had before the failure and still
+          has it after. The bubble needs its own surface for that, because underneath it
+          is the page rather than the pill. */}
+      {status && (
+        <p
+          role={status.kind === "error" ? "alert" : "status"}
+          className={
+            withLabel
+              ? `mt-1 text-xs ${tone}`
+              : `absolute left-1/2 top-full z-20 mt-1 w-max max-w-[13rem] -translate-x-1/2 rounded-lg bg-white px-2.5 py-1.5 text-xs shadow-lg ring-1 ring-black/5 dark:bg-night-raised dark:ring-white/10 ${tone}`
+          }
+        >
           {status.text}
         </p>
       )}

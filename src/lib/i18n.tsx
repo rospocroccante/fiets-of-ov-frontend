@@ -61,6 +61,10 @@ const STRINGS = {
   zoomInForPlaces: { en: "Zoom in to see bars and places", nl: "Zoom in voor cafés en plekken" },
   placesUnavailable: { en: "Places unavailable right now", nl: "Plekken zijn nu niet beschikbaar" },
   placesPartial: { en: "Some places are missing here", nl: "Hier ontbreken enkele plekken" },
+  // The icon carries this on its own, so the words are only ever heard, not read. They
+  // say what the view goes back to rather than naming a gesture, because the user who
+  // needs this button is the one who no longer knows where they panned to.
+  resetView: { en: "Show the whole trip", nl: "Toon de hele reis" },
   clickMapSetStart: {
     en: "Click the map to set the start",
     nl: "Klik op de kaart om het startpunt te kiezen",

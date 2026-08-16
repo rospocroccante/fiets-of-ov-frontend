@@ -13,13 +13,17 @@ type MapContainerProps = {
 // pass with the option gone. The props themselves are the only truth available here.
 export const __mapContainerProps: { last: MapContainerProps | null } = { last: null };
 
-// forwardRef so MapView's map ref (used by the zoom-to-POIs chip) attaches without
-// React warnings; the mock exposes no map instance, so the ref simply stays null and
-// callers must guard.
-export const MapContainer = React.forwardRef<never, MapContainerProps>(
-  function MapContainer(props, _ref) {
+// The ref is handed the same object useMap() returns, so the imperative buttons that go
+// through MapView's map ref (zoom to POIs, reset the view) reach the __mapCalls spies
+// instead of no-opping against a null. It used to stay null, which meant clicking those
+// buttons in a test did nothing and the test still passed. Callers must go on guarding
+// per method: this object is a handful of counters, not an L.Map.
+export const MapContainer = React.forwardRef<unknown, MapContainerProps>(
+  function MapContainer(props, ref) {
     __mapContainerProps.last = props;
     const { children, className } = props;
+    if (typeof ref === "function") ref(_map);
+    else if (ref) ref.current = _map;
     return <div className={`leaflet-container ${className ?? ""}`.trim()}>{children}</div>;
   },
 );
@@ -78,7 +82,7 @@ export const __wheelZoom = { enabled: null as boolean | null };
 // Test spy: counts imperative camera calls (FitRoute vs FollowCamera assertions).
 // Tests should compare before/after deltas taken inside the test; __resetMapMock zeroes
 // them between tests, so an absolute value only means anything within one case.
-export const __mapCalls = { fitBounds: 0, setView: 0, panTo: 0 };
+export const __mapCalls = { fitBounds: 0, setView: 0, panTo: 0, setZoom: 0 };
 
 // A single stable map object, like the real useMap: effects keyed on map identity
 // must not re-fire every render.
@@ -91,6 +95,9 @@ const _map = {
   },
   panTo: () => {
     __mapCalls.panTo += 1;
+  },
+  setZoom: () => {
+    __mapCalls.setZoom += 1;
   },
   scrollWheelZoom: {
     enable: () => {
@@ -157,4 +164,5 @@ export function __resetMapMock(): void {
   __mapCalls.fitBounds = 0;
   __mapCalls.setView = 0;
   __mapCalls.panTo = 0;
+  __mapCalls.setZoom = 0;
 }

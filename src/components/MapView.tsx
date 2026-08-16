@@ -204,6 +204,35 @@ function MapInteraction({ interactive }: { interactive: boolean }) {
   return null;
 }
 
+// The map's default view: the whole route when there is one, the single endpoint when
+// that is all there is. Two callers apply it, the automatic refit when a plan arrives
+// and the reset button, and a view that differs between them would be a view the user
+// cannot get back to, so both go through here.
+//
+// `empty` is where they part company. FitRoute runs on every plan change, so with
+// nothing to show it has to leave the camera where the user put it. The button is a
+// deliberate tap, and "nothing to show" is exactly when going back to the city is the
+// answer being asked for.
+//
+// Every call is guarded because the react-leaflet mock the unit tests run against
+// implements only part of L.Map.
+function applyDefaultView(
+  map: L.Map,
+  coords: [number, number][],
+  fallback: LatLon | null,
+  empty: "keep" | "city",
+) {
+  if (coords.length >= 2) {
+    if (typeof map.fitBounds === "function") {
+      map.fitBounds(coords as LatLngBoundsExpression, { padding: [50, 50] });
+    }
+    return;
+  }
+  if (typeof map.setView !== "function") return;
+  if (fallback) map.setView([fallback.lat, fallback.lon], 14);
+  else if (empty === "city") map.setView(AMS, 13);
+}
+
 function FitRoute({
   coords,
   fallback,
@@ -217,11 +246,7 @@ function FitRoute({
   useEffect(() => {
     // Navigation owns the camera: a refit on every replan would snap it off the fix.
     if (!active) return;
-    if (coords.length >= 2) {
-      map.fitBounds(coords as LatLngBoundsExpression, { padding: [50, 50] });
-    } else if (fallback) {
-      map.setView([fallback.lat, fallback.lon], 14);
-    }
+    applyDefaultView(map, coords, fallback, "keep");
   }, [map, coords, fallback, active]);
   return null;
 }
@@ -558,34 +583,62 @@ export function MapView({
         </>
       )}
       </MapContainer>
-      {/* Discoverability: the POI layer only exists at street zoom — say so, and let
-          the chip do the zooming (guarded: the test mock's map has no setZoom). */}
-      {interactive && viewport != null && viewport.zoom < POI_MIN_ZOOM && (
-        <button
-          type="button"
-          onClick={() => {
-            const m = mapRef.current;
-            if (m && typeof m.setZoom === "function") m.setZoom(POI_MIN_ZOOM);
-          }}
-          // px-3, not wider: the chip is already ~200px across on a phone and it sits on
-          // top of the map pane, so every extra pixel is one more place where a pan
-          // gesture starts on a button instead of on the map.
-          className="absolute bottom-3 right-3 z-[1000] inline-flex min-h-[44px] items-center rounded-full bg-white/90 px-3 text-xs font-medium text-slate-600 shadow transition hover:bg-white dark:bg-night-surface/90 dark:text-night-text dark:hover:bg-night-hover"
-        >
-          {t("zoomInForPlaces")}
-        </button>
-      )}
-      {/* A dead POI feed must say so, or an Overpass outage reads as "no places". The
-          amber variant is the half-dead case: part of the view loaded, so the labels on
-          screen are real but incomplete — worth a softer warning than "unavailable". */}
-      {interactive && (poisError || poisPartial) && (
-        <span
-          className={`absolute bottom-3 right-3 z-[1000] rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold shadow dark:bg-night-surface/90 ${
-            poisError ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"
-          }`}
-        >
-          {poisError ? t("placesUnavailable") : t("placesPartial")}
-        </span>
+      {/* One column for everything that sits in the bottom-right corner. They used to be
+          two siblings both pinned to bottom-3 right-3, which was fine only because
+          nobody had hit the state where both are true: a dead Overpass at city zoom drew
+          the error chip straight on top of the zoom-in chip. Stacked, each one takes its
+          own line and the reset button below them keeps the corner nearest the thumb. */}
+      {interactive && (
+        <div className="absolute bottom-3 right-3 z-[1000] flex flex-col items-end gap-2">
+          {/* A dead POI feed must say so, or an Overpass outage reads as "no places". The
+              amber variant is the half-dead case: part of the view loaded, so the labels
+              on screen are real but incomplete, worth a softer warning than
+              "unavailable". */}
+          {(poisError || poisPartial) && (
+            <span
+              className={`rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold shadow dark:bg-night-surface/90 ${
+                poisError ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"
+              }`}
+            >
+              {poisError ? t("placesUnavailable") : t("placesPartial")}
+            </span>
+          )}
+          {/* Discoverability: the POI layer only exists at street zoom — say so, and let
+              the chip do the zooming (guarded: the test mock's map has no setZoom). */}
+          {viewport != null && viewport.zoom < POI_MIN_ZOOM && (
+            <button
+              type="button"
+              onClick={() => {
+                const m = mapRef.current;
+                if (m && typeof m.setZoom === "function") m.setZoom(POI_MIN_ZOOM);
+              }}
+              // px-3, not wider: the chip is already ~200px across on a phone and it sits
+              // on top of the map pane, so every extra pixel is one more place where a
+              // pan gesture starts on a button instead of on the map.
+              className="inline-flex min-h-[44px] items-center rounded-full bg-white/90 px-3 text-xs font-medium text-slate-600 shadow transition hover:bg-white dark:bg-night-surface/90 dark:text-night-text dark:hover:bg-night-hover"
+            >
+              {t("zoomInForPlaces")}
+            </button>
+          )}
+          {/* Panning and zooming a map is easy to do and hard to undo: once the route is
+              off screen there is no gesture that brings it back, only a hunt. This is the
+              way back, and it is the same view the app picked when the plan arrived. */}
+          <button
+            type="button"
+            data-fov="map-reset-view"
+            aria-label={t("resetView")}
+            title={t("resetView")}
+            onClick={() => {
+              const m = mapRef.current;
+              if (m) applyDefaultView(m, allCoords, origin ?? destination, "city");
+            }}
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-white/90 text-slate-600 shadow transition hover:bg-white dark:bg-night-surface/90 dark:text-night-text dark:hover:bg-night-hover"
+          >
+            <span aria-hidden="true" className="material-symbols-rounded text-[22px] leading-none">
+              zoom_out_map
+            </span>
+          </button>
+        </div>
       )}
       {showWeather && (
         <RadarReadout

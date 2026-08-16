@@ -305,3 +305,47 @@ test("no tile or data credit is drawn on or beside the map", () => {
   expect(container.querySelector(".leaflet-control-attribution")).toBeNull();
   expect(container.textContent).not.toMatch(/OpenStreetMap|CARTO|OpenFreeMap|OpenMapTiles/i);
 });
+
+// ---------------------------------------------------------------------------
+// Reset the view
+// ---------------------------------------------------------------------------
+
+test("the reset button puts the whole route back on screen", () => {
+  renderMap(
+    <MapView
+      origin={{ lat: 52.379, lon: 4.9 }}
+      destination={{ lat: 52.358, lon: 4.868 }}
+      stops={[]}
+      route={route}
+    />
+  );
+  // FitRoute already fitted once on mount, so only the delta from the click counts.
+  const before = __mapCalls.fitBounds;
+  fireEvent.click(screen.getByRole("button", { name: /whole trip/i }));
+  expect(__mapCalls.fitBounds).toBe(before + 1);
+});
+
+test("with nothing planned the reset button goes back to the city", () => {
+  renderMap(<MapView origin={null} destination={null} stops={[]} route={null} />);
+  // The automatic refit deliberately leaves an empty map alone, so nothing has moved
+  // the camera yet and this really is the button's own call.
+  const before = __mapCalls.setView;
+  fireEvent.click(screen.getByRole("button", { name: /whole trip/i }));
+  expect(__mapCalls.setView).toBe(before + 1);
+});
+
+test("an empty map is left where the user put it until they ask for the reset", () => {
+  // The guard that keeps panning usable: FitRoute runs on every plan change, and if it
+  // recentred with nothing to show, a pan across an unplanned map would spring back.
+  const before = { fit: __mapCalls.fitBounds, view: __mapCalls.setView };
+  const { rerender } = renderMap(
+    <MapView origin={null} destination={null} stops={[]} route={null} />
+  );
+  rerender(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MapView origin={null} destination={null} stops={[]} route={null} />
+    </QueryClientProvider>
+  );
+  expect(__mapCalls.fitBounds).toBe(before.fit);
+  expect(__mapCalls.setView).toBe(before.view);
+});
