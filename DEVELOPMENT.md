@@ -305,11 +305,22 @@ app hard-codes a dark colour.
 | `night.muted` | `#CEE2F3` | secondary text |
 | `night.subtle` | `#9FBAD1` | tertiary / meta text |
 | `night.faint` | `#6A87A0` | separator glyphs only |
+| `night.accent` | `#FFC917` | NS geel — accent text, fills, selection rings |
+| `night.accent-soft` | `#FFE38A` | lighter accent step — fine text on tinted chips |
+| `night.accent-deep` | `#6B4E00` | translucent chip backgrounds and borders only |
 
 **Why 206–208°.** Every surface step sits on the brand's own blue (`#0D4A73` is hue 206)
 at 36–64% saturation. This is deliberately a *blue* theme rather than a tinted charcoal:
 where the light theme is navy ink on white paper, night is white ink on navy paper.
 Primary text on `night.bg` measures 16.05:1 — comfortably past AAA.
+
+**The accent is the NS yellow** (`#FFC917`, the Dutch railway geel already in the
+palette as `ams.ns`), replacing the emerald the dark theme used to borrow from the
+light theme's bike green. It reads as text on every surface (10.4:1 on `bg`, 6.4:1
+on `hover`); solid fills pair it with `night.bg` text — navy on yellow, the NS
+signage pairing. The home aurora follows: the dark lava lamp is NS geel, gold and
+amber instead of the old greens. `theme.night.test.ts` pins the accent's contrast
+floors and fails any `dark:*-emerald/lime/green-*` class a component reintroduces.
 
 **Retuning** is one line per token. Move the hue on all surface steps together, or nudge
 one step's lightness. Two things have to follow:

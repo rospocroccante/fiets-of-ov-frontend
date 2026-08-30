@@ -66,7 +66,7 @@ export function WeatherStrip({
       }`}
     >
       <div className="flex shrink-0 items-center gap-2" title={now.label}>
-        <Glyph icon={now.icon} px={compact ? 22 : undefined} className="text-ams-sky dark:text-emerald-300" />
+        <Glyph icon={now.icon} px={compact ? 22 : undefined} className="text-ams-sky dark:text-night-accent" />
         <div>
           <p
             className={`font-semibold leading-tight dark:text-night-text ${compact ? "text-base" : "text-lg"}`}
@@ -120,7 +120,7 @@ export function WeatherStrip({
               >
                 {h.time}
               </span>
-              <Glyph icon={look.icon} px={compact ? 16 : undefined} className="my-0.5 text-ams-sky dark:text-emerald-300" />
+              <Glyph icon={look.icon} px={compact ? 16 : undefined} className="my-0.5 text-ams-sky dark:text-night-accent" />
               {/* Compact puts the rain chance beside the temperature rather than under
                   it, so a wet hour and a dry one are the same height and the column
                   below the strip does not lose a row the moment it starts raining. */}

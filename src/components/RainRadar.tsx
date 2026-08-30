@@ -99,7 +99,7 @@ export function RadarReadout({
               onClick={() => onLayerToggle(k)}
               className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
                 layers[k]
-                  ? "bg-brand text-white dark:bg-emerald-600"
+                  ? "bg-brand text-white dark:bg-night-accent dark:text-night-bg"
                   : "text-gray-500 hover:bg-gray-100 dark:text-night-muted dark:hover:bg-white/10"
               }`}
             >
@@ -109,7 +109,7 @@ export function RadarReadout({
         </div>
       )}
       {label && (
-        <span className="rounded-full bg-white/90 px-2 py-1 text-xs font-semibold text-brand shadow dark:bg-night-surface/90 dark:text-emerald-300">
+        <span className="rounded-full bg-white/90 px-2 py-1 text-xs font-semibold text-brand shadow dark:bg-night-surface/90 dark:text-night-accent">
           {label}
         </span>
       )}

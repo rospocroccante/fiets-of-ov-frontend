@@ -16,7 +16,7 @@ function nightTokens(): Record<string, string> {
   const block = config.match(/night:\s*\{([\s\S]*?)\n\s*\},/);
   if (!block) throw new Error("no `night` colour block in tailwind.config.js");
   return Object.fromEntries(
-    [...block[1].matchAll(/(\w+):\s*"(#[0-9A-Fa-f]{6})"/g)].map((m) => [m[1], m[2].toUpperCase()]),
+    [...block[1].matchAll(/"?([\w-]+)"?:\s*"(#[0-9A-Fa-f]{6})"/g)].map((m) => [m[1], m[2].toUpperCase()]),
   );
 }
 
@@ -59,6 +59,11 @@ test("the night ramp holds the contrast floors it was solved for", () => {
   expect(contrast(t.subtle, t.raised)).toBeGreaterThanOrEqual(4.5);
   // `faint` is separator-only, so it answers to the 3:1 non-text floor instead.
   expect(contrast(t.faint, t.surface)).toBeGreaterThanOrEqual(3);
+  // The NS-yellow accent: readable as text on every surface it lands on, and dark
+  // enough behind navy text when it is the fill. `accent-soft` is fine text on cards.
+  expect(contrast(t.accent, t.hover)).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(t.bg, t.accent)).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(t["accent-soft"], t.raised)).toBeGreaterThanOrEqual(4.5);
   // The ramp has to actually step: each surface must be lighter than the one below it.
   const ladder = ["shade", "bg", "surface", "raised", "hover", "border"];
   const lums = ladder.map((k) => relativeLuminance(t[k]));
@@ -76,6 +81,10 @@ test("no component hard-codes a dark surface any more", () => {
       offenders.push(`${file}: ${bad}`);
     }
     for (const bad of src.match(/dark:[\w:-]*(?:bg|text|border)-slate-\d{3}/g) ?? []) {
+      offenders.push(`${file}: ${bad}`);
+    }
+    // The greens the dark theme borrowed before the NS-yellow accent replaced them.
+    for (const bad of src.match(/dark:[\w:-]*(?:emerald|lime|green)-\d{2,3}(?:\/\d+)?/g) ?? []) {
       offenders.push(`${file}: ${bad}`);
     }
   }

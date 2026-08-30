@@ -47,6 +47,15 @@ export default {
           muted: "#CEE2F3", // hsl(207 60% 88%) — secondary (was slate-300)
           subtle: "#9FBAD1", // hsl(207 35% 72%) — tertiary/meta (was slate-400/500)
           faint: "#6A87A0", // hsl(207 22% 52%) — decorative separators only (was slate-500/600)
+          // Dark accent — NS geel (the Dutch railway yellow, the ams.ns family),
+          // replacing the emerald the dark theme used to borrow. `accent` works as
+          // text on every surface (10.4:1 on `bg`, 6.4:1 on `hover`); solid fills
+          // pair it with `night.bg` text — navy on yellow, the NS signage pairing.
+          // `accent-soft` is the lighter text step on tinted chips; `accent-deep`
+          // never carries text, it is the translucent chip/border tint only.
+          accent: "#FFC917", // NS geel — accent text, fills, selection rings
+          "accent-soft": "#FFE38A", // lighter step — fine text on tinted chips
+          "accent-deep": "#6B4E00", // translucent backgrounds/borders only
         },
       },
       borderRadius: { card: "1.25rem" },

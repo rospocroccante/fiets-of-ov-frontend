@@ -67,14 +67,14 @@ export function PlaceInfoCard({
         <button
           type="button"
           onClick={() => onDirections("start")}
-          className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full bg-brand px-3 text-xs font-semibold text-white transition hover:bg-brand-dark dark:bg-emerald-600 dark:hover:bg-emerald-500"
+          className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full bg-brand px-3 text-xs font-semibold text-white transition hover:bg-brand-dark dark:bg-night-accent dark:text-night-bg dark:hover:bg-night-accent-soft"
         >
           {t("fromHere")}
         </button>
         <button
           type="button"
           onClick={() => onDirections("end")}
-          className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full border border-brand px-3 text-xs font-semibold text-brand transition hover:bg-brand-light dark:border-emerald-400 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
+          className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full border border-brand px-3 text-xs font-semibold text-brand transition hover:bg-brand-light dark:border-night-accent dark:text-night-accent dark:hover:bg-night-accent-deep/30"
         >
           {t("toHere")}
         </button>

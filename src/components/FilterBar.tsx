@@ -58,13 +58,13 @@ export function FilterBar({
   const chip = (pressed: boolean) =>
     `inline-flex min-h-[44px] shrink-0 items-center rounded-full border px-3 text-sm font-medium transition mouse:min-h-[36px] sm:px-4 ${
       pressed
-        ? "border-transparent bg-brand text-white dark:bg-emerald-600"
+        ? "border-transparent bg-brand text-white dark:bg-night-accent dark:text-night-bg"
         : "border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-night-border dark:text-night-muted dark:hover:bg-night-hover"
     }`;
   const segment = (pressed: boolean) =>
     `inline-flex min-h-[44px] items-center rounded-full px-3 text-sm transition mouse:min-h-[36px] ${
       pressed
-        ? "bg-brand text-white dark:bg-emerald-600"
+        ? "bg-brand text-white dark:bg-night-accent dark:text-night-bg"
         : "text-gray-600 hover:bg-gray-100 dark:text-night-muted dark:hover:bg-night-hover"
     }`;
 

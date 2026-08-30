@@ -52,7 +52,7 @@ export function NavigationOverlay({
       <div className="flex items-center gap-3">
         <span
           aria-hidden="true"
-          className="material-symbols-rounded shrink-0 text-[36px] leading-none text-brand dark:text-emerald-300"
+          className="material-symbols-rounded shrink-0 text-[36px] leading-none text-brand dark:text-night-accent"
         >
           {glyph}
         </span>

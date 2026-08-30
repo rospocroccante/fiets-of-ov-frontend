@@ -58,14 +58,14 @@ export function UseMyLocationButton({ onLocated, className, withLabel = false }:
     <div className={["relative", className].filter(Boolean).join(" ")}>
       {/* The light-mode pair is brand navy on white. Left alone it would be 1.4:1 on a
           night surface (invisible), and its hover would flash the near-white
-          brand-light; dark mode takes the emerald the rest of the app already
+          brand-light; dark mode takes the NS yellow the rest of the app already
           substitutes for the brand, over the night hover step. */}
       <button
         type="button"
         aria-label={t("useMyLocation")}
         disabled={busy}
         onClick={handleClick}
-        className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-brand hover:bg-brand-light disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-night-hover${
+        className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-brand hover:bg-brand-light disabled:opacity-50 dark:text-night-accent dark:hover:bg-night-hover${
           withLabel ? " gap-1.5 px-3 text-sm font-medium" : ""
         }`}
       >

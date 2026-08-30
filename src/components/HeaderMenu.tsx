@@ -105,7 +105,7 @@ export function HeaderMenu({
             <button type="button" aria-pressed={dark} className={item} onClick={onToggleTheme}>
               <span
                 aria-hidden="true"
-                className="material-symbols-rounded mr-2 text-[18px] leading-none text-slate-400 dark:text-emerald-300"
+                className="material-symbols-rounded mr-2 text-[18px] leading-none text-slate-400 dark:text-night-accent"
               >
                 {dark ? "light_mode" : "dark_mode"}
               </span>

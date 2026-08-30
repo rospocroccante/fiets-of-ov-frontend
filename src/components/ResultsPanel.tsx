@@ -35,7 +35,7 @@ function WeatherBanner({ view }: { view: PlanView }) {
     ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-900/25 dark:text-amber-200 dark:border-amber-800/40"
     : unknown
       ? "bg-gray-50 text-gray-600 border-gray-200 dark:bg-white/5 dark:text-night-muted dark:border-white/10"
-      : "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-900/25 dark:text-emerald-200 dark:border-emerald-800/40";
+      : "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-night-accent-deep/25 dark:text-night-accent-soft dark:border-night-accent-deep/40";
   const tag = wet ? t("rainExpected") : unknown ? t("forecastUnavailable") : t("dry");
   return (
     <div data-fov="weather-banner" className={`rounded-card border p-4 ${tone}`}>
@@ -151,7 +151,7 @@ export function ResultsPanel({
               // same contrast as the text on the ones they did not.
               className={`overflow-hidden rounded-card border bg-white transition dark:bg-night-surface ${
                 isSelected
-                  ? "border-brand ring-1 ring-inset ring-brand dark:border-emerald-400 dark:ring-emerald-400"
+                  ? "border-brand ring-1 ring-inset ring-brand dark:border-night-accent dark:ring-night-accent"
                   : "border-gray-200 hover:border-gray-300 dark:border-night-border dark:hover:border-white/25"
               }`}
             >
@@ -209,7 +209,7 @@ function SelectedDetails({
       type="button"
       aria-label={t("startNavigation")}
       onClick={onStartNav}
-      className="inline-flex min-h-[44px] shrink-0 items-center rounded-full bg-brand px-4 text-xs font-semibold text-white shadow transition hover:brightness-110 dark:bg-emerald-600"
+      className="inline-flex min-h-[44px] shrink-0 items-center rounded-full bg-brand px-4 text-xs font-semibold text-white shadow transition hover:brightness-110 dark:bg-night-accent dark:text-night-bg"
     >
       {t("start")}
     </button>
@@ -238,7 +238,7 @@ function SelectedDetails({
             >
               {departure}
             </span>
-            <span className="shrink-0 text-xs font-semibold text-brand dark:text-emerald-300">
+            <span className="shrink-0 text-xs font-semibold text-brand dark:text-night-accent">
               {t("stepByStep")}
             </span>
           </summary>

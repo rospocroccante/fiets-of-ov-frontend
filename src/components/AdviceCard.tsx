@@ -121,7 +121,7 @@ export function AdviceCard({
         <h3
           data-fov="option-title"
           className={`min-w-0 flex-1 text-sm font-semibold ${
-            selected ? "text-brand dark:text-emerald-300" : "text-slate-900 dark:text-night-text"
+            selected ? "text-brand dark:text-night-accent" : "text-slate-900 dark:text-night-text"
           }`}
         >
           {option.title}
@@ -129,7 +129,7 @@ export function AdviceCard({
         {option.recommended && (
           // One treatment, selected or not. The selected variant used to be
           // white-on-brand at 10px, which measured 2.86:1 in the night theme.
-          <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+          <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-night-accent-deep/40 dark:text-night-accent">
             {t("best")}
           </span>
         )}

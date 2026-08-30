@@ -34,15 +34,15 @@ const BLUE_BLOBS: Blob[] = [
   { color: "#F18700", size: "22rem", opacity: 0.5, anim: "aurora-b", duration: "16s", delay: "-14s", pos: { top: "58%", left: "12%" } },
 ];
 
-// Dark theme: the all-green lava lamp — lime, light green, emerald, deep forest — on
-// the anthracite backdrop.
-const GREEN_BLOBS: Blob[] = [
-  { color: "#84CC16", size: "40rem", opacity: 0.45, anim: "aurora-a", duration: "12s", delay: "0s", pos: { top: "-10rem", left: "-10rem" } },
-  { color: "#166534", size: "34rem", opacity: 0.5, anim: "aurora-b", duration: "14.5s", delay: "-6s", pos: { top: "-6rem", right: "-8rem" } },
-  { color: "#4ADE80", size: "36rem", opacity: 0.4, anim: "aurora-c", duration: "15.5s", delay: "-3s", pos: { bottom: "-10rem", right: "2rem" } },
-  { color: "#A3E635", size: "28rem", opacity: 0.35, anim: "aurora-b", duration: "13s", delay: "-9s", pos: { bottom: "-8rem", left: "0rem" } },
-  { color: "#059669", size: "30rem", opacity: 0.45, anim: "aurora-a", duration: "13.5s", delay: "-11s", pos: { top: "26%", left: "30%" } },
-  { color: "#34D399", size: "26rem", opacity: 0.35, anim: "aurora-c", duration: "11s", delay: "-5s", pos: { top: "38%", right: "22%" } },
+// Dark theme: the all-yellow lava lamp — NS geel, gold, amber, deep bronze — on
+// the navy backdrop.
+const YELLOW_BLOBS: Blob[] = [
+  { color: "#FACC15", size: "40rem", opacity: 0.45, anim: "aurora-a", duration: "12s", delay: "0s", pos: { top: "-10rem", left: "-10rem" } },
+  { color: "#854D0E", size: "34rem", opacity: 0.5, anim: "aurora-b", duration: "14.5s", delay: "-6s", pos: { top: "-6rem", right: "-8rem" } },
+  { color: "#FDE047", size: "36rem", opacity: 0.4, anim: "aurora-c", duration: "15.5s", delay: "-3s", pos: { bottom: "-10rem", right: "2rem" } },
+  { color: "#FDE68A", size: "28rem", opacity: 0.35, anim: "aurora-b", duration: "13s", delay: "-9s", pos: { bottom: "-8rem", left: "0rem" } },
+  { color: "#FFC917", size: "30rem", opacity: 0.45, anim: "aurora-a", duration: "13.5s", delay: "-11s", pos: { top: "26%", left: "30%" } },
+  { color: "#F59E0B", size: "26rem", opacity: 0.35, anim: "aurora-c", duration: "11s", delay: "-5s", pos: { top: "38%", right: "22%" } },
 ];
 
 // This lives OUTSIDE the home stage — App mounts it in its own layer between the map
@@ -60,7 +60,7 @@ const GREEN_BLOBS: Blob[] = [
 // effect; the background lifting with it, or being cut by the lift, is not — so the
 // background is its own layer, fading on exactly the same curve and never moving.
 export function HomeAurora({ dark = false }: { dark?: boolean }) {
-  const blobs = dark ? GREEN_BLOBS : BLUE_BLOBS;
+  const blobs = dark ? YELLOW_BLOBS : BLUE_BLOBS;
   return (
     <div
       data-fov="home-aurora"

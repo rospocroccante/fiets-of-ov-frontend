@@ -621,7 +621,7 @@ export default function App() {
           the bottom of it. */}
       <a
         href={progressIs1 ? "#fov-map-main" : "#fov-home-main"}
-        className="sr-only focus:not-sr-only focus:fixed focus:left-[calc(0.75rem+env(safe-area-inset-left))] focus:top-[calc(0.75rem+env(safe-area-inset-top))] focus:z-[3000] focus:inline-flex focus:min-h-[44px] focus:items-center focus:rounded-full focus:bg-white focus:px-4 focus:text-sm focus:font-semibold focus:text-brand focus:shadow-lg dark:focus:bg-night-raised dark:focus:text-emerald-300"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-[calc(0.75rem+env(safe-area-inset-left))] focus:top-[calc(0.75rem+env(safe-area-inset-top))] focus:z-[3000] focus:inline-flex focus:min-h-[44px] focus:items-center focus:rounded-full focus:bg-white focus:px-4 focus:text-sm focus:font-semibold focus:text-brand focus:shadow-lg dark:focus:bg-night-raised dark:focus:text-night-accent"
       >
         {t("skipToContent")}
       </a>
@@ -734,7 +734,7 @@ export default function App() {
             {!hideMap && (
               <section className="relative order-1 h-[32dvh] shrink-0 md:order-2 md:h-auto md:w-1/2">
                 {armed && (
-                  <div className="absolute left-3 top-3 z-[1000] rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow dark:bg-emerald-600">
+                  <div className="absolute left-3 top-3 z-[1000] rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow dark:bg-night-accent dark:text-night-bg">
                     {armed === "start" ? t("clickMapSetStart") : t("clickMapSetEnd")}
                   </div>
                 )}
@@ -863,7 +863,7 @@ export default function App() {
               type="button"
               aria-label={t("switchLanguage")}
               onClick={toggleLang}
-              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 px-3 text-xs font-semibold leading-[20px] text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-emerald-300 dark:hover:bg-white/20"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 px-3 text-xs font-semibold leading-[20px] text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-night-accent dark:hover:bg-white/20"
             >
               {lang === "en" ? "NL" : "EN"}
             </button>
@@ -872,7 +872,7 @@ export default function App() {
               aria-label={dark ? t("switchToLight") : t("switchToDark")}
               aria-pressed={dark}
               onClick={toggleTheme}
-              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-emerald-300 dark:hover:bg-white/20"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-night-accent dark:hover:bg-white/20"
             >
               <span aria-hidden="true" className="material-symbols-rounded block text-[20px] leading-none">
                 {dark ? "light_mode" : "dark_mode"}
@@ -1026,7 +1026,7 @@ export default function App() {
             )}
             <button
               onClick={goHome}
-              className="flex min-h-[44px] items-center truncate text-xl font-bold text-brand dark:text-emerald-300"
+              className="flex min-h-[44px] items-center truncate text-xl font-bold text-brand dark:text-night-accent"
             >
               Fiets of OV
             </button>
@@ -1101,7 +1101,7 @@ export default function App() {
             type="button"
             aria-label={t("swapStartEnd")}
             onClick={swap}
-            className="flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center text-gray-400 hover:text-brand dark:hover:text-emerald-300"
+            className="flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center text-gray-400 hover:text-brand dark:hover:text-night-accent"
           >
             &#8646;
           </button>
