@@ -151,7 +151,7 @@ export function ResultsPanel({
               // same contrast as the text on the ones they did not.
               className={`overflow-hidden rounded-card border bg-white transition dark:bg-night-surface ${
                 isSelected
-                  ? "border-brand ring-1 ring-inset ring-brand dark:border-night-accent dark:ring-night-accent"
+                  ? "border-brand ring-1 ring-inset ring-brand dark:border-ams-ns dark:ring-ams-ns"
                   : "border-gray-200 hover:border-gray-300 dark:border-night-border dark:hover:border-white/25"
               }`}
             >
