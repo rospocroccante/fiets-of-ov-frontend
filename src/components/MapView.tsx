@@ -19,16 +19,41 @@ import "leaflet/dist/leaflet.css";
 // Maki (CC0, mapbox/maki): the POI icon set drawn on a 15px grid for exactly
 // this job — badges on a map. ?raw inlines each file as a string at build time,
 // so only the ten icons below ship, not the whole set.
+import alcoholShopSvg from "@mapbox/maki/icons/alcohol-shop.svg?raw";
+import aquariumSvg from "@mapbox/maki/icons/aquarium.svg?raw";
 import artGallerySvg from "@mapbox/maki/icons/art-gallery.svg?raw";
 import attractionSvg from "@mapbox/maki/icons/attraction.svg?raw";
+import bakerySvg from "@mapbox/maki/icons/bakery.svg?raw";
+import bankSvg from "@mapbox/maki/icons/bank.svg?raw";
 import barSvg from "@mapbox/maki/icons/bar.svg?raw";
 import beerSvg from "@mapbox/maki/icons/beer.svg?raw";
+import bicycleSvg from "@mapbox/maki/icons/bicycle.svg?raw";
 import cafeSvg from "@mapbox/maki/icons/cafe.svg?raw";
+import cinemaSvg from "@mapbox/maki/icons/cinema.svg?raw";
+import clothingStoreSvg from "@mapbox/maki/icons/clothing-store.svg?raw";
+import convenienceSvg from "@mapbox/maki/icons/convenience.svg?raw";
 import fastFoodSvg from "@mapbox/maki/icons/fast-food.svg?raw";
+import fitnessCentreSvg from "@mapbox/maki/icons/fitness-centre.svg?raw";
+import gardenSvg from "@mapbox/maki/icons/garden.svg?raw";
+import grocerySvg from "@mapbox/maki/icons/grocery.svg?raw";
+import hairdresserSvg from "@mapbox/maki/icons/hairdresser.svg?raw";
 import iceCreamSvg from "@mapbox/maki/icons/ice-cream.svg?raw";
+import librarySvg from "@mapbox/maki/icons/library.svg?raw";
+import lodgingSvg from "@mapbox/maki/icons/lodging.svg?raw";
 import markerSvg from "@mapbox/maki/icons/marker.svg?raw";
 import museumSvg from "@mapbox/maki/icons/museum.svg?raw";
+import musicSvg from "@mapbox/maki/icons/music.svg?raw";
+import parkSvg from "@mapbox/maki/icons/park.svg?raw";
+import pharmacySvg from "@mapbox/maki/icons/pharmacy.svg?raw";
+import placeOfWorshipSvg from "@mapbox/maki/icons/place-of-worship.svg?raw";
+import playgroundSvg from "@mapbox/maki/icons/playground.svg?raw";
 import restaurantSvg from "@mapbox/maki/icons/restaurant.svg?raw";
+import shopSvg from "@mapbox/maki/icons/shop.svg?raw";
+import stadiumSvg from "@mapbox/maki/icons/stadium.svg?raw";
+import swimmingSvg from "@mapbox/maki/icons/swimming.svg?raw";
+import theatreSvg from "@mapbox/maki/icons/theatre.svg?raw";
+import viewpointSvg from "@mapbox/maki/icons/viewpoint.svg?raw";
+import zooSvg from "@mapbox/maki/icons/zoo.svg?raw";
 import type { Itinerary, PlanLeg, Stop } from "../api/types";
 import { declutterPois, usePois, POI_MIN_ZOOM } from "../hooks/usePois";
 import type { Poi, Viewport } from "../hooks/usePois";
@@ -104,6 +129,8 @@ const POI_COLOR: Record<Poi["kind"], string> = {
   food: "#ea580c",
   drink: "#7c3aed",
   culture: "#4f46e5",
+  nature: "#16a34a",
+  shop: "#db2777",
   other: "#d97706",
 };
 
@@ -112,39 +139,106 @@ const POI_COLOR: Record<Poi["kind"], string> = {
 const maki = (svg: string): string => svg.slice(svg.indexOf("<svg"));
 
 const MAKI: Record<string, string> = {
+  "alcohol-shop": maki(alcoholShopSvg),
+  aquarium: maki(aquariumSvg),
   "art-gallery": maki(artGallerySvg),
   attraction: maki(attractionSvg),
+  bakery: maki(bakerySvg),
+  bank: maki(bankSvg),
   bar: maki(barSvg),
   beer: maki(beerSvg),
+  bicycle: maki(bicycleSvg),
   cafe: maki(cafeSvg),
+  cinema: maki(cinemaSvg),
+  "clothing-store": maki(clothingStoreSvg),
+  convenience: maki(convenienceSvg),
   "fast-food": maki(fastFoodSvg),
+  "fitness-centre": maki(fitnessCentreSvg),
+  garden: maki(gardenSvg),
+  grocery: maki(grocerySvg),
+  hairdresser: maki(hairdresserSvg),
   "ice-cream": maki(iceCreamSvg),
+  library: maki(librarySvg),
+  lodging: maki(lodgingSvg),
   marker: maki(markerSvg),
   museum: maki(museumSvg),
+  music: maki(musicSvg),
+  park: maki(parkSvg),
+  pharmacy: maki(pharmacySvg),
+  "place-of-worship": maki(placeOfWorshipSvg),
+  playground: maki(playgroundSvg),
   restaurant: maki(restaurantSvg),
+  shop: maki(shopSvg),
+  stadium: maki(stadiumSvg),
+  swimming: maki(swimmingSvg),
+  theatre: maki(theatreSvg),
+  viewpoint: maki(viewpointSvg),
+  zoo: maki(zooSvg),
 };
 
 // The raw OSM tag picks the icon, because a cafe cup is not a cocktail glass
 // even though both kinds are "drink". Values are Maki icon names — every one
 // must have an entry in MAKI above, or the badge renders empty.
 const POI_ICON_TAG: Record<string, string> = {
+  // amenity
   restaurant: "restaurant",
   fast_food: "fast-food",
+  food_court: "restaurant",
   ice_cream: "ice-cream",
   cafe: "cafe",
   bar: "bar",
   pub: "beer",
+  biergarten: "beer",
+  nightclub: "music",
+  theatre: "theatre",
+  cinema: "cinema",
+  arts_centre: "art-gallery",
+  library: "library",
+  place_of_worship: "place-of-worship",
+  pharmacy: "pharmacy",
+  bank: "bank",
+  // tourism
   museum: "museum",
   attraction: "attraction",
   gallery: "art-gallery",
+  artwork: "art-gallery",
+  viewpoint: "viewpoint",
+  zoo: "zoo",
+  aquarium: "aquarium",
+  theme_park: "attraction",
+  hotel: "lodging",
+  hostel: "lodging",
+  guest_house: "lodging",
+  // leisure
+  park: "park",
+  garden: "garden",
+  nature_reserve: "park",
+  playground: "playground",
+  dog_park: "park",
+  fitness_centre: "fitness-centre",
+  sports_centre: "fitness-centre",
+  stadium: "stadium",
+  swimming_pool: "swimming",
+  // shop
+  supermarket: "grocery",
+  convenience: "convenience",
+  bakery: "bakery",
+  alcohol: "alcohol-shop",
+  clothes: "clothing-store",
+  hairdresser: "hairdresser",
+  books: "library",
+  bicycle: "bicycle",
 };
 
-// Per-kind fallback for POIs persisted by poiStore before Poi carried the tag:
-// an old cache must degrade to a sensible icon, never to a blank badge.
+// Per-kind fallback: POIs persisted before Poi carried the tag, and the long tail
+// of OSM values with no dedicated glyph (the query now takes every named
+// amenity/tourism/leisure/shop), must degrade to a sensible icon, never blank.
 const POI_ICON_KIND: Record<Poi["kind"], string> = {
   food: "restaurant",
   drink: "cafe",
   culture: "museum",
+  nature: "park",
+  shop: "shop",
   other: "marker",
 };
 
@@ -217,6 +311,34 @@ function MapInteraction({ interactive }: { interactive: boolean }) {
 //
 // Every call is guarded because the react-leaflet mock the unit tests run against
 // implements only part of L.Map.
+// Recentring glides instead of teleporting: flyTo runs Leaflet's zoom-out/zoom-in
+// arc, which keeps the user oriented when the jump is long (panned off to Germany,
+// back to Amsterdam). Duration scales with how far the camera actually travels:
+// a nudge within the city snaps back in ~0.3s, and anything beyond ~30km already
+// earns the full one-second glide.
+function flyOpts(map: L.Map, target: [number, number]) {
+  let duration = 1;
+  if (typeof map.getCenter === "function" && typeof map.distance === "function") {
+    const meters = map.distance(map.getCenter(), target);
+    duration = Math.min(1, Math.max(0.3, meters / 30_000));
+  }
+  return { duration };
+}
+
+function boundsCenter(coords: [number, number][]): [number, number] {
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  let minLon = Infinity;
+  let maxLon = -Infinity;
+  for (const [lat, lon] of coords) {
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+    if (lon < minLon) minLon = lon;
+    if (lon > maxLon) maxLon = lon;
+  }
+  return [(minLat + maxLat) / 2, (minLon + maxLon) / 2];
+}
+
 function applyDefaultView(
   map: L.Map,
   coords: [number, number][],
@@ -224,14 +346,25 @@ function applyDefaultView(
   empty: "keep" | "city",
 ) {
   if (coords.length >= 2) {
-    if (typeof map.fitBounds === "function") {
+    if (typeof map.flyToBounds === "function") {
+      map.flyToBounds(coords as LatLngBoundsExpression, {
+        padding: [50, 50],
+        ...flyOpts(map, boundsCenter(coords)),
+      });
+    } else if (typeof map.fitBounds === "function") {
       map.fitBounds(coords as LatLngBoundsExpression, { padding: [50, 50] });
     }
     return;
   }
-  if (typeof map.setView !== "function") return;
-  if (fallback) map.setView([fallback.lat, fallback.lon], 14);
-  else if (empty === "city") map.setView(AMS, 13);
+  const target: [number, number] | null = fallback
+    ? [fallback.lat, fallback.lon]
+    : empty === "city"
+      ? AMS
+      : null;
+  if (!target) return;
+  const zoom = fallback ? 14 : 13;
+  if (typeof map.flyTo === "function") map.flyTo(target, zoom, flyOpts(map, target));
+  else if (typeof map.setView === "function") map.setView(target, zoom);
 }
 
 function FitRoute({

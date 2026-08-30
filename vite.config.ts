@@ -119,6 +119,14 @@ export default defineConfig({
             return "leaflet";
           }
           if (/node_modules\/framer-motion\//.test(id)) return "motion";
+          // maplibre-gl and its leaflet binding change only on version bumps, but they
+          // were being fused into basemapGL's dynamic chunk - so any edit to the glue
+          // in src/lib/basemapGL.ts invalidated ~1 MB of vendor code in users' caches.
+          // A manual chunk stays lazy: nothing loads it until the dynamic basemapGL
+          // chunk imports it, and the entry never references it, so index.html gains
+          // no modulepreload. "@maplibre/" rides along because the binding shares the
+          // vendor's release cadence, not the glue's edit cadence.
+          if (/node_modules\/(maplibre-gl|@maplibre)\//.test(id)) return "maplibre";
           // React needs a chunk of its own, and this is the line that actually makes
           // the map lazy. Left unassigned, React is a dependency of both the entry and
           // the (manual) leaflet chunk, and Rollup resolves that by parking React

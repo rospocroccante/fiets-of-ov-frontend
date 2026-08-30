@@ -5,7 +5,9 @@ import type { Poi } from "../hooks/usePois";
 // plenty) and are served from an in-memory Map so reads cost nothing. Writes are
 // debounced into one serialized blob; on quota pressure the oldest half is dropped
 // and, failing that, the store degrades to memory-only for the session.
-const KEY = "fov.pois.v1";
+// v2: kinds/tags widened to all named amenity/tourism/leisure/shop elements and
+// ids gained the element type; v1 entries would render the old narrow world.
+const KEY = "fov.pois.v2";
 const TTL_MS = 7 * 24 * 3600 * 1000;
 const MAX_STORED_CELLS = 400;
 const PERSIST_DEBOUNCE_MS = 1000;

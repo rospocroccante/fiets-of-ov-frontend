@@ -82,7 +82,7 @@ export const __wheelZoom = { enabled: null as boolean | null };
 // Test spy: counts imperative camera calls (FitRoute vs FollowCamera assertions).
 // Tests should compare before/after deltas taken inside the test; __resetMapMock zeroes
 // them between tests, so an absolute value only means anything within one case.
-export const __mapCalls = { fitBounds: 0, setView: 0, panTo: 0, setZoom: 0 };
+export const __mapCalls = { fitBounds: 0, setView: 0, panTo: 0, setZoom: 0, flyTo: 0, flyToBounds: 0 };
 
 // A single stable map object, like the real useMap: effects keyed on map identity
 // must not re-fire every render.
@@ -98,6 +98,12 @@ const _map = {
   },
   setZoom: () => {
     __mapCalls.setZoom += 1;
+  },
+  flyTo: () => {
+    __mapCalls.flyTo += 1;
+  },
+  flyToBounds: () => {
+    __mapCalls.flyToBounds += 1;
   },
   scrollWheelZoom: {
     enable: () => {
@@ -165,4 +171,6 @@ export function __resetMapMock(): void {
   __mapCalls.setView = 0;
   __mapCalls.panTo = 0;
   __mapCalls.setZoom = 0;
+  __mapCalls.flyTo = 0;
+  __mapCalls.flyToBounds = 0;
 }

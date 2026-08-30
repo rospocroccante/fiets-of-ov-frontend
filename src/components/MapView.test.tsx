@@ -269,12 +269,14 @@ test("while navigating, the route refit is suppressed and the camera follows the
     </QueryClientProvider>
   );
   const fitBefore = __mapCalls.fitBounds;
+  const flyBoundsBefore = __mapCalls.flyToBounds;
   const setViewBefore = __mapCalls.setView;
   const panBefore = __mapCalls.panTo;
   const { rerender } = render(view({ lat: 52.379, lon: 4.9, accuracy: 10 }));
   // FitRoute is inactive while navigating (a replan must not snap the camera away);
   // FollowCamera did the one activation setView instead.
   expect(__mapCalls.fitBounds).toBe(fitBefore);
+  expect(__mapCalls.flyToBounds).toBe(flyBoundsBefore);
   expect(__mapCalls.setView).toBe(setViewBefore + 1);
   // Each new fix pans; it does not re-run the zooming setView.
   rerender(view({ lat: 52.3785, lon: 4.899, accuracy: 10 }));
@@ -320,24 +322,31 @@ test("the reset button puts the whole route back on screen", () => {
     />
   );
   // FitRoute already fitted once on mount, so only the delta from the click counts.
-  const before = __mapCalls.fitBounds;
+  // The refit flies (animated) rather than snapping - same camera, smoother ride.
+  const before = __mapCalls.flyToBounds;
   fireEvent.click(screen.getByRole("button", { name: /whole trip/i }));
-  expect(__mapCalls.fitBounds).toBe(before + 1);
+  expect(__mapCalls.flyToBounds).toBe(before + 1);
 });
 
 test("with nothing planned the reset button goes back to the city", () => {
   renderMap(<MapView origin={null} destination={null} stops={[]} route={null} />);
   // The automatic refit deliberately leaves an empty map alone, so nothing has moved
-  // the camera yet and this really is the button's own call.
-  const before = __mapCalls.setView;
+  // the camera yet and this really is the button's own call. It flies back to the
+  // city: from wherever the user wandered off to, the return is animated, not a snap.
+  const before = __mapCalls.flyTo;
   fireEvent.click(screen.getByRole("button", { name: /whole trip/i }));
-  expect(__mapCalls.setView).toBe(before + 1);
+  expect(__mapCalls.flyTo).toBe(before + 1);
 });
 
 test("an empty map is left where the user put it until they ask for the reset", () => {
   // The guard that keeps panning usable: FitRoute runs on every plan change, and if it
   // recentred with nothing to show, a pan across an unplanned map would spring back.
-  const before = { fit: __mapCalls.fitBounds, view: __mapCalls.setView };
+  const before = {
+    fit: __mapCalls.fitBounds,
+    view: __mapCalls.setView,
+    fly: __mapCalls.flyTo,
+    flyBounds: __mapCalls.flyToBounds,
+  };
   const { rerender } = renderMap(
     <MapView origin={null} destination={null} stops={[]} route={null} />
   );
@@ -348,4 +357,6 @@ test("an empty map is left where the user put it until they ask for the reset", 
   );
   expect(__mapCalls.fitBounds).toBe(before.fit);
   expect(__mapCalls.setView).toBe(before.view);
+  expect(__mapCalls.flyTo).toBe(before.fly);
+  expect(__mapCalls.flyToBounds).toBe(before.flyBounds);
 });

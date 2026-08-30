@@ -20,7 +20,7 @@ const OVERPASS_ENDPOINTS = [
   "https://overpass.kumi.systems/api/interpreter",
 ];
 
-export type PoiKind = "food" | "drink" | "culture" | "other";
+export type PoiKind = "food" | "drink" | "culture" | "nature" | "shop" | "other";
 
 export interface Poi {
   id: string;
@@ -43,29 +43,68 @@ export interface Viewport {
   zoom: number;
 }
 
+// Every named amenity/tourism/leisure/shop element is a POI. These maps only pin
+// down the tags that get their own colour and declutter priority; any other tag in
+// those namespaces falls back to a kind instead of being dropped, so "all of OSM"
+// really means all of it.
 const AMENITY_KIND: Record<string, PoiKind> = {
   restaurant: "food",
   fast_food: "food",
   ice_cream: "food",
+  food_court: "food",
   cafe: "drink",
   bar: "drink",
   pub: "drink",
+  biergarten: "drink",
+  nightclub: "drink",
+  theatre: "culture",
+  cinema: "culture",
+  arts_centre: "culture",
+  library: "culture",
+  place_of_worship: "culture",
 };
 
 const TOURISM_KIND: Record<string, PoiKind> = {
   museum: "culture",
   attraction: "culture",
   gallery: "culture",
+  artwork: "culture",
+  viewpoint: "culture",
+  zoo: "culture",
+  aquarium: "culture",
+  theme_park: "culture",
 };
+
+const LEISURE_KIND: Record<string, PoiKind> = {
+  park: "nature",
+  garden: "nature",
+  nature_reserve: "nature",
+  playground: "nature",
+  dog_park: "nature",
+};
+
+// Tag families in display-priority order: a snack bar inside a park is a snack
+// bar first. `shop` needs no per-value map - every shop is kind "shop"; the raw
+// value still reaches the marker so a bakery gets a bakery glyph.
+function classify(tags: Record<string, string>): { kind: PoiKind; tag: string } | null {
+  if (tags.amenity) return { kind: AMENITY_KIND[tags.amenity] ?? "other", tag: tags.amenity };
+  if (tags.tourism) return { kind: TOURISM_KIND[tags.tourism] ?? "other", tag: tags.tourism };
+  if (tags.leisure) return { kind: LEISURE_KIND[tags.leisure] ?? "other", tag: tags.leisure };
+  if (tags.shop) return { kind: "shop", tag: tags.shop };
+  return null;
+}
 
 function label(tag: string): string {
   return tag.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 }
 
 interface OverpassElement {
+  type?: "node" | "way" | "relation";
   id: number;
-  lat: number;
-  lon: number;
+  // Nodes carry lat/lon; ways and relations carry an Overpass-computed `center`.
+  lat?: number;
+  lon?: number;
+  center?: { lat: number; lon: number };
   tags?: Record<string, string>;
 }
 
@@ -73,18 +112,20 @@ export function toPoi(el: OverpassElement): Poi | null {
   const tags = el.tags ?? {};
   const name = tags.name?.trim();
   if (!name) return null;
-  const amenity = tags.amenity ? AMENITY_KIND[tags.amenity] : undefined;
-  const tourism = tags.tourism ? TOURISM_KIND[tags.tourism] : undefined;
-  const kind = amenity ?? tourism ?? "other";
-  const kindTag = amenity ? tags.amenity : tourism ? tags.tourism : null;
+  const lat = el.lat ?? el.center?.lat;
+  const lon = el.lon ?? el.center?.lon;
+  if (lat == null || lon == null) return null;
+  const c = classify(tags);
   return {
-    id: `osm-${el.id}`,
+    // Node and way ids live in separate OSM sequences and can collide, so the
+    // element type must be part of the identity or dedupe eats real places.
+    id: `osm-${el.type ?? "node"}-${el.id}`,
     name,
-    kind,
-    kindLabel: kindTag ? label(kindTag) : "Place",
-    tag: kindTag,
-    lat: el.lat,
-    lon: el.lon,
+    kind: c?.kind ?? "other",
+    kindLabel: c ? label(c.tag) : "Place",
+    tag: c?.tag ?? null,
+    lat,
+    lon,
   };
 }
 
@@ -94,6 +135,8 @@ const MOCK_POIS: Poi[] = [
   { id: "m2", name: "Bar Noord", kind: "drink", kindLabel: "Bar", tag: "bar", lat: 52.4, lon: 4.9 },
   { id: "m3", name: "Pizzeria Amstel", kind: "food", kindLabel: "Restaurant", tag: "restaurant", lat: 52.366, lon: 4.898 },
   { id: "m4", name: "Museum Het Schip", kind: "culture", kindLabel: "Museum", tag: "museum", lat: 52.385, lon: 4.877 },
+  { id: "m5", name: "Westerpark", kind: "nature", kindLabel: "Park", tag: "park", lat: 52.387, lon: 4.873 },
+  { id: "m6", name: "Bakkerij Centrum", kind: "shop", kindLabel: "Bakery", tag: "bakery", lat: 52.372, lon: 4.895 },
 ];
 
 interface Bbox {
@@ -106,11 +149,16 @@ interface Bbox {
 function overpassQuery(v: Bbox, cap: number): string {
   const bbox = `${v.south.toFixed(4)},${v.west.toFixed(4)},${v.north.toFixed(4)},${v.east.toFixed(4)}`;
   const timeout = cap > MAX_POIS ? 25 : 10;
+  // `nwr` + `out center` folds ways and relations (parks, museums drawn as
+  // building outlines) to a single labelled point. The name filter is what keeps
+  // "every POI" honest: an unnamed bench has nothing for a label to say.
   return (
     `[out:json][timeout:${timeout}];(` +
-    `node["amenity"~"^(restaurant|fast_food|ice_cream|cafe|bar|pub)$"]["name"](${bbox});` +
-    `node["tourism"~"^(museum|attraction|gallery)$"]["name"](${bbox});` +
-    `);out body ${cap} qt;`
+    `nwr["amenity"]["name"](${bbox});` +
+    `nwr["tourism"]["name"](${bbox});` +
+    `nwr["leisure"]["name"](${bbox});` +
+    `nwr["shop"]["name"](${bbox});` +
+    `);out center ${cap} qt;`
   );
 }
 
@@ -120,7 +168,12 @@ function overpassQuery(v: Bbox, cap: number): string {
 // grid-aligned, so their keys are identical across pans.
 const CELL_LAT = 0.01; // ~1.1 km
 const CELL_LON = 0.015; // ~1.0 km at Amsterdam's latitude
-const MAX_CELLS = 12;
+// A full-screen desktop map at zoom 14 spans ~9x6 km, so the cap must admit ~60
+// cells or part of the view simply never loads. 12 was tuned for a phone viewport
+// and truncated a desktop view to its south-west quadrant - places visibly "loaded
+// halfway". The cap is affordable because in Amsterdam the bulk prefetch answers
+// almost every cell from the store with zero network.
+const MAX_CELLS = 60;
 
 interface Cell extends Bbox {
   key: string;
@@ -131,20 +184,27 @@ function cellsFor(v: Bbox): Cell[] {
   const s1 = Math.floor(v.north / CELL_LAT);
   const w0 = Math.floor(v.west / CELL_LON);
   const w1 = Math.floor(v.east / CELL_LON);
-  const cells: Cell[] = [];
+  const cells: Array<Cell & { d: number }> = [];
   for (let i = s0; i <= s1; i++) {
     for (let j = w0; j <= w1; j++) {
-      if (cells.length >= MAX_CELLS) return cells;
       cells.push({
         south: i * CELL_LAT,
         west: j * CELL_LON,
         north: (i + 1) * CELL_LAT,
         east: (j + 1) * CELL_LON,
         key: `${i}:${j}`,
+        // Squared distance from the viewport centre, in cell units (cells are
+        // near-square, so no lat/lon weighting needed).
+        d: (i - (s0 + s1) / 2) ** 2 + (j - (w0 + w1) / 2) ** 2,
       });
     }
   }
-  return cells;
+  // Centre-out order: if a viewport still exceeds the cap (deep zoom-out races
+  // POI_MIN_ZOOM, ultra-wide screens), the cells that drop are the corners - the
+  // least noticeable loss - rather than the entire northern half, which is what
+  // the raw row scan surrendered. Key tie-break keeps the order deterministic.
+  cells.sort((a, b) => a.d - b.d || (a.key < b.key ? -1 : 1));
+  return cells.slice(0, MAX_CELLS).map(({ d: _d, ...cell }) => cell);
 }
 
 // Each attempt gets its own timeout so a hanging mirror cannot eat the whole retry
@@ -194,9 +254,14 @@ async function fetchPois(
 // not refetch either; that marking is skipped if the result hit the cap, because a
 // truncated sweep cannot prove a cell empty. Runs at most once a week; a failure is
 // silent (the on-demand per-cell path still works).
-const PREFETCH_META_KEY = "fov.poisPrefetch.v1";
+// v2: the sweep now covers every named amenity/tourism/leisure/shop element, so a
+// v1 timestamp (narrow tag list) must not suppress the wider refetch.
+const PREFETCH_META_KEY = "fov.poisPrefetch.v2";
 const PREFETCH_TTL_MS = 7 * 24 * 3600 * 1000;
-const PREFETCH_CAP = 8000;
+// Central Amsterdam holds well over 8k named places under the widened query; a
+// bigger cap keeps the known-empty marking (which requires an uncapped result)
+// reachable. ~12k elements is a few MB of JSON, paid at most once a week.
+const PREFETCH_CAP = 12_000;
 const AMS_CORE: Bbox = { south: 52.32, west: 4.8, north: 52.43, east: 4.99 };
 
 export async function prefetchAmsterdamPois(): Promise<void> {
@@ -249,8 +314,16 @@ export async function prefetchAmsterdamPois(): Promise<void> {
 // exactly like Google's: stacked names pack tight, east-west neighbours need
 // room for the text. Zooming in stretches metres into more pixels, so more
 // labels fit with no per-zoom tuning table.
-// Museums win over bars, bars over snack corners, when they compete for a spot.
-const KIND_PRIORITY: Record<PoiKind, number> = { culture: 0, drink: 1, food: 2, other: 3 };
+// Museums win over parks, parks over bars, bars over snack corners, snack corners
+// over shops, when they compete for a spot.
+const KIND_PRIORITY: Record<PoiKind, number> = {
+  culture: 0,
+  nature: 1,
+  drink: 2,
+  food: 3,
+  shop: 4,
+  other: 5,
+};
 
 // Mirrors the .poi-marker CSS: 16px glyph badge (border-box) + 4px gap, 11px
 // semibold text capped at 130px, one line high; CHAR_W is that font's average

@@ -100,12 +100,19 @@ test("marker html inlines the Maki svg in a coloured badge and still escapes the
 // the failure mode the old font subset had with unknown ligatures. Every tag we
 // map and every kind fallback must resolve to a bundled svg.
 test("every mapped tag and kind fallback resolves to an inline svg", () => {
-  const tags = ["restaurant", "fast_food", "ice_cream", "cafe", "bar", "pub", "museum", "attraction", "gallery"];
+  const tags = [
+    "restaurant", "fast_food", "food_court", "ice_cream", "cafe", "bar", "pub", "biergarten",
+    "nightclub", "theatre", "cinema", "arts_centre", "library", "place_of_worship", "pharmacy",
+    "bank", "museum", "attraction", "gallery", "artwork", "viewpoint", "zoo", "aquarium",
+    "theme_park", "hotel", "hostel", "guest_house", "park", "garden", "nature_reserve",
+    "playground", "dog_park", "fitness_centre", "sports_centre", "stadium", "swimming_pool",
+    "supermarket", "convenience", "bakery", "alcohol", "clothes", "hairdresser", "books", "bicycle",
+  ];
   for (const tag of tags) {
     const html = poiMarkerHtml({ id: tag, name: tag, kind: "food", kindLabel: "x", tag, lat: 0, lon: 0 });
     expect(html, tag).toContain("<svg");
   }
-  for (const kind of ["food", "drink", "culture", "other"] as const) {
+  for (const kind of ["food", "drink", "culture", "nature", "shop", "other"] as const) {
     const html = poiMarkerHtml({ id: kind, name: kind, kind, kindLabel: "x", tag: null, lat: 0, lon: 0 });
     expect(html, kind).toContain("<svg");
   }

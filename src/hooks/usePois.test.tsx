@@ -130,3 +130,22 @@ test("toPoi maps OSM tags to kinds and drops unnamed elements", () => {
   ).toMatchObject({ kindLabel: "Fast food" });
   expect(toPoi({ id: 4, lat: 52, lon: 4, tags: { amenity: "bar" } })).toBeNull();
 });
+
+test("toPoi covers the whole named-POI world: leisure, shop, unmapped tags, way centers", () => {
+  // A park drawn as a way has no lat/lon, only an Overpass-computed center.
+  expect(
+    toPoi({ type: "way", id: 5, center: { lat: 52.36, lon: 4.87 }, tags: { leisure: "park", name: "Vondelpark" } }),
+  ).toMatchObject({ id: "osm-way-5", kind: "nature", kindLabel: "Park", lat: 52.36, lon: 4.87 });
+  // Every shop value is kind "shop"; the raw tag survives for the glyph.
+  expect(
+    toPoi({ id: 6, lat: 52, lon: 4, tags: { shop: "supermarket", name: "AH" } }),
+  ).toMatchObject({ kind: "shop", kindLabel: "Supermarket", tag: "supermarket" });
+  // Tags outside the curated maps still become POIs instead of being dropped.
+  expect(
+    toPoi({ id: 7, lat: 52, lon: 4, tags: { amenity: "dentist", name: "Tandarts West" } }),
+  ).toMatchObject({ kind: "other", kindLabel: "Dentist", tag: "dentist" });
+  // Node and way ids can collide; the element type keeps them distinct.
+  expect(toPoi({ id: 8, lat: 52, lon: 4, tags: { amenity: "bar", name: "A" } })?.id).toBe("osm-node-8");
+  // A way with neither coordinates nor center cannot be placed.
+  expect(toPoi({ type: "way", id: 9, tags: { leisure: "park", name: "Ghost" } })).toBeNull();
+});
