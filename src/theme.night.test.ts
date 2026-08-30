@@ -59,8 +59,8 @@ test("the night ramp holds the contrast floors it was solved for", () => {
   expect(contrast(t.subtle, t.raised)).toBeGreaterThanOrEqual(4.5);
   // `faint` is separator-only, so it answers to the 3:1 non-text floor instead.
   expect(contrast(t.faint, t.surface)).toBeGreaterThanOrEqual(3);
-  // The shaded-white accent: readable as text on every surface it lands on, and
-  // light enough behind navy text when it is the fill. `accent-soft` is fine text on cards.
+  // The NS-geel accent: readable as text on every surface it lands on, and light
+  // enough behind navy text when it is the fill. `accent-soft` is fine text on cards.
   expect(contrast(t.accent, t.hover)).toBeGreaterThanOrEqual(4.5);
   expect(contrast(t.bg, t.accent)).toBeGreaterThanOrEqual(4.5);
   expect(contrast(t["accent-soft"], t.raised)).toBeGreaterThanOrEqual(4.5);

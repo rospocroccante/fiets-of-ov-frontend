@@ -5,10 +5,11 @@
 // navy flowing into GVB transit blue, headline in sky-into-canal (the weather is the
 // product), and the four semantic accents (position red, GVB blue, bike green, sun
 // yellow) on the popular-trip cards.
-// Dark theme swaps the family to the NS-yellow range (the dark UI's accent
-// colour) and carries its own text pairing: navy on yellow, like the signage.
+// Dark theme: the Search action goes shaded white — white easing into the palest
+// brand blue, navy text — and the headline accent line goes NS geel, the
+// yellow-for-details rule the dark UI borrows from ns.nl.
 export const PRIMARY_GRADIENT =
-  "bg-gradient-to-r from-[#0D4A73] to-[#0077C8] dark:from-night-accent dark:to-amber-500 dark:text-night-bg";
+  "bg-gradient-to-r from-[#0D4A73] to-[#0077C8] dark:from-white dark:to-brand-light dark:text-night-bg";
 
 export const TEXT_GRADIENT =
   "bg-gradient-to-r from-[#0EA5E9] to-[#0D4A73] bg-clip-text text-transparent dark:from-night-accent-soft dark:to-night-accent";

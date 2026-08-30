@@ -295,32 +295,35 @@ app hard-codes a dark colour.
 
 | token | value | what it is |
 | --- | --- | --- |
-| `night.shade` | `#081826` | below the page — the map-label halo |
-| `night.bg` | `#0E2334` | page / `body` |
-| `night.surface` | `#163046` | cards, pills, chips |
-| `night.raised` | `#1C384F` | menus, dropdowns, popovers |
-| `night.hover` | `#25465F` | hover on an opaque night surface |
-| `night.border` | `#375B76` | borders and hairline dividers on one |
+| `night.shade` | `#052033` | below the page — the map-label halo |
+| `night.bg` | `#0A3552` | page / `body` |
+| `night.surface` | `#0D4A73` | cards, pills, chips — the brand blue, verbatim |
+| `night.raised` | `#164E74` | menus, dropdowns, popovers |
+| `night.hover` | `#1E5980` | hover on an opaque night surface |
+| `night.border` | `#3F7AA2` | borders and hairline dividers on one |
 | `night.text` | `#FFFFFF` | primary text — pure white |
 | `night.muted` | `#CEE2F3` | secondary text |
-| `night.subtle` | `#9FBAD1` | tertiary / meta text |
-| `night.faint` | `#6A87A0` | separator glyphs only |
-| `night.accent` | `#E7EEF3` | shaded white — accent text, fills |
-| `night.accent-soft` | `#FFFFFF` | lighter accent step — fine text on tinted chips |
-| `night.accent-deep` | `#C7D7E4` | translucent chip backgrounds and borders only |
+| `night.subtle` | `#AFC9DE` | tertiary / meta text |
+| `night.faint` | `#87A0B5` | separator glyphs only |
+| `night.accent` | `#FFC917` | NS geel — detail text, small fills, rings |
+| `night.accent-soft` | `#FFE38A` | lighter accent step — fine text on tinted chips |
+| `night.accent-deep` | `#6B4E00` | translucent chip backgrounds and borders only |
 
-**Why 206–208°.** Every surface step sits on the brand's own blue (`#0D4A73` is hue 206)
-at 36–64% saturation. This is deliberately a *blue* theme rather than a tinted charcoal:
-where the light theme is navy ink on white paper, night is white ink on navy paper.
-Primary text on `night.bg` measures 16.05:1 — comfortably past AAA.
+**Why hue 204.** The surfaces are the light theme's own blue, after dark:
+`night.surface` *is* brand `#0D4A73`, verbatim, and the rest of the ramp is solved
+around it on the same hue at brand saturation — the ns.nl move of deep blue ground,
+white type, geel details. Primary text on `night.bg` measures 12.77:1 — comfortably
+past AAA.
 
-**The accent is a shaded white** (`#E7EEF3`, white pulled one step towards the
-palette's grey-blue), replacing first the borrowed emerald and then the NS-geel
-experiment. It reads as text on every surface (13.7:1 on `bg`, 8.5:1 on `hover`);
-solid fills pair it with `night.bg` text. NS geel (`#FFC917`, `ams.ns`) stays in
-the dark theme for small details only: the selected-card ring, the header-menu and
-weather glyphs, and one blob in the home aurora — the rest of the aurora is white
-mist. `theme.night.test.ts` pins the accent's contrast floors and fails any
+**The accent is NS geel** (`#FFC917`, the same hex as `ams.ns`), used the way ns.nl
+uses it: details, never surfaces. Icon and link text, the small filled controls
+(filter pills, "Vai", badges — geel ground, navy type, the signage pairing), the
+selected-card ring, and the headline accent line of the slogan. It holds 4.87:1 as
+text on `hover`, the lightest surface it lands on, and 8.28:1 under `night.bg` text
+when it is the fill. The primary Search action is the one deliberate exception: it
+stays white (`from-white to-brand-light`, navy text) so the single biggest control
+reads as light, not gold — and the home aurora is white mist only, no geel blob.
+`theme.night.test.ts` pins the accent's contrast floors and fails any
 `dark:*-emerald/lime/green-*` class a component reintroduces.
 
 **Retuning** is one line per token. Move the hue on all surface steps together, or nudge

@@ -18,47 +18,46 @@ export default {
           sky: "#0284C7",
           ns: "#FFC917",
         },
-        // Night palette — "blu e bianco". The dark theme is the light theme inverted:
-        // where light is white paper with canal-water navy on it, dark is canal-water
-        // navy with white on it. Every surface sits on the brand hue (206-208, the hue
-        // of brand #0D4A73) at real saturation (36-64%), so it reads as a *blue* theme,
-        // not as charcoal with a lean. Lightness climbs the ramp; saturation eases off
-        // as it does, the way the old ramp eased 18%→12%, so the border never goes neon.
+        // Night palette — the light theme's own blue, after dark. The surfaces sit on
+        // brand #0D4A73 itself: `surface` IS the brand hex, verbatim, and the rest of
+        // the ramp is solved around it on the same hue (204-205) at brand saturation,
+        // so the dark page is recognisably the blue of the light theme's buttons and
+        // titles — the ns.nl move: deep blue ground, white type, geel details.
         //
         // The text steps are the counterpart of the light theme's navy-on-white: pure
-        // white body text, then blue-tinted whites on the same hue as the surfaces —
-        // the cool mirror of the warm ivory ramp this replaces. Each step clears its
-        // WCAG floor on the *lightest* surface it is ever used on — `text` reaches
-        // 16.05:1 on `bg` (AAA) and 9.91:1 on `hover`, `muted` 9.14:1 and `subtle`
-        // 6.03:1 on `raised` (AA for body text), `faint` 3.61:1 on `surface` (the
-        // non-text floor; it is only ever a separator glyph). Move a surface step
+        // white body text, then blue-tinted whites on the surface hue. Each step
+        // clears its WCAG floor on the *lightest* surface it is ever used on — `text`
+        // reaches 12.77:1 on `bg` (AAA) and 7.51:1 on `hover`, `muted` 6.65:1 and
+        // `subtle` 5.15:1 on `raised` (AA for body text), `faint` 3.44:1 on `surface`
+        // (the non-text floor; it is only ever a separator glyph). Move a surface step
         // lighter and those two must be rechecked — theme.night.test.ts holds the line.
         //
         // Retuning: change the hue on all six surface steps together, or nudge one
         // step's lightness. Nothing else in the app hard-codes a dark surface.
         night: {
-          shade: "#081826", // hsl(208 64%  9%) — below the page; the map-label halo
-          bg: "#0E2334", // hsl(207 58% 13%) — page/body
-          surface: "#163046", // hsl(207 52% 18%) — cards, pills, chips
-          raised: "#1C384F", // hsl(207 48% 21%) — menus, dropdowns, popovers
-          hover: "#25465F", // hsl(206 44% 26%) — hover on an opaque night surface
-          border: "#375B76", // hsl(206 36% 34%) — borders on an opaque night surface
+          shade: "#052033", // hsl(205 82% 11%) — below the page; the map-label halo
+          bg: "#0A3552", // hsl(204 78% 18%) — page/body
+          surface: "#0D4A73", // brand, verbatim — cards, pills, chips
+          raised: "#164E74", // hsl(204 68% 27%) — menus, dropdowns, popovers
+          hover: "#1E5980", // hsl(204 62% 31%) — hover on an opaque night surface
+          border: "#3F7AA2", // hsl(204 44% 44%) — borders on an opaque night surface
           text: "#FFFFFF", // pure white — primary, the mirror of navy-on-white
           muted: "#CEE2F3", // hsl(207 60% 88%) — secondary (was slate-300)
-          subtle: "#9FBAD1", // hsl(207 35% 72%) — tertiary/meta (was slate-400/500)
-          faint: "#6A87A0", // hsl(207 22% 52%) — decorative separators only (was slate-500/600)
-          // Dark accent — white shaded one step towards the palette grey-blue
-          // (hue 207, the surface hue), so it reads as an accent against the pure
-          // white of `text` instead of as a fourth text step. It works as text on
-          // every surface (13.7:1 on `bg`, 8.5:1 on `hover`); solid fills pair it
-          // with `night.bg` text. `accent-soft` is fine text on tinted chips;
-          // `accent-deep` never carries text — translucent chip/border tint only.
-          // NS geel stays in the dark theme as `ams.ns`, demoted to small details:
-          // the selected-card ring, the header-menu and weather glyphs, one blob
-          // in the home aurora.
-          accent: "#E7EEF3", // shaded white — accent text, fills
-          "accent-soft": "#FFFFFF", // lighter step — fine text on tinted chips
-          "accent-deep": "#C7D7E4", // translucent backgrounds/borders only
+          subtle: "#AFC9DE", // hsl(207 42% 78%) — tertiary/meta (was slate-400/500)
+          faint: "#87A0B5", // hsl(207 24% 62%) — decorative separators only (was slate-500/600)
+          // Dark accent — NS geel, used the way ns.nl uses it: details only. Icon and
+          // link text, the small filled controls (filter pills, "Vai", badges — geel
+          // ground, navy type, the signage pairing), the selected-card ring, the
+          // slogan's accent line. Never a surface, never the backdrop. It holds
+          // 4.87:1 as text on `hover` (the lightest surface it lands on) and 8.28:1
+          // under `night.bg` text when it is the fill. `accent-soft` is fine text on
+          // tinted chips; `accent-deep` never carries text — translucent tint only.
+          // The one non-geel accent left is the primary Search action, which goes
+          // shaded white (from-white to-brand-light) so the single biggest control
+          // reads as light, not gold.
+          accent: "#FFC917", // NS geel — detail text, small fills, rings
+          "accent-soft": "#FFE38A", // lighter step — fine text on tinted chips
+          "accent-deep": "#6B4E00", // translucent backgrounds/borders only
         },
       },
       borderRadius: { card: "1.25rem" },
