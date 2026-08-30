@@ -103,7 +103,7 @@ summary:focus-visible {
   outline-color: #34D399;
 }
 
-/* Dark theme base: the night palette's page step, warm ivory text. Both come from the
+/* Dark theme base: the night palette's page step, white text on brand navy. Both come from the
    tokens in tailwind.config.js via @apply, so the theme has exactly one source of
    truth — see the `night` block there for the hue rationale. Components refine on top
    with dark: variants; this catches everything else (and native form controls via

@@ -18,36 +18,35 @@ export default {
           sky: "#0284C7",
           ns: "#FFC917",
         },
-        // Night palette — "carbone virato navy". The dark theme stays a discreet
-        // neutral dark, but its undertone is the brand's own hue instead of a flat
-        // grey: every surface is hsl(204, …), 204 being the hue of brand #0D4A73.
-        // Saturation is kept at 12-18% so the result reads as charcoal with a lean,
-        // never as a blue theme. Lightness is the only axis that moves between steps,
-        // and `bg` is set so its WCAG relative luminance (0.0202) matches the charcoal
-        // it replaces (#23272B, 0.0198) — same perceived darkness, different cast.
+        // Night palette — "blu e bianco". The dark theme is the light theme inverted:
+        // where light is white paper with canal-water navy on it, dark is canal-water
+        // navy with white on it. Every surface sits on the brand hue (206-208, the hue
+        // of brand #0D4A73) at real saturation (36-64%), so it reads as a *blue* theme,
+        // not as charcoal with a lean. Lightness climbs the ramp; saturation eases off
+        // as it does, the way the old ramp eased 18%→12%, so the border never goes neon.
         //
-        // The text steps are the counterpart: the body ivory #ECEAE6 is hsl(40, …), so
-        // the secondary tones are that same warm hue. Warm text on a cool surface is
-        // the existing identity; the old blue-grey slates fought it. Their lightness
-        // starts from the relative luminance of the slate step each one replaces, then
-        // is raised to whatever clears its WCAG floor on the *lightest* surface it is
-        // ever used on — `subtle` reaches 4.77:1 on `raised` (AA for body text),
-        // `faint` reaches 3.06:1 on `surface` (the non-text floor; it is only ever a
-        // separator glyph). Move a surface step lighter and those two must be rechecked.
+        // The text steps are the counterpart of the light theme's navy-on-white: pure
+        // white body text, then blue-tinted whites on the same hue as the surfaces —
+        // the cool mirror of the warm ivory ramp this replaces. Each step clears its
+        // WCAG floor on the *lightest* surface it is ever used on — `text` reaches
+        // 16.05:1 on `bg` (AAA) and 9.91:1 on `hover`, `muted` 9.14:1 and `subtle`
+        // 6.03:1 on `raised` (AA for body text), `faint` 3.61:1 on `surface` (the
+        // non-text floor; it is only ever a separator glyph). Move a surface step
+        // lighter and those two must be rechecked — theme.night.test.ts holds the line.
         //
         // Retuning: change the hue on all six surface steps together, or nudge one
         // step's lightness. Nothing else in the app hard-codes a dark surface.
         night: {
-          shade: "#171D21", // hsl(204 18% 11%) — below the page; the map-label halo
-          bg: "#20282E", // hsl(204 18% 15%) — page/body
-          surface: "#2A343A", // hsl(204 16% 20%) — cards, pills, chips
-          raised: "#313B42", // hsl(204 15% 22%) — menus, dropdowns, popovers
-          hover: "#3A454D", // hsl(204 14% 27%) — hover on an opaque night surface
-          border: "#48545B", // hsl(204 12% 32%) — borders on an opaque night surface
-          text: "#ECEAE6", // hsl(40 14% 91%) — primary, the body ivory
-          muted: "#D6D3CF", // hsl(40  8% 83%) — secondary (was slate-300)
-          subtle: "#ABA79E", // hsl(40  7% 65%) — tertiary/meta (was slate-400/500)
-          faint: "#807C72", // hsl(40  6% 48%) — decorative separators only (was slate-500/600)
+          shade: "#081826", // hsl(208 64%  9%) — below the page; the map-label halo
+          bg: "#0E2334", // hsl(207 58% 13%) — page/body
+          surface: "#163046", // hsl(207 52% 18%) — cards, pills, chips
+          raised: "#1C384F", // hsl(207 48% 21%) — menus, dropdowns, popovers
+          hover: "#25465F", // hsl(206 44% 26%) — hover on an opaque night surface
+          border: "#375B76", // hsl(206 36% 34%) — borders on an opaque night surface
+          text: "#FFFFFF", // pure white — primary, the mirror of navy-on-white
+          muted: "#CEE2F3", // hsl(207 60% 88%) — secondary (was slate-300)
+          subtle: "#9FBAD1", // hsl(207 35% 72%) — tertiary/meta (was slate-400/500)
+          faint: "#6A87A0", // hsl(207 22% 52%) — decorative separators only (was slate-500/600)
         },
       },
       borderRadius: { card: "1.25rem" },
