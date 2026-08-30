@@ -32,3 +32,6 @@ coverage/
 .DS_Store
 .idea/
 *.sw?
+
+# Private planning docs (superpowers plans/specs, drafts) — never public
+/docs/
