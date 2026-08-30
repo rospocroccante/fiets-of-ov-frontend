@@ -2,5 +2,312 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Icon font, self-hosted. This is byte-for-byte the file the Google Fonts css2 URL
+   below resolves to: a 25 kB subset holding only the glyphs the app uses, with the
+   opsz/wght/FILL/GRAD axes intact (the full variable font is 336 kB). Serving it
+   ourselves takes two cross-origin connections and one render-blocking third-party
+   stylesheet off the critical path, which is the part a phone on a slow network feels.
+
+   The file lives in src/fonts/, not in public/. public/ is copied verbatim, so the URL
+   never changes and a browser holding yesterday's copy keeps it: the day location_on
+   was added to the subset, a warm cache still rendered the word "LOCATION_ON" across
+   the map, and on Cloudflare Pages (long max-age on static assets) it would have kept
+   doing so for a long time. Referenced from here with a relative url(), the font goes
+   through Vite's asset pipeline and is emitted with its content hash in the filename,
+   so new bytes mean a new URL and no cache can serve the old glyph set.
+
+   There is deliberately no <link rel="preload"> for it. Vite does not rewrite a
+   hardcoded href in index.html to the hashed name, so a preload could only be kept by
+   having a build plugin inject it — and a preload whose URL misses the emitted one by a
+   character costs a second download instead of saving a round trip. The price of doing
+   without: the font is now discovered when this stylesheet is parsed rather than from
+   the HTML itself, roughly one extra round trip on the icons. font-display: block is
+   what makes that acceptable — the icons hold blank space and then appear, and no
+   ligature name is ever painted.
+
+   To add an icon you must regenerate the file — the subset is frozen, and a glyph that
+   is not in it renders as its literal ligature name ("dark_mode") rather than as an
+   icon. Fetch the CSS with a browser User-Agent, follow the src: url() in the response,
+   and overwrite src/fonts/material-symbols-rounded-subset.woff2:
+
+   https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,0&icon_names=bedtime,close,cloud,dark_mode,foggy,history,light_mode,location_on,my_location,near_me,partly_cloudy_day,partly_cloudy_night,progress_activity,rainy,roundabout_left,roundabout_right,sports_score,star,straight,sunny,thunderstorm,tram,turn_left,turn_right,turn_slight_left,turn_slight_right,u_turn_left,u_turn_right,weather_snowy&display=block
+
+   Keep that icon_names list alphabetical (the API requires it) and in sync with the
+   usages of material-symbols-rounded in src/. src/iconFont.test.ts enforces all three:
+   it reads this list, scans src/ for the glyph names actually rendered, and reads the
+   ligatures back out of the .woff2 itself, so a list edited without regenerating the
+   font fails as loudly as a glyph nobody added. The start pin shipped as the word
+   "LOCATION_ON" across the map before that test existed. The map POI badges are NOT in
+   this font: they are Maki svgs inlined by MapView.tsx. font-display: block is
+   deliberate and matches what the Google stylesheet says: an icon font's fallback is
+   the ligature name in readable text, so a flash of it is worse than a flash of
+   nothing. */
+@font-face {
+  font-family: "Material Symbols Rounded";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: block;
+  src: url("./fonts/material-symbols-rounded-subset.woff2") format("woff2");
+}
+.material-symbols-rounded {
+  font-family: "Material Symbols Rounded";
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
 html, body, #root { height: 100%; margin: 0; }
 body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; color: #111; }
+
+/* iOS inflates text in landscape unless told not to; the layout is already responsive,
+   so the inflation only breaks it. */
+html { -webkit-text-size-adjust: 100%; }
+
+/* The home is the resting scroll position, so on a phone every downward swipe on it
+   sits exactly where pull-to-refresh lives: without this, half the gestures that mean
+   "go back to the top of the home" reload the app instead. Vertical page scrolling
+   (which drives the morph) is unaffected. */
+html { overscroll-behavior-y: contain; }
+
+/* Touch: no double-tap-to-zoom delay on controls. Buttons are 44px targets, so the
+   browser's tap-zoom heuristic has nothing to offer here. */
+button, [role="button"], a, input, select, textarea { touch-action: manipulation; }
+
+/* Keyboard focus. Several controls carry outline-none (the search inputs) or sit on a
+   frosted background where the UA ring disappears, and no component styled focus
+   itself. focus-visible only, so a mouse/touch press never shows a ring. */
+button:focus-visible,
+[role="button"]:focus-visible,
+[role="option"]:focus-visible,
+a:focus-visible,
+input:focus-visible,
+summary:focus-visible {
+  outline: 2px solid #0D4A73;
+  outline-offset: 2px;
+}
+.dark button:focus-visible,
+.dark [role="button"]:focus-visible,
+.dark [role="option"]:focus-visible,
+.dark a:focus-visible,
+.dark input:focus-visible,
+.dark summary:focus-visible {
+  outline-color: #34D399;
+}
+
+/* Dark theme base: the night palette's page step, warm ivory text. Both come from the
+   tokens in tailwind.config.js via @apply, so the theme has exactly one source of
+   truth — see the `night` block there for the hue rationale. Components refine on top
+   with dark: variants; this catches everything else (and native form controls via
+   color-scheme). */
+.dark { color-scheme: dark; }
+.dark body { @apply bg-night-bg text-night-text; }
+
+/* Home<->map morph: the page scroll drives the transition, and resting between the
+   two ends leaves a half-faded, half-interactive UI. Proximity snap (with the two
+   sentinels App renders at 0 and 100vh) settles the scroll on whichever stage is
+   closer, so releasing the wheel always lands on a fully working screen. */
+html { scroll-snap-type: y proximity; }
+
+/* The phone search screen arrives over the app rather than replacing it in place, so
+   it gets the one cue that says "this is a new surface, and it came from below": a
+   short rise and fade. 180ms is under the threshold where a transition starts to feel
+   like waiting. Reduced motion drops it entirely — the screen still appears, just
+   without the travel. */
+@keyframes fov-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.fov-sheet {
+  animation: fov-sheet-in 180ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fov-sheet {
+    animation: none;
+  }
+}
+
+/* Maps-style POI labels: a coloured category badge with the place name beside it,
+   white halo so the text stays readable over any basemap. Rendered as Leaflet
+   divIcons. */
+.poi-marker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+/* The badge: kind colour underneath, white Maki icon on top, like Google Maps'
+   category pins. 16px border-box — the declutter maths in usePois (LABEL_DOT_W)
+   mirrors this size, keep them in sync. */
+.poi-badge {
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  border: 1.5px solid #fff;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Maki ships width/height="15"; size it to the badge here instead. The paths
+   carry no fill attribute, so fill on the root svg paints them white. */
+.poi-badge svg {
+  width: 10px;
+  height: 10px;
+  display: block;
+  fill: #fff;
+}
+.poi-name {
+  font-size: 11px;
+  font-weight: 600;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #334155;
+  text-shadow:
+    0 1px 2px #fff,
+    0 -1px 2px #fff,
+    1px 0 2px #fff,
+    -1px 0 2px #fff;
+}
+/* The two rules the MapLibre basemap needs out of its 70 kB stylesheet, which is not
+   imported (components/Basemap says why): the GL container has to be a positioned,
+   clipping box, because its canvas is absolutely positioned inside it and is drawn
+   deliberately larger than the map. Everything else in that file styles controls this
+   map does not create. */
+.leaflet-container .maplibregl-map {
+  position: relative;
+  overflow: hidden;
+}
+.leaflet-container .maplibregl-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* What Leaflet paints where no tile does. leaflet.css ships
+   `.leaflet-container { background: #ddd }` (leaflet.css:261), and at minimum zoom the
+   strip above the top of the world is exactly that: a #dddddd band across the top of a
+   night-theme card. In dark the container joins the night ramp instead, one step below
+   the page like every other backdrop.
+   This also means a basemap that never painted no longer shows up as a bright rectangle
+   in dark, so the guard against a dead map at night is the colour count in
+   browser-tests/specs/basemap.checks.mjs ("a map drawn in it, not just a background
+   colour"), not the luminance floors. Keep it. */
+.dark .leaflet-container {
+  background: theme("colors.night.shade");
+}
+
+/* Only the raster fallback (no WebGL, PDOK BRT-A) is filtered. PDOK serves a grey
+   daytime map and no night one, so night has to be made: inverting a greyscale map is
+   the one filter that gets dark surfaces with light roads out of it. The vector basemap
+   above needs none of this: its dark theme is a style, not a filter. */
+.dark .basemap-raster {
+  filter: invert(1) brightness(0.92) contrast(0.9);
+}
+
+/* On the dark basemap the halo flips: light text, dark glow. The pair is the night
+   palette's own — ivory label, and a glow one step below the page background so the
+   labels sit in the same family as the app chrome around the map. */
+.dark .poi-name {
+  color: theme("colors.night.text");
+  text-shadow:
+    0 1px 2px theme("colors.night.shade"),
+    0 -1px 2px theme("colors.night.shade"),
+    1px 0 2px theme("colors.night.shade"),
+    -1px 0 2px theme("colors.night.shade");
+}
+
+/* Leaflet ships 30x30 zoom controls, which is well under the 44px a finger needs.
+   .leaflet-touch is only present when Leaflet detected a touch device, so pointer
+   users keep the compact original. */
+.leaflet-touch .leaflet-bar a,
+.leaflet-touch .leaflet-bar a:first-child,
+.leaflet-touch .leaflet-bar a:last-child {
+  width: 44px;
+  height: 44px;
+  line-height: 44px;
+  font-size: 22px;
+}
+
+/* Leaflet's own zoom chrome is white with black glyphs and a translucent black ring —
+   at 44px that is the brightest thing on a dark basemap, and the ring disappears into
+   it. In dark mode the buttons join the night ramp instead: raised surface, ivory
+   glyphs, and the ring lightened so the control still has an edge against the map.
+   Specificity is deliberate. leaflet.css ships `.leaflet-bar a:hover` and
+   `.leaflet-touch .leaflet-bar a` at (0,2,1) and arrives *after* this file (it is
+   imported from the lazily-loaded MapView), so the hover/focus rules are written one
+   class deeper to win outright rather than on source order. */
+.dark .leaflet-bar a,
+.dark .leaflet-bar a:first-child,
+.dark .leaflet-bar a:last-child {
+  @apply bg-night-raised text-night-text border-b-night-border;
+}
+.dark .leaflet-bar a:hover,
+.dark .leaflet-bar a:focus {
+  @apply bg-night-hover text-night-text;
+}
+.dark .leaflet-bar a.leaflet-disabled,
+.dark .leaflet-bar a.leaflet-disabled:hover {
+  @apply bg-night-surface text-night-faint;
+}
+.dark .leaflet-touch .leaflet-bar,
+.dark .leaflet-bar {
+  border-color: rgba(236, 234, 230, 0.14);
+}
+
+/* When picking a point on the map, the crosshair must beat Leaflet's own grab cursor
+   (set on the container by .leaflet-grab). The class sits on MapView's wrapper because
+   react-leaflet freezes the container's className at mount. */
+.map-picking .leaflet-container,
+.map-picking .leaflet-grab,
+.map-picking .leaflet-interactive {
+  cursor: crosshair !important;
+}
+
+/* Home background: blurred colour blobs moving like a lava lamp. The scale is
+   non-uniform (scaleX != scaleY) and crosses through a midpoint pose, so each blob
+   stretches and squashes as it drifts instead of just gliding. Only transform
+   animates, so it stays on the GPU compositor and off the main thread. Each blob
+   picks one of these paths with its own duration/delay for an organic,
+   non-repeating feel; `alternate` eases back so the loop never jumps. */
+.aurora-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(72px);
+  will-change: transform;
+}
+@keyframes aurora-a {
+  0%   { transform: translate(0, 0) scale(1, 1); }
+  50%  { transform: translate(6%, 10%) scale(1.3, 0.78); }
+  100% { transform: translate(12%, 4%) scale(0.82, 1.24); }
+}
+@keyframes aurora-b {
+  0%   { transform: translate(0, 0) scale(1.12, 0.9); }
+  50%  { transform: translate(-9%, 8%) scale(0.78, 1.3); }
+  100% { transform: translate(-14%, 2%) scale(1.22, 0.84); }
+}
+@keyframes aurora-c {
+  0%   { transform: translate(0, 0) scale(0.9, 1.15); }
+  50%  { transform: translate(5%, -9%) scale(1.32, 0.8); }
+  100% { transform: translate(10%, -14%) scale(0.88, 1.12); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aurora-blob { animation: none !important; }
+}

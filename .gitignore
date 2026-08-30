@@ -5,6 +5,9 @@ node_modules/
 dist/
 dist-ssr/
 
+# Local Cloudflare state: `wrangler pages dev` writes .wrangler/state/ next to it.
+.wrangler/
+
 # TypeScript / Vite emit guards (build is tsc --noEmit; never commit emitted JS into src)
 *.tsbuildinfo
 vite.config.js

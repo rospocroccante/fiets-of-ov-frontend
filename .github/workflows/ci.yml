@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint -- --max-warnings 0
+      - run: npm test
+
+      # The suite above runs in jsdom, which never lays anything out: every box in it is
+      # 0x0 at (0,0). It can prove that "w-full" was written into a class attribute and
+      # nothing about how wide the element is, so six one-line changes that each ship a
+      # visibly broken phone search screen - the sheet moved off screen, collapsed to
+      # zero width, sent behind the page, made untouchable, the suggestion list clamped
+      # to 63px, the entry button clamped to a chip - passed all 314 of those tests.
+      #
+      # This step is the layer that measures instead: a real Chrome at 390x844 with
+      # touch emulation, asserting getBoundingClientRect geometry and elementFromPoint.
+      # It installs nothing. Every GitHub-hosted Ubuntu image ships Google Chrome, and
+      # browser-tests/lib talks to it over the DevTools protocol with a WebSocket client
+      # of its own, so there is no browser download and no new dependency to cache. Set
+      # CHROME_PATH if a runner image ever stops providing one.
+      #
+      # Deliberately its own step and its own script: `npm run check` and every commit
+      # must keep working on a machine with no browser.
+      - run: npm run test:browser
+
+      # .env.example is the only documentation a deploy target gets, so it has to stay
+      # exactly the set of VITE_ variables the source actually reads - in both
+      # directions. A variable added to the code and not documented here is invisible
+      # to whoever deploys next; one documented and no longer read is a lie.
+      - name: .env.example matches the variables the app reads
+        run: |
+          used=$(grep -rhoE "import\.meta\.env\.VITE_[A-Z_]+" src | sed 's/.*VITE_/VITE_/' | sort -u)
+          declared=$(grep -oE '^VITE_[A-Z_]+' .env.example | sort -u)
+          if ! diff <(echo "$used") <(echo "$declared"); then
+            echo "::error::.env.example is out of sync with the VITE_ variables used in src (< used, > declared)"
+            exit 1
+          fi
+          echo "$used" | sed 's/^/in sync: /'
+
+      # The runner has no .env file, exactly like a hosting provider with nothing
+      # configured. That build must not succeed: it would ship mock fixtures dressed as
+      # real answers. The guard lives in vite.config.ts; this is what keeps it honest.
+      - name: A build with no data source configured is refused
+        run: |
+          if npx vite build --outDir "$RUNNER_TEMP/dist-unconfigured" >"$RUNNER_TEMP/unconfigured.log" 2>&1; then
+            echo "::error::an unconfigured build succeeded - it would have shipped fixtures as if they were real"
+            exit 1
+          fi
+          grep -q "VITE_API_MODE is not set" "$RUNNER_TEMP/unconfigured.log"
+
+      # Both shipping shapes have to compile, not just the one CI happens to build.
+      - name: Live build
+        run: npx vite build --outDir "$RUNNER_TEMP/dist-live"
+        env:
+          VITE_API_MODE: live
+          VITE_API_BASE: /api
+
+      # functions/api/[[path]].js is production code that nothing else here compiles:
+      # it is outside tsconfig's include, vite never reads it, and it has no test, so
+      # until this step a syntax error in it passed every check in the repository and
+      # was caught only by the post-deploy probe - which runs after publishing, and
+      # only on a repository holding Cloudflare secrets, so never on a pull request and
+      # never on a fork. This is the compile. It needs no credentials and no network
+      # beyond fetching wrangler itself.
+      - name: The Pages Function compiles
+        run: npx --yes wrangler@4 pages functions build --outfile "$RUNNER_TEMP/fn.js"
+
+      # build runs tsc --noEmit first (see package.json), so this is also the typecheck.
+      - run: npm run build
+        env:
+          VITE_API_MODE: mock

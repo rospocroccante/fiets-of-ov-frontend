@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { isLive } from "../api/client";
 
 // A regular grid over the wider Amsterdam region for the animated wind field.
 // leaflet-velocity interpolates between nodes, so ~0.1 deg spacing is plenty.
@@ -55,14 +56,49 @@ function gridUrl(): string {
   );
 }
 
-// leaflet-velocity's grib-json shape: one record for U (2,2), one for V (2,3).
-export function useWindField(enabled: boolean): VelocityRecord[] | null {
+// leaflet-velocity's grib-json shape: one record for U (2,2), one for V (2,3), both
+// over the same grid.
+function toRecords(u: number[], v: number[]): VelocityRecord[] {
+  const header = {
+    nx: NX,
+    ny: NY,
+    lo1: LON_WEST,
+    la1: LAT_NORTH,
+    lo2: LON_EAST,
+    la2: LAT_SOUTH,
+    dx: (LON_EAST - LON_WEST) / (NX - 1),
+    dy: (LAT_NORTH - LAT_SOUTH) / (NY - 1),
+  };
+  return [
+    { header: { ...header, parameterCategory: 2, parameterNumber: 2 }, data: u },
+    { header: { ...header, parameterCategory: 2, parameterNumber: 3 }, data: v },
+  ];
+}
+
+// Offline fixture for mock mode: a steady 6 m/s south-wester, the Amsterdam default,
+// so the particle layer animates without a call to open-meteo.com (same rule as
+// useShortForecast's MOCK_FORECAST).
+function mockWindField(): VelocityRecord[] {
+  const [u, v] = toUV(6, 225);
+  return toRecords(Array(NX * NY).fill(u), Array(NX * NY).fill(v));
+}
+
+export interface WindFieldState {
+  data: VelocityRecord[] | null;
+  error: boolean;
+}
+
+export function useWindField(enabled: boolean): WindFieldState {
   const query = useQuery<VelocityRecord[]>({
     queryKey: ["wind-field"],
     enabled,
     refetchInterval: 15 * 60 * 1000,
-    queryFn: async () => {
-      const res = await fetch(gridUrl());
+    // Current conditions change slowly; a chip re-toggle within the refresh window
+    // must not refetch the 81-point grid.
+    staleTime: 15 * 60 * 1000,
+    queryFn: async ({ signal }) => {
+      if (!isLive()) return mockWindField();
+      const res = await fetch(gridUrl(), { signal });
       if (!res.ok) throw new Error(`wind field failed: ${res.status}`);
       const points = (await res.json()) as OpenMeteoPoint[];
       if (!Array.isArray(points) || points.length !== NX * NY) {
@@ -75,21 +111,8 @@ export function useWindField(enabled: boolean): VelocityRecord[] | null {
         u.push(pu);
         v.push(pv);
       }
-      const header = {
-        nx: NX,
-        ny: NY,
-        lo1: LON_WEST,
-        la1: LAT_NORTH,
-        lo2: LON_EAST,
-        la2: LAT_SOUTH,
-        dx: (LON_EAST - LON_WEST) / (NX - 1),
-        dy: (LAT_NORTH - LAT_SOUTH) / (NY - 1),
-      };
-      return [
-        { header: { ...header, parameterCategory: 2, parameterNumber: 2 }, data: u },
-        { header: { ...header, parameterCategory: 2, parameterNumber: 3 }, data: v },
-      ];
+      return toRecords(u, v);
     },
   });
-  return query.data ?? null;
+  return { data: query.data ?? null, error: query.isError };
 }

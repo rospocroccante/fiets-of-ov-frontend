@@ -3,6 +3,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { toUV, useWindField } from "./useWindField";
 
+// Open-Meteo is a live-mode feature; most tests here force the live path to exercise
+// the grid builder, and one flips the flag to check the offline fixture.
+const mode = vi.hoisted(() => ({ live: true }));
+vi.mock("../api/client", () => ({ isLive: () => mode.live }));
+afterEach(() => {
+  mode.live = true;
+});
+
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
@@ -28,17 +36,44 @@ test("hook builds the two grib-style U/V records from the 81-point grid", async 
   vi.stubGlobal("fetch", fetchMock);
 
   const { result } = renderHook(() => useWindField(true), { wrapper });
-  await waitFor(() => expect(result.current).not.toBeNull());
+  await waitFor(() => expect(result.current.data).not.toBeNull());
 
   const url = fetchMock.mock.calls[0][0];
   expect(url).toContain("wind_speed_unit=ms");
   expect(url.match(/latitude=([\d.,]+)/)![1].split(",")).toHaveLength(81);
 
-  const [u, v] = result.current!;
+  const [u, v] = result.current.data!;
   expect(u.header).toMatchObject({ parameterCategory: 2, parameterNumber: 2, nx: 9, ny: 9 });
   expect(v.header.parameterNumber).toBe(3);
   expect(u.header.la1).toBeGreaterThan(u.header.la2); // scan starts at the north edge
   expect(u.data).toHaveLength(81);
   expect(u.data[0]).toBeCloseTo(5); // from the west -> eastward u
   expect(v.data[0]).toBeCloseTo(0);
+});
+
+test("mock mode returns a steady offline field without touching open-meteo.com", async () => {
+  mode.live = false;
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+
+  const { result } = renderHook(() => useWindField(true), { wrapper });
+
+  await waitFor(() => expect(result.current.data).not.toBeNull());
+  expect(fetchMock).not.toHaveBeenCalled();
+  const [u, v] = result.current.data!;
+  expect(u.data).toHaveLength(81);
+  // 6 m/s from the south-west blows north-east: both components positive and equal.
+  expect(u.data[0]).toBeCloseTo(4.24, 1);
+  expect(v.data[0]).toBeCloseTo(4.24, 1);
+  expect(result.current.error).toBe(false);
+});
+
+test("an upstream failure surfaces error instead of silent null", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })),
+  );
+  const { result } = renderHook(() => useWindField(true), { wrapper });
+  await waitFor(() => expect(result.current.error).toBe(true));
+  expect(result.current.data).toBeNull();
 });

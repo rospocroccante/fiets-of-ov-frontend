@@ -1,0 +1,126 @@
+import { useEffect, useRef, useState } from "react";
+import { TileLayer, useMap } from "react-leaflet";
+import type L from "leaflet";
+import type { BasemapHandle } from "../lib/basemapGL";
+
+// The basemap the app draws on, and the only place its sources are named.
+//
+// OpenFreeMap (https://openfreemap.org) serves OpenMapTiles-schema vector tiles from
+// OpenStreetMap data, free and without an API key or a rate limit, under a licence that
+// asks for nothing but the credit, which the app gives in the About block and in the
+// privacy notice rather than on the map. It replaces CARTO's raster basemaps, whose tile
+// service is "restricted to CARTO enterprise customers and Non-Profit GRANTS only and is
+// not available for free public use" (docs/superpowers/specs/2026-08-15-third-party-terms.md).
+//
+// Vector, not raster, so the dark theme is a real night style rather than a CSS filter
+// over daylight tiles: labels stay legible, water stays water, and the map no longer
+// glows when the rest of the app goes dark.
+//
+// The light style is `bright` and not `liberty` ON PURPOSE, and the reason is the water.
+// The swap away from CARTO was asked for as a DARK-theme change; it took the daylight
+// map with it, and `liberty` is not what this app used to look like. Measured over
+// Amsterdam at Leaflet z13 and z15, 1280x900 and 390x844, against the old voyager raster
+// (share-weighted CIEDE2000 across land, water, roads and parks):
+//
+//   bright    dE00 3.78   water #b1d1e2 against voyager's #d1e5e8  <- closest, and steady
+//   liberty   dE00 5.59   water #a3c0fe, dE 19 off: cornflower, not the old soft blue
+//   positron  dE00 8.06   greyscale, paints no yellow roads and no green parks at all
+//
+// Water is 13 to 20 per cent of an Amsterdam frame and every canal in the centre, so
+// liberty's periwinkle is the single most visible break from the old look; bright is the
+// same soft blue family, one step deeper. It also holds its match as you zoom, where
+// liberty drifts (dE00 5.0 at z13 to 6.4 at z15, against bright's flat 3.7 to 4.1).
+//
+// If someone "fixes" this back to liberty, the daylight map turns blue again. It is not
+// an exact restore of voyager either way: bright carries more label and shield clutter,
+// and no OpenFreeMap style reproduces voyager exactly. CARTO is the only exact match and
+// it is out of terms (docs/superpowers/specs/2026-08-15-third-party-terms.md).
+//
+// The dark style is untouched: it is the one the owner asked for and accepted.
+export const BASEMAP_STYLE = {
+  light: "https://tiles.openfreemap.org/styles/bright",
+  dark: "https://tiles.openfreemap.org/styles/dark",
+} as const;
+
+// The no-WebGL road. PDOK's BRT Achtergrondkaart is the Kadaster's own basemap, open
+// data and free for anyone ("De BRT-A is de achtergrondkaart voor heel Nederland en is
+// gratis te gebruiken via PDOK"), served as plain raster WMTS a Leaflet TileLayer can
+// consume with no GL at all. It covers the Netherlands only, which is the whole map this
+// app draws, and it is a fallback: a machine with WebGL disabled gets a working map, not
+// the designed one.
+export const BASEMAP_FALLBACK = {
+  light: "https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/standaard/EPSG:3857/{z}/{x}/{y}.png",
+  dark: "https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/grijs/EPSG:3857/{z}/{x}/{y}.png",
+} as const;
+
+/** The vector style for a theme. */
+export function basemapStyleUrl(dark: boolean): string {
+  return dark ? BASEMAP_STYLE.dark : BASEMAP_STYLE.light;
+}
+
+/** The raster tile template for a theme, for the no-WebGL fallback. */
+export function basemapFallbackUrl(dark: boolean): string {
+  return dark ? BASEMAP_FALLBACK.dark : BASEMAP_FALLBACK.light;
+}
+
+/**
+ * The basemap layer. Vector tiles through MapLibre GL, hosted inside the Leaflet map
+ * that owns every other layer; raster tiles if this browser cannot give GL a context.
+ */
+export function Basemap({ dark = false }: { dark?: boolean }) {
+  const [glFailed, setGlFailed] = useState(false);
+  if (glFailed) {
+    return (
+      <TileLayer
+        className="basemap-raster"
+        url={basemapFallbackUrl(dark)}
+        maxZoom={19}
+      />
+    );
+  }
+  return <BasemapGL dark={dark} onFail={() => setGlFailed(true)} />;
+}
+
+// The GL layer's life cycle, kept to one effect keyed on the map: the layer is built
+// once and lives as long as the map does. A theme change swaps the style on the map that
+// is already there. Tearing the layer down and building another one would flash the
+// page background through the map and drop every tile the user is looking at.
+function BasemapGL({ dark, onFail }: { dark: boolean; onFail: () => void }) {
+  const map = useMap() as L.Map;
+  const handle = useRef<BasemapHandle | null>(null);
+  // Read at creation time, which can be several hundred ms after mount: whichever theme
+  // is current when the GL module finishes loading is the style the map opens with.
+  const style = useRef(basemapStyleUrl(dark));
+  style.current = basemapStyleUrl(dark);
+  const fail = useRef(onFail);
+  fail.current = onFail;
+
+  useEffect(() => {
+    // The unit suite's react-leaflet mock has no Leaflet map behind useMap, and jsdom has
+    // no WebGL to give MapLibre. Same guard as WindVelocityLayer: no real map, no GL, and
+    // the engine is never even imported there.
+    if (!map || typeof map.addLayer !== "function") return;
+    let cancelled = false;
+    let created: BasemapHandle | null = null;
+    import("../lib/basemapGL")
+      .then(({ createBasemap }) => {
+        if (cancelled) return;
+        created = createBasemap(map, style.current);
+        handle.current = created;
+      })
+      .catch(() => {
+        if (!cancelled) fail.current();
+      });
+    return () => {
+      cancelled = true;
+      handle.current = null;
+      created?.remove();
+    };
+  }, [map]);
+
+  useEffect(() => {
+    handle.current?.setStyle(basemapStyleUrl(dark));
+  }, [dark]);
+
+  return null;
+}

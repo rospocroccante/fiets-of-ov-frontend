@@ -1,4 +1,4 @@
-import { buildPlanView, departureLabel } from "./planView";
+import { buildPlanView, departureLabel, friendlyReason } from "./planView";
 import { mockPlanFor } from "../api/mock";
 import type { Plan, PlanLeg } from "../api/types";
 
@@ -73,6 +73,105 @@ test("bike km counts only bicycle legs and the ferry crossing is called out", ()
 test("carries the rain fields through", () => {
   const v = buildPlanView(mockPlanFor("A", "Unknown spot"));
   expect(v.rainExpected).toBeNull();
+});
+
+test("each option keeps its own rain exposure, not just the trip-level banner", () => {
+  const v = buildPlanView(mockPlanFor("A", "Bijlmer rain"));
+  const transit = v.options.find((o) => o.mode === "transit");
+  const bike = v.options.find((o) => o.mode === "bike");
+  // Same trip, same forecast: 22 minutes of it are spent in the rain on a bike and
+  // none of it in a metro carriage. Dropping this made both options look identical.
+  expect(transit?.rainMinutes).toBe(0);
+  expect(bike?.rainMinutes).toBe(22);
+});
+
+test("rain exposure is null, not zero, when the forecast is unavailable", () => {
+  // The backend still sends rain_minutes: 0 here, but that is "we do not know",
+  // not "you will stay dry". Rendering it as zero would invent a promise.
+  const v = buildPlanView(mockPlanFor("A", "Unknown spot"));
+  expect(v.rainExpected).toBeNull();
+  expect(v.options.every((o) => o.rainMinutes === null)).toBe(true);
+});
+
+test("every option carries its own fare, calories and CO2", () => {
+  const v = buildPlanView(mockPlanFor("A", "Bijlmer rain"));
+  const transit = v.options.find((o) => o.mode === "transit")!;
+  const bike = v.options.find((o) => o.mode === "bike")!;
+  expect(transit.metrics.fareEur).toBeGreaterThan(0);
+  expect(bike.metrics.fareEur).toBe(0);
+  // Metro and tram in Amsterdam run on Dutch green power, so on the 2026 factors both
+  // options emit nothing. The euros and the calories are what separate them here.
+  expect(transit.metrics.co2Grams).toBe(0);
+  expect(bike.metrics.co2Grams).toBe(0);
+  // The bike wins the calorie count on the same trip; that is the point of showing it.
+  expect(bike.metrics.kcal).toBeGreaterThan(transit.metrics.kcal);
+});
+
+test("backend reasons become plain sentences", () => {
+  expect(friendlyReason("dry during your 16-min ride -> bike")).toBe(
+    "It should stay dry for your 16-minute ride. Take the bike.",
+  );
+  expect(friendlyReason("dry during your 24-min ride (rain only from 15:40) -> bike")).toBe(
+    "It should stay dry for your 24-minute ride (rain starts around 15:40). Take the bike.",
+  );
+  expect(friendlyReason("rain around 15:10 (~1.2 mm/h) -> take tram 1 (29 min)")).toBe(
+    "Rain is expected around 15:10 (up to 1.2 mm/h). Take tram 1 (29 min).",
+  );
+  expect(friendlyReason("rain forecast unavailable -> fastest is bike (24 min)")).toBe(
+    "The rain forecast is unavailable right now. The fastest option is the bike (24 min).",
+  );
+  expect(friendlyReason("rain expected but no transit found -> bike (24 min), bring a raincoat")).toBe(
+    "Rain is on the way and there is no good transit alternative. Bike it in 24 minutes and bring a raincoat.",
+  );
+  // Unknown phrasings pass through untouched rather than getting mangled.
+  expect(friendlyReason("some new backend reason")).toBe("some new backend reason");
+});
+
+test("friendlyReason: the fastest-option variants read as sentences in English", () => {
+  expect(friendlyReason("rain around 15:10 (~1.2 mm/h) -> fastest is transit (29 min)")).toBe(
+    "Rain is expected around 15:10 (up to 1.2 mm/h). The fastest option is transit (29 min).",
+  );
+  expect(friendlyReason("dry during your 16-min ride -> fastest is bike and ride (21 min)")).toBe(
+    "It should stay dry for your 16-minute ride. The fastest option is bike and ride (21 min).",
+  );
+});
+
+test("friendlyReason renders the vetted Dutch sentences", () => {
+  expect(friendlyReason("dry during your 16-min ride -> bike", "nl")).toBe(
+    "Het blijft naar verwachting droog tijdens je rit van 16 minuten. Pak de fiets.",
+  );
+  expect(friendlyReason("dry during your 24-min ride (rain only from 15:40) -> bike", "nl")).toBe(
+    "Het blijft naar verwachting droog tijdens je rit van 24 minuten (regen begint rond 15:40). Pak de fiets.",
+  );
+  expect(friendlyReason("rain around 15:10 (~1.2 mm/h) -> take tram 1 (29 min)", "nl")).toBe(
+    "Rond 15:10 wordt regen verwacht (tot 1.2 mm/u). Neem tram 1 (29 min).",
+  );
+  expect(friendlyReason("rain forecast unavailable -> fastest is bike (24 min)", "nl")).toBe(
+    "De regenverwachting is momenteel niet beschikbaar. De snelste optie is de fiets (24 min).",
+  );
+  expect(
+    friendlyReason("rain expected but no transit found -> bike (24 min), bring a raincoat", "nl"),
+  ).toBe("Er komt regen aan en er is geen goed OV-alternatief. Pak de fiets (24 min) en neem een regenjas mee.");
+  expect(friendlyReason("dry -> bike to Amstelstation, then take metro 51 (18 min)", "nl")).toBe(
+    "Het blijft droog. Fiets naar Amstelstation, daarna take metro 51 (18 min).",
+  );
+  // Unknown phrasings pass through untouched in Dutch too, never half-translated.
+  expect(friendlyReason("some new backend reason", "nl")).toBe("some new backend reason");
+});
+
+test("buildPlanView in Dutch translates titles and summary pieces", () => {
+  const v = buildPlanView(bikeWithFerryPlan(), "nl");
+  expect(v.options[0].title).toBe("Met de fiets");
+  expect(v.options[0].summary).toBe("6.2 km fietsen + pont");
+});
+
+test("departureLabel in Dutch: Vertrek nu / Vertrek om", () => {
+  const it = bikeWithFerryPlan().options[0].itinerary;
+  const now = Date.UTC(2026, 6, 2, 12, 0);
+  expect(departureLabel({ ...it, start_time: now + 90_000 }, now, "nl")).toBe("Vertrek nu");
+  expect(departureLabel({ ...it, start_time: now + 34 * 60_000 }, now, "nl")).toMatch(
+    /^Vertrek om \d{1,2}[:.]\d{2}/,
+  );
 });
 
 test("departureLabel: leave now when imminent, clock time when the trip departs later", () => {

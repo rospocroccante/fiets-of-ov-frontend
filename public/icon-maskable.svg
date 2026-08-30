@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Fiets of OV">
+  <title>Fiets of OV</title>
+  <!-- The maskable variant of icon.svg. A launcher that supports `purpose: maskable`
+       crops the icon to its own shape (circle, squircle, teardrop) and may keep as
+       little as the central 80% circle, so this file is the same artwork on a
+       full-bleed background, shrunk to 0.70 and recentred to sit inside that circle.
+       The badge's own rounded corners are dropped: the launcher supplies the shape.
+       Regenerate the PNGs after editing (see the note in index.html). -->
+  <rect width="64" height="64" fill="#0D4A73" />
+
+  <g transform="translate(32 32) scale(0.7) translate(-32 -30)">
+    <!-- Tram: body, window band, and the pantograph nub on the roof. -->
+    <rect x="18" y="7" width="28" height="23" rx="5" fill="#FFC917" />
+    <rect x="23" y="12" width="18" height="9" rx="2" fill="#0D4A73" />
+    <rect x="30" y="3" width="4" height="4" rx="1" fill="#FFC917" />
+    <rect x="22" y="25" width="6" height="3" rx="1.5" fill="#0D4A73" />
+    <rect x="36" y="25" width="6" height="3" rx="1.5" fill="#0D4A73" />
+
+    <!-- Bicycle: two wheels and a diamond frame in white. -->
+    <g fill="none" stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="17" cy="48" r="9" />
+      <circle cx="47" cy="48" r="9" />
+      <path d="M17 48 L30 36 L47 48" />
+      <path d="M30 36 L30 48 L17 48" />
+      <path d="M43 36 L47 48" />
+      <path d="M39 35 L46 35" />
+    </g>
+  </g>
+</svg>

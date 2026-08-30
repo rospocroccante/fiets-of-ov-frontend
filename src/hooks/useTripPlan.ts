@@ -1,8 +1,10 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getPlan, getStops } from "../api/client";
+import { useI18n } from "../lib/i18n";
 import { buildPlanView, type PlanView } from "../lib/planView";
-import type { PlaceRef, Stop } from "../api/types";
-import type { Trip } from "../components/SearchBar";
+import type { PlaceRef, Plan, Stop } from "../api/types";
+import type { Trip } from "../trip";
 
 type LatLon = { lat: number; lon: number };
 
@@ -16,7 +18,7 @@ export interface TripPlanView {
 }
 
 interface TripData {
-  view: PlanView;
+  plan: Plan;
   origin: LatLon | null;
   destination: LatLon | null;
   stops: Stop[];
@@ -27,8 +29,12 @@ function coords(ref: PlaceRef): LatLon | null {
 }
 
 export function useTripPlan(trip: Trip | null): TripPlanView {
+  const { lang } = useI18n();
   const query = useQuery<TripData>({
-    queryKey: ["plan", trip?.from, trip?.to],
+    // The submit nonce is part of the key on purpose: this hook lives in an
+    // always-mounted component, so without it a second Search on the same route would
+    // hand back the first plan forever, departure times and all.
+    queryKey: ["plan", trip?.from, trip?.to, trip?.submit],
     enabled: trip !== null,
     queryFn: async () => {
       const t = trip!;
@@ -37,9 +43,16 @@ export function useTripPlan(trip: Trip | null): TripPlanView {
       const stops = destination
         ? await getStops(destination.lat, destination.lon).catch(() => [])
         : [];
-      return { view: buildPlanView(plan), origin: coords(plan.origin), destination, stops };
+      return { plan, origin: coords(plan.origin), destination, stops };
     },
   });
+
+  // The view's text depends on the UI language, so it is derived outside the query:
+  // a language toggle must rebuild it without refetching the plan.
+  const view = useMemo(
+    () => (query.data ? buildPlanView(query.data.plan, lang) : undefined),
+    [query.data, lang],
+  );
 
   if (trip === null) {
     return { status: "idle", origin: null, destination: null, stops: [] };
@@ -53,7 +66,7 @@ export function useTripPlan(trip: Trip | null): TripPlanView {
   }
   return {
     status: "ready",
-    view: query.data.view,
+    view,
     origin: query.data.origin,
     destination: query.data.destination,
     stops: query.data.stops,

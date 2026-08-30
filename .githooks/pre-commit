@@ -1,0 +1,16 @@
+#!/bin/sh
+# Pre-commit gate: typecheck, lint and the full test suite, the same three things CI
+# runs. Lives in the repo (not .git/hooks) so it is versioned and shared; enable it
+# once per clone with:
+#
+#   git config core.hooksPath .githooks
+#
+# The suite is offline and takes a couple of seconds. To land a commit without it
+# (rebase fixups, WIP on a branch), use `git commit --no-verify`.
+set -e
+
+# Run from the repo root, whatever directory git invoked the hook from.
+cd "$(git rev-parse --show-toplevel)"
+
+echo "pre-commit: npm run check (tsc + eslint + vitest)"
+npm run -s check
