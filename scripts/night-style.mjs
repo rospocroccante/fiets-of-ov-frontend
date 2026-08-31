@@ -10,24 +10,26 @@
 // from tiles.openfreemap.org (the style JSON keeps its absolute URLs); only the style
 // document itself is served from this origin.
 //
-// The mapping, per colour found under a *-color property:
-//   hue        S < 5% (no hue to speak of) goes straight to 204, the ramp hue.
-//              Chromatic hues rotate by -20° (fiord's dominant land/road hue is ~224;
-//              224 - 20 = 204) and clamp into [196, 212], so fiord's internal hue
-//              spread survives, compressed around the brand hue.
-//   lightness  background/fill/line layers compress toward the ramp's dark end:
-//              L' = 0.05 + 0.5·L  (ground #45516E L.35 → L.23, next to `surface` L.25).
-//              Symbol layers keep their lightness: label text stays light, halos stay
-//              dark, contrast holds.
+// The mapping, per colour found under a *-color property (night ramp v2, the
+// near-black "canale di notte" mix — see the `night` note in tailwind.config.js):
+//   hue        S < 5% (no hue to speak of) goes straight to 218, the ramp hue.
+//              Chromatic hues rotate by -6° (fiord's dominant land/road hue is ~224;
+//              224 - 6 = 218) and clamp into [210, 226], so fiord's internal hue
+//              spread survives, compressed around the ramp hue.
+//   lightness  background/fill/line layers compress hard toward the ramp's near-black
+//              end: L' = 0.03 + 0.28·L (ground #45516E L.35 → L.13, next to `raised`
+//              L.12) — the Dark Matter move: compressed lightness so the light water
+//              and the data layers keep the whole upper range to themselves. Symbol
+//              layers keep their lightness: label text stays light, halos stay dark.
 //   saturation solved from L', following the ramp's own saturation-vs-lightness curve
-//              (shade hsl(205 82% 11%) → border hsl(204 44% 44%) → faint 24% → muted
-//              60%), so dark ground comes out at brand saturation (~80%) and the light
-//              text steps come out blue-tinted like `muted`/`subtle`, not dyed navy.
+//              (shade hsl(224 52% 4%) → border 26% → faint/subtle ~17% → muted 19%),
+//              so the ground comes out low-chroma like the UI surfaces and the light
+//              text steps come out blue-greys like `muted`/`subtle`, not dyed navy.
 //   water      pinned, not derived — the owner asked for pale water ("azzurrino oppure
-//              bianco"). The water fill, the waterway lines and the water-name halo are
-//              `night.muted` (#CEE2F3, hsl(207 60% 88%)), and the water-name type flips
-//              to `night.bg` navy so it reads on the light ground: rivers and lakes cut
-//              light through the navy map, the light theme's water inverted.
+//              bianco"), and on the near-black ground it is the map's one light field:
+//              fill, waterway lines and the water-name halo are #B0CCE4
+//              (hsl(208 49% 79%), the A×C blend), and the water-name type flips to
+//              `night.bg` so it reads on the light ground — canals as bright threads.
 //
 // Regenerate with: node scripts/night-style.mjs   (then commit the JSON; the snapshot
 // is deliberate — a live fetch would let an upstream restyle repaint the app unseen).
@@ -39,24 +41,24 @@ import { fileURLToPath } from "node:url";
 const SOURCE = "https://tiles.openfreemap.org/styles/fiord";
 const OUT = join(dirname(fileURLToPath(import.meta.url)), "..", "public", "styles", "night.json");
 
-const RAMP_HUE = 204;
-const HUE_SHIFT = -20;
-const HUE_MIN = 196;
-const HUE_MAX = 212;
+const RAMP_HUE = 218;
+const HUE_SHIFT = -6;
+const HUE_MIN = 210;
+const HUE_MAX = 226;
 // The night ramp's saturation at each lightness, read straight off tailwind.config.js:
 // shade, bg, surface, raised, hover, border, faint, subtle, muted (see the note there).
 const SAT_CURVE = [
-  [0.0, 0.82],
-  [0.11, 0.82],
-  [0.18, 0.78],
-  [0.25, 0.8],
-  [0.27, 0.68],
-  [0.31, 0.62],
-  [0.44, 0.44],
-  [0.62, 0.24],
-  [0.78, 0.42],
-  [0.88, 0.6],
-  [1.0, 0.6],
+  [0.0, 0.52],
+  [0.04, 0.52],
+  [0.07, 0.44],
+  [0.1, 0.38],
+  [0.12, 0.39],
+  [0.14, 0.36],
+  [0.22, 0.26],
+  [0.44, 0.17],
+  [0.56, 0.16],
+  [0.65, 0.19],
+  [1.0, 0.19],
 ];
 
 function satFor(l) {
@@ -107,7 +109,7 @@ function recolor(str, keepLightness) {
   const [h, s, l, a] = parsed;
   const hue =
     s < 0.05 ? RAMP_HUE : Math.min(HUE_MAX, Math.max(HUE_MIN, ((h + HUE_SHIFT) % 360 + 360) % 360));
-  const light = keepLightness ? l : 0.05 + 0.5 * l;
+  const light = keepLightness ? l : 0.03 + 0.28 * l;
   const sat = satFor(light);
   const H = Math.round(hue);
   const S = Math.round(sat * 100);
@@ -138,8 +140,8 @@ for (const layer of style.layers) {
 
 // Water, pinned after the derivation (see the note in the header). The three layers are
 // fiord's complete water story: the polygon fill, the thin waterway lines, the names.
-const WATER = "hsl(207,60%,88%)"; // night.muted — the azzurrino
-const WATER_TEXT = "hsl(204,78%,18%)"; // night.bg — navy type on light water
+const WATER = "hsl(208,49%,79%)"; // #B0CCE4, the A×C blend — the azzurrino
+const WATER_TEXT = "hsl(221,44%,7%)"; // night.bg — near-black type on light water
 for (const layer of style.layers) {
   if (layer.id === "water") layer.paint["fill-color"] = WATER;
   if (layer.id === "waterway") layer.paint["line-color"] = WATER;

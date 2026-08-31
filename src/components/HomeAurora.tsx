@@ -35,15 +35,17 @@ const BLUE_BLOBS: Blob[] = [
 ];
 
 // Dark theme: white mist only — whites and the palest brand blue drifting on
-// the navy backdrop. The geel stays out of the backdrop and on the details, so
-// the page never drifts towards grey or gold.
+// the near-black backdrop. The geel stays out of the backdrop and on the details,
+// so the page never drifts towards grey or gold. Opacities sit ~30% under the old
+// navy-era values: the same mist reads brighter on night.bg L 7% than it did on
+// L 18%, and the v2 ramp wants the ground calm so the accent and water carry.
 const NIGHT_BLOBS: Blob[] = [
-  { color: "#FFFFFF", size: "40rem", opacity: 0.2, anim: "aurora-a", duration: "12s", delay: "0s", pos: { top: "-10rem", left: "-10rem" } },
-  { color: "#E7F0F7", size: "34rem", opacity: 0.26, anim: "aurora-b", duration: "14.5s", delay: "-6s", pos: { top: "-6rem", right: "-8rem" } },
-  { color: "#F8FAFC", size: "36rem", opacity: 0.2, anim: "aurora-c", duration: "15.5s", delay: "-3s", pos: { bottom: "-10rem", right: "2rem" } },
-  { color: "#E7F0F7", size: "28rem", opacity: 0.22, anim: "aurora-b", duration: "13s", delay: "-9s", pos: { bottom: "-8rem", left: "0rem" } },
-  { color: "#FFFFFF", size: "30rem", opacity: 0.18, anim: "aurora-a", duration: "13.5s", delay: "-11s", pos: { top: "26%", left: "30%" } },
-  { color: "#F8FAFC", size: "26rem", opacity: 0.2, anim: "aurora-c", duration: "11s", delay: "-5s", pos: { top: "38%", right: "22%" } },
+  { color: "#FFFFFF", size: "40rem", opacity: 0.14, anim: "aurora-a", duration: "12s", delay: "0s", pos: { top: "-10rem", left: "-10rem" } },
+  { color: "#E7F0F7", size: "34rem", opacity: 0.18, anim: "aurora-b", duration: "14.5s", delay: "-6s", pos: { top: "-6rem", right: "-8rem" } },
+  { color: "#F8FAFC", size: "36rem", opacity: 0.14, anim: "aurora-c", duration: "15.5s", delay: "-3s", pos: { bottom: "-10rem", right: "2rem" } },
+  { color: "#E7F0F7", size: "28rem", opacity: 0.16, anim: "aurora-b", duration: "13s", delay: "-9s", pos: { bottom: "-8rem", left: "0rem" } },
+  { color: "#FFFFFF", size: "30rem", opacity: 0.13, anim: "aurora-a", duration: "13.5s", delay: "-11s", pos: { top: "26%", left: "30%" } },
+  { color: "#F8FAFC", size: "26rem", opacity: 0.14, anim: "aurora-c", duration: "11s", delay: "-5s", pos: { top: "38%", right: "22%" } },
 ];
 
 // This lives OUTSIDE the home stage — App mounts it in its own layer between the map

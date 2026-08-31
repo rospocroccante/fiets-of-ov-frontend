@@ -234,9 +234,10 @@ map that owns every other layer (`src/components/Basemap.tsx`, `src/lib/basemapG
 Daylight is the `bright` style; night is `/styles/night.json`, a snapshot of
 OpenFreeMap's `fiord` recoloured onto the night ramp by `scripts/night-style.mjs` and
 served from this origin — fiord as published is a paler grey-slate (ground `#45516E`)
-that floated on the navy UI, so the ground is re-solved onto the ramp's own hue,
-saturation and lightness (land next to `surface`) and water is pinned pale on
-`night.muted`, light rivers and lakes cutting through the navy ground. Tiles,
+that floated on the dark UI, so the ground is re-solved onto the ramp's own hue,
+saturation and lightness (land next to `raised`, the Dark Matter move of a compressed
+near-black range) and water is pinned pale on `#B0CCE4`, light rivers and lakes
+cutting through the near-black ground. Tiles,
 glyphs and sprites still come from tiles.openfreemap.org; only the style document is
 ours. Switching theme calls `setStyle` on the map already on the screen, so the canvas,
 the camera and the radar frames above it all survive the swap.
@@ -294,38 +295,41 @@ privacy notice next to OpenFreeMap, in both languages, and the privacy notice na
 
 ## Night palette
 
-The dark theme is the light theme **mirrored**: deep navy canal-water surfaces with pure
-white text — the exact inverse of the light theme's navy-on-white, not a dimmed copy of
-it. Everything lives in the `night` block of `tailwind.config.js`; nothing else in the
-app hard-codes a dark colour.
+The dark theme (v2, "canale di notte") is the canal blue taken to its near-black end:
+large areas sit at L 4-14% and low chroma, elevation is micro-steps of lightness plus
+hairline borders, and geel is the only vivid colour — the modern dark-UI grammar
+(Radix steps 1-2, Linear, CARTO Dark Matter) on the app's own hue. Everything lives in
+the `night` block of `tailwind.config.js`; nothing else in the app hard-codes a dark
+colour.
 
 | token | value | what it is |
 | --- | --- | --- |
-| `night.shade` | `#052033` | below the page — the map-label halo |
-| `night.bg` | `#0A3552` | page / `body` |
-| `night.surface` | `#0D4A73` | cards, pills, chips — the brand blue, verbatim |
-| `night.raised` | `#164E74` | menus, dropdowns, popovers |
-| `night.hover` | `#1E5980` | hover on an opaque night surface |
-| `night.border` | `#3F7AA2` | borders and hairline dividers on one |
-| `night.text` | `#FFFFFF` | primary text — pure white |
-| `night.muted` | `#CEE2F3` | secondary text |
-| `night.subtle` | `#AFC9DE` | tertiary / meta text |
-| `night.faint` | `#87A0B5` | separator glyphs only |
+| `night.shade` | `#050810` | below the page — the map-label halo |
+| `night.bg` | `#0A0F1A` | page / `body` — near-black canal blue |
+| `night.surface` | `#101724` | cards, pills, chips |
+| `night.raised` | `#131C2B` | menus, dropdowns, popovers |
+| `night.hover` | `#16202F` | hover on an opaque night surface |
+| `night.border` | `#2A3548` | hairline dividers — ≈ white @9% over `surface` |
+| `night.text` | `#E7ECF3` | primary text — off-white, never pure white |
+| `night.muted` | `#96A3B8` | secondary text |
+| `night.subtle` | `#7C8BA1` | tertiary / meta text |
+| `night.faint` | `#5C6B82` | separator glyphs only |
 | `night.accent` | `#FFC917` | NS geel — detail text, small fills, rings |
 | `night.accent-soft` | `#FFE38A` | lighter accent step — fine text on tinted chips |
 | `night.accent-deep` | `#6B4E00` | translucent chip backgrounds and borders only |
 
-**Why hue 204.** The surfaces are the light theme's own blue, after dark:
-`night.surface` *is* brand `#0D4A73`, verbatim, and the rest of the ramp is solved
-around it on the same hue at brand saturation — the ns.nl move of deep blue ground,
-white type, geel details. Primary text on `night.bg` measures 12.77:1 — comfortably
-past AAA.
+**Why hue 216-221.** The surfaces are still the light theme's blue after dark — but as
+temperature, not as colour: saturation falls from 44% at the near-black end to ~17%
+mid-ramp, so nothing on screen competes with the geel details or the pale water on the
+map. The first ramp sat on saturated mid-navy (`bg #0A3552`, `surface` = brand
+`#0D4A73`) and read as dated; the hexes live on in the light theme, where they belong.
+Primary text on `night.bg` measures 16.14:1 — comfortably past AAA.
 
 **The accent is NS geel** (`#FFC917`, the same hex as `ams.ns`), used the way ns.nl
 uses it: details, never surfaces. Icon and link text, the small filled controls
 (filter pills, "Vai", badges — geel ground, navy type, the signage pairing), the
-selected-card ring, and the headline accent line of the slogan. It holds 4.87:1 as
-text on `hover`, the lightest surface it lands on, and 8.28:1 under `night.bg` text
+selected-card ring, and the headline accent line of the slogan. It holds 10.63:1 as
+text on `hover`, the lightest surface it lands on, and 12.42:1 under `night.bg` text
 when it is the fill. The primary Search action is the one deliberate exception: it
 stays white (`from-white to-brand-light`, navy text) so the single biggest control
 reads as light, not gold — and the home aurora is white mist only, no geel blob.
