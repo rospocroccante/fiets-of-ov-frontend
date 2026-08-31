@@ -231,7 +231,8 @@ for the map (see `WARM_EVENTS` in `App.tsx`), which cut the home screen's cold l
 
 The map is drawn by MapLibre GL from OpenFreeMap vector tiles, hosted inside the Leaflet
 map that owns every other layer (`src/components/Basemap.tsx`, `src/lib/basemapGL.ts`).
-Daylight is the `bright` style, night is `dark`. Switching theme calls `setStyle` on the
+Daylight is the `bright` style, night is `fiord`, OpenFreeMap's dark blue — the
+basemap in the same deep-blue family as the night palette's brand-blue surfaces. Switching theme calls `setStyle` on the
 map already on the screen, so the canvas, the camera and the radar frames above it all
 survive the swap.
 

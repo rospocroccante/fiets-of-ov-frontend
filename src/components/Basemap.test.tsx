@@ -18,7 +18,7 @@ test("each theme has its own OpenFreeMap style, and neither is CARTO", () => {
   // is a change nobody asked for, so the exact style is pinned here rather than left to
   // "any light style will do".
   expect(basemapStyleUrl(false)).toBe("https://tiles.openfreemap.org/styles/bright");
-  expect(basemapStyleUrl(true)).toBe("https://tiles.openfreemap.org/styles/dark");
+  expect(basemapStyleUrl(true)).toBe("https://tiles.openfreemap.org/styles/fiord");
   // The dark theme reading the light style is the mutation this pins: the map would go
   // on looking fine in daylight and stay bright at night.
   expect(basemapStyleUrl(true)).not.toBe(basemapStyleUrl(false));

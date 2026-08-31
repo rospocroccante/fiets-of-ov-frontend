@@ -36,10 +36,13 @@ import type { BasemapHandle } from "../lib/basemapGL";
 // and no OpenFreeMap style reproduces voyager exactly. CARTO is the only exact match and
 // it is out of terms (docs/superpowers/specs/2026-08-15-third-party-terms.md).
 //
-// The dark style is untouched: it is the one the owner asked for and accepted.
+// Night is `fiord` — OpenMapTiles' dark-blue style — swapped in from the charcoal
+// `dark` style at the owner's request: the night UI sits on the brand blue
+// (tailwind's `night` ramp), and fiord is the basemap that lives in the same
+// deep-blue family instead of a grey one.
 export const BASEMAP_STYLE = {
   light: "https://tiles.openfreemap.org/styles/bright",
-  dark: "https://tiles.openfreemap.org/styles/dark",
+  dark: "https://tiles.openfreemap.org/styles/fiord",
 } as const;
 
 // The no-WebGL road. PDOK's BRT Achtergrondkaart is the Kadaster's own basemap, open
