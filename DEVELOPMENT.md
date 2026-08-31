@@ -231,10 +231,14 @@ for the map (see `WARM_EVENTS` in `App.tsx`), which cut the home screen's cold l
 
 The map is drawn by MapLibre GL from OpenFreeMap vector tiles, hosted inside the Leaflet
 map that owns every other layer (`src/components/Basemap.tsx`, `src/lib/basemapGL.ts`).
-Daylight is the `bright` style, night is `fiord`, OpenFreeMap's dark blue — the
-basemap in the same deep-blue family as the night palette's brand-blue surfaces. Switching theme calls `setStyle` on the
-map already on the screen, so the canvas, the camera and the radar frames above it all
-survive the swap.
+Daylight is the `bright` style; night is `/styles/night.json`, a snapshot of
+OpenFreeMap's `fiord` recoloured onto the night ramp by `scripts/night-style.mjs` and
+served from this origin — fiord as published is a paler grey-slate (ground `#45516E`)
+that floated on the navy UI, so ground and water are re-solved onto the ramp's own hue,
+saturation and lightness (land next to `surface`, canals next to `night.bg`). Tiles,
+glyphs and sprites still come from tiles.openfreemap.org; only the style document is
+ours. Switching theme calls `setStyle` on the map already on the screen, so the canvas,
+the camera and the radar frames above it all survive the swap.
 
 Daylight is `bright` rather than `liberty` because it is the closest OpenFreeMap style to
 the CARTO voyager raster the map used to draw, measured over Amsterdam at two zooms and

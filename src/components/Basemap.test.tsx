@@ -11,19 +11,23 @@ import {
 // GL engine is never touched here. The layer itself (a WebGL canvas, its style swap and
 // the raster fallback) is proved in the browser suite, browser-tests/specs/basemap.checks.mjs.
 
-test("each theme has its own OpenFreeMap style, and neither is CARTO", () => {
+test("each theme has its own style, and neither is CARTO", () => {
   // `bright`, not `liberty`: it is the OpenFreeMap style measured closest to the CARTO
   // voyager raster this app used to draw, mostly because of the water (see the note over
   // BASEMAP_STYLE). Changing it back to liberty turns every canal cornflower blue, which
   // is a change nobody asked for, so the exact style is pinned here rather than left to
   // "any light style will do".
   expect(basemapStyleUrl(false)).toBe("https://tiles.openfreemap.org/styles/bright");
-  expect(basemapStyleUrl(true)).toBe("https://tiles.openfreemap.org/styles/fiord");
+  // Night is the recoloured fiord snapshot served from this origin — the style document
+  // that puts the basemap on the night ramp (see the note over BASEMAP_STYLE). Pointing
+  // this back at any live tiles.openfreemap.org style brings back the pale grey-slate
+  // map the owner rejected.
+  expect(basemapStyleUrl(true)).toBe("/styles/night.json");
   // The dark theme reading the light style is the mutation this pins: the map would go
   // on looking fine in daylight and stay bright at night.
   expect(basemapStyleUrl(true)).not.toBe(basemapStyleUrl(false));
   for (const url of Object.values(BASEMAP_STYLE)) {
-    expect(url).toMatch(/^https:\/\/tiles\.openfreemap\.org\//);
+    expect(url).toMatch(/^(https:\/\/tiles\.openfreemap\.org\/|\/styles\/)/);
     expect(url).not.toMatch(/carto/i);
   }
 });
