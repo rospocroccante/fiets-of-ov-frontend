@@ -35,3 +35,21 @@ test("saved chip and recent row fire their callbacks; clear clears", () => {
   expect(cleared).toHaveBeenCalledTimes(1);
   expect(screen.getByText("10m ago")).toBeInTheDocument();
 });
+
+test("the recents meta text carries the readable colour steps on both themes", () => {
+  render(
+    <HomeShortcuts
+      saved={[]}
+      recents={recents}
+      onPickSaved={() => {}}
+      onPickRecent={() => {}}
+      onClearRecents={() => {}}
+      now={10 * 60000}
+    />,
+  );
+  // slate-400 measured 2.56:1 on the frosted card; these pins keep the AA fix from regressing by copy-paste.
+  expect(screen.getByText("Recent")).toHaveClass("text-slate-500", "dark:text-night-subtle");
+  const clear = screen.getByRole("button", { name: /clear/i });
+  expect(clear).toHaveClass("text-slate-500", "hover:text-slate-700", "dark:text-night-subtle", "dark:hover:text-night-text");
+  expect(screen.getByText("10m ago")).toHaveClass("text-slate-500", "dark:text-night-subtle");
+});

@@ -10,6 +10,9 @@ interface Props {
   onText: (text: string) => void;
   onSelect: (place: Place) => void;
   onLocate: (ep: Endpoint) => void;
+  // Ties a locate's completion back to its start so the owner can drop a result the
+  // user has typed over in the meantime; see UseMyLocationButton.
+  beginLocate?: () => (ep: Endpoint) => void;
   savedPlaces?: Place[];
   history?: HistoryEntry[];
   onPickHistory?: (h: HistoryEntry) => void;
@@ -37,6 +40,7 @@ export function EndpointField({
   onText,
   onSelect,
   onLocate,
+  beginLocate,
   savedPlaces,
   history,
   onPickHistory,
@@ -93,7 +97,7 @@ export function EndpointField({
           </span>
         </button>
       )}
-      {showLocate && <UseMyLocationButton onLocated={onLocate} />}
+      {showLocate && <UseMyLocationButton onLocated={onLocate} beginLocate={beginLocate} />}
     </div>
   );
 }

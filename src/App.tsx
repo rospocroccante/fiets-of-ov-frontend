@@ -250,6 +250,7 @@ export default function App() {
     setArmed(null);
     setHideMap(false);
     setRadar(false);
+    placeSeq.current++;
     setPlaceInfo(null);
     setNavigating(false);
     setSearchOpen(false);
@@ -334,6 +335,7 @@ export default function App() {
     setToText(p.name);
     setDestination({ label: p.name, query: coordQuery(p.lat, p.lon) });
     setSelectedMode(null);
+    placeSeq.current++;
     setPlaceInfo({ name: p.name, address: p.label !== p.name ? p.label : null, lat: p.lat, lon: p.lon });
     submitted();
     toMap();
@@ -349,8 +351,15 @@ export default function App() {
     toMap();
   }
 
+  // "What's here?" is a reverse geocode too, so card writes follow the same
+  // out-of-order rule as endpoints: a slow answer may not replace a newer card, nor
+  // re-open one the user has closed. Every other open/close of the card claims the
+  // seq so a late answer loses.
+  const placeSeq = useRef(0);
   async function whatsHere(c: { lat: number; lon: number }) {
+    const seq = ++placeSeq.current;
     const detail = await reverseGeocodeDetail(c.lat, c.lon);
+    if (seq !== placeSeq.current) return;
     setPlaceInfo({ name: detail.name, address: detail.address, lat: c.lat, lon: c.lon });
   }
 
@@ -359,6 +368,7 @@ export default function App() {
   function infoDirections(which: "start" | "end") {
     if (!placeInfo) return;
     geocodeSeq.current[which]++;
+    placeSeq.current++;
     const ep = { label: placeInfo.name, query: coordQuery(placeInfo.lat, placeInfo.lon) };
     if (which === "start") {
       setFromText(placeInfo.name);
@@ -401,6 +411,30 @@ export default function App() {
     setToText(ep.label);
     setDestination(ep);
     setSelectedMode(null);
+  }
+  // "Use my location" answers long after the click (a GPS fix plus a reverse
+  // geocode), so it runs under the same out-of-order rule as pin drags: the click
+  // claims the slot's seq, and if anything newer wrote to the slot meanwhile -
+  // typing, a map pick, another locate - the stale fix is dropped on arrival.
+  function beginLocate(which: "start" | "end"): (ep: Endpoint) => void {
+    const seq = ++geocodeSeq.current[which];
+    return (ep) => {
+      if (seq !== geocodeSeq.current[which]) return;
+      if (which === "start") locateFrom(ep);
+      else locateTo(ep);
+    };
+  }
+  const beginLocateFrom = () => beginLocate("start");
+  const beginLocateTo = () => beginLocate("end");
+  // Typing claims the slot too: without the bump, text entered while a locate (or
+  // a slow pin-drag geocode) was still in flight was overwritten when it landed.
+  function typeFromText(text: string) {
+    geocodeSeq.current.start++;
+    setFromText(text);
+  }
+  function typeToText(text: string) {
+    geocodeSeq.current.end++;
+    setToText(text);
   }
   function swap() {
     setFromText(toText);
@@ -667,6 +701,7 @@ export default function App() {
               count={count}
               hideMap={hideMap}
               onToggleMap={() => setHideMap((v) => !v)}
+              hideMapDisabled={navigating}
               armed={armed}
               onArm={armPick}
               radar={radar}
@@ -713,7 +748,17 @@ export default function App() {
               )}
               <ResultsPanel
                 state={panel}
-                onStartNav={route ? () => setNavigating(true) : undefined}
+                onStartNav={
+                  route
+                    ? () => {
+                        // The nav UI (banner, Exit, follow camera) lives in the map
+                        // pane: starting nav with the map hidden left the GPS watch
+                        // and wake lock running with no banner and no way out.
+                        setHideMap(false);
+                        setNavigating(true);
+                      }
+                    : undefined
+                }
                 narrow={isPhone}
               />
               {/* Weather and OpenStreetMap credit for the advice itself, which stays on
@@ -757,9 +802,10 @@ export default function App() {
                     onMovePoint={onMovePoint}
                     onContextPick={onContextPick}
                     onWhatsHere={whatsHere}
-                    onPoiPick={(p) =>
-                      setPlaceInfo({ name: p.name, address: p.kindLabel, lat: p.lat, lon: p.lon })
-                    }
+                    onPoiPick={(p) => {
+                      placeSeq.current++;
+                      setPlaceInfo({ name: p.name, address: p.kindLabel, lat: p.lat, lon: p.lon });
+                    }}
                     interactive={progressIs1}
                     radar={radar}
                     wLayers={wLayers}
@@ -797,7 +843,10 @@ export default function App() {
                       })
                     }
                     onDirections={infoDirections}
-                    onClose={() => setPlaceInfo(null)}
+                    onClose={() => {
+                      placeSeq.current++;
+                      setPlaceInfo(null);
+                    }}
                   />
                 )}
               </section>
@@ -1089,9 +1138,10 @@ export default function App() {
             <EndpointField
               value={fromText}
               placeholder={t("from")}
-              onText={setFromText}
+              onText={typeFromText}
               onSelect={selectFrom}
               onLocate={locateFrom}
+              beginLocate={beginLocateFrom}
               savedPlaces={savedPlaces}
               history={endpointHistory}
               onPickHistory={pickHistoryFrom}
@@ -1101,7 +1151,7 @@ export default function App() {
             type="button"
             aria-label={t("swapStartEnd")}
             onClick={swap}
-            className="flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center text-gray-400 hover:text-brand dark:hover:text-night-accent"
+            className="flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center text-gray-500 hover:text-brand dark:text-night-muted dark:hover:text-night-accent"
           >
             &#8646;
           </button>
@@ -1109,9 +1159,10 @@ export default function App() {
             <EndpointField
               value={toText}
               placeholder={t("to")}
-              onText={setToText}
+              onText={typeToText}
               onSelect={selectTo}
               onLocate={locateTo}
+              beginLocate={beginLocateTo}
               savedPlaces={savedPlaces}
               history={endpointHistory}
               onPickHistory={pickHistoryTo}
@@ -1145,12 +1196,14 @@ export default function App() {
         <MobileSearchSheet
           fromText={fromText}
           toText={toText}
-          onFromText={setFromText}
-          onToText={setToText}
+          onFromText={typeFromText}
+          onToText={typeToText}
           onSelectFrom={selectFrom}
           onSelectTo={selectTo}
           onLocateFrom={locateFrom}
           onLocateTo={locateTo}
+          beginLocateFrom={beginLocateFrom}
+          beginLocateTo={beginLocateTo}
           savedPlaces={savedPlaces}
           history={endpointHistory}
           onPickHistoryFrom={pickHistoryFrom}

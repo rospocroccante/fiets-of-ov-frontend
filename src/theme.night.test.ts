@@ -70,6 +70,19 @@ test("the night ramp holds the contrast floors it was solved for", () => {
   expect(lums).toEqual([...lums].sort((a, b) => a - b));
 });
 
+test("the light theme's meta text holds its floors on the white surfaces it sits on", () => {
+  // Tailwind's fixed palette, restated because the config does not define it: slate-400 is what HomeShortcuts, the place card and the swap arrow used; slate-500/gray-500 are the steps they were re-pinned to.
+  const SLATE_400 = "#94A3B8";
+  const SLATE_500 = "#64748B";
+  const GRAY_500 = "#6B7280";
+  const WHITE = "#FFFFFF";
+  // The bug: slate-400 cannot carry 11px meta text, nor even the 3:1 non-text floor, on a white card.
+  expect(contrast(SLATE_400, WHITE)).toBeLessThan(3);
+  // The replacements clear AA for normal text, which also covers the swap glyph's non-text floor.
+  expect(contrast(SLATE_500, WHITE)).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(GRAY_500, WHITE)).toBeGreaterThanOrEqual(4.5);
+});
+
 test("no component hard-codes a dark surface any more", () => {
   const offenders: string[] = [];
   for (const file of sourceFiles()) {

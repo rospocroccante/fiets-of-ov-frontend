@@ -7,6 +7,11 @@ import type { Endpoint } from "../trip";
 
 interface Props {
   onLocated: (ep: Endpoint) => void;
+  // Captures the destination slot's state the moment the locate starts: the returned
+  // sink replaces onLocated for that one request, so the owner can drop a fix that
+  // was overtaken by typing or another write while the GPS + reverse geocode were in
+  // flight (see App.beginLocate).
+  beginLocate?: () => (ep: Endpoint) => void;
   className?: string;
   // Draw the name next to the icon. The desktop pill has room for an icon and nothing
   // else; the phone search screen puts this button in a row of its own, where an
@@ -19,7 +24,12 @@ type StatusState =
   | { kind: "error"; text: string }
   | null;
 
-export function UseMyLocationButton({ onLocated, className, withLabel = false }: Props): JSX.Element {
+export function UseMyLocationButton({
+  onLocated,
+  beginLocate,
+  className,
+  withLabel = false,
+}: Props): JSX.Element {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<StatusState>(null);
@@ -27,11 +37,14 @@ export function UseMyLocationButton({ onLocated, className, withLabel = false }:
   async function handleClick() {
     setBusy(true);
     setStatus(null);
+    // Resolved before the first await: the race guard must see the world as it was
+    // when the button was pressed, not as it is when the position finally arrives.
+    const deliver = beginLocate ? beginLocate() : onLocated;
     try {
       const fix = await getCurrentPosition();
       const query = coordQuery(fix.lat, fix.lon);
       const label = await reverseGeocode(fix.lat, fix.lon);
-      onLocated({ label, query });
+      deliver({ label, query });
       const w = accuracyWarning(fix.accuracy);
       if (w) {
         setStatus({ kind: "warn", text: w });

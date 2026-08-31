@@ -193,6 +193,18 @@ test("the manifest declares 192 and 512 PNGs and a maskable icon, and all of the
   expect(png("512x512", "maskable"), "no 512x512 maskable PNG").toBeDefined();
 });
 
+test("the manifest theme_color matches the light theme-color meta, so install and launch paint the same chrome", () => {
+  const manifest = JSON.parse(readFileSync(join(PUBLIC, "manifest.webmanifest"), "utf8")) as {
+    theme_color?: string;
+  };
+  const light = html.match(
+    /<meta\s+name="theme-color"\s+media="\(prefers-color-scheme: light\)"\s+content="(#[0-9A-Fa-f]{6})"/,
+  );
+  expect(light, "no light theme-color meta in index.html").not.toBeNull();
+  // The manifest used to say #0D4A73: Android's splash and title bar launched teal, then snapped to the white the metas paint.
+  expect(manifest.theme_color?.toLowerCase()).toBe(light![1].toLowerCase());
+});
+
 // Every PNG the app declares. All of them are the same mark on the same badge, so the
 // same two floors apply to all five.
 const IMAGES = [

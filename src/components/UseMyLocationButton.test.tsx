@@ -106,4 +106,20 @@ describe("UseMyLocationButton", () => {
     // onLocated must NOT have been called
     expect(onLocated).not.toHaveBeenCalled();
   });
+
+  it("delivers through the sink captured when the locate began, not through onLocated", async () => {
+    stubGeoSuccess(52.358, 4.8686, 20);
+    const onLocated = vi.fn();
+    const sink = vi.fn();
+    const beginLocate = vi.fn(() => sink);
+
+    render(<UseMyLocationButton onLocated={onLocated} beginLocate={beginLocate} />);
+    fireEvent.click(screen.getByRole("button", { name: /use my location/i }));
+
+    await vi.waitFor(() => expect(sink).toHaveBeenCalledTimes(1));
+    // beginLocate runs before the first await, so the owner can claim its race guard at click time; the fix then flows through that sink alone, which is what lets App drop a fix the user typed over.
+    expect(beginLocate).toHaveBeenCalledTimes(1);
+    expect(onLocated).not.toHaveBeenCalled();
+    expect(sink.mock.calls[0][0].label).toMatch(/vondelpark/i);
+  });
 });

@@ -199,6 +199,21 @@ test("the Dutch phone bar names the trailing control so the spoken name contains
   }
 });
 
+test("Hide map is locked while navigating: the map pane is the nav UI", () => {
+  const toggles: number[] = [];
+  renderBar({ hideMapDisabled: true, onToggleMap: () => toggles.push(1) });
+  const hide = screen.getByRole("button", { name: /hide map/i });
+  expect(hide).toBeDisabled();
+  fireEvent.click(hide);
+  expect(toggles).toEqual([]);
+});
+
+test("the phone panel's Hide map is locked while navigating too", () => {
+  renderPhoneBar({ hideMapDisabled: true });
+  fireEvent.click(screen.getByRole("button", { name: /map options/i }));
+  expect(screen.getByRole("button", { name: /hide map/i })).toBeDisabled();
+});
+
 test("mode chips are real filters: pressed state reflects kinds, click toggles", () => {
   const toggled: string[] = [];
   renderBar({

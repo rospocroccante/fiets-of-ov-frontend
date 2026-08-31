@@ -1,5 +1,6 @@
 import type { Plan, Stop, Place } from "./types";
 import { mockPlanFor, mockStops, mockSearchPlaces } from "./mock";
+import { anySignal } from "../lib/abortSignal";
 
 // Defaults are dev-server defaults, not deploy defaults. A production build cannot
 // reach this fallback: vite.config.ts refuses to build unless VITE_API_MODE is set
@@ -38,15 +39,16 @@ const TIMEOUT_MESSAGE = "the routing service did not answer in time";
 const NETWORK_MESSAGE = "could not reach the routing service";
 
 // Same shape as the one in usePois: a per-request deadline that still honours a caller
-// that has moved on. Feature-guarded because AbortSignal.timeout/any are recent enough
-// that an older browser would otherwise take down every request instead of a few.
+// that has moved on. Feature-guarded because AbortSignal.timeout is recent enough that
+// an older browser would otherwise take down every request instead of a few; anySignal
+// covers the engines that have timeout() but not any(), where the caller's own signal
+// used to be silently dropped in favour of the deadline.
 function withTimeout(outer: AbortSignal | undefined, ms: number): AbortSignal | undefined {
   if (typeof AbortSignal === "undefined" || typeof AbortSignal.timeout !== "function") {
     return outer;
   }
   const t = AbortSignal.timeout(ms);
-  if (!outer) return t;
-  return typeof AbortSignal.any === "function" ? AbortSignal.any([outer, t]) : t;
+  return outer ? anySignal(outer, t) : t;
 }
 
 // A fetch rejection carries no status, so the two cases have to be told apart by the

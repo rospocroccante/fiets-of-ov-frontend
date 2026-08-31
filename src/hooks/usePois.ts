@@ -1,5 +1,6 @@
 import { useQueries } from "@tanstack/react-query";
 import { isLive } from "../api/client";
+import { anySignal } from "../lib/abortSignal";
 import { getCell, putCell, putMany } from "../lib/poiStore";
 
 // Named points of interest (bars, restaurants, museums...) for the Maps-style POI
@@ -139,7 +140,7 @@ const MOCK_POIS: Poi[] = [
   { id: "m6", name: "Bakkerij Centrum", kind: "shop", kindLabel: "Bakery", tag: "bakery", lat: 52.372, lon: 4.895 },
 ];
 
-interface Bbox {
+export interface Bbox {
   south: number;
   west: number;
   north: number;
@@ -209,13 +210,14 @@ function cellsFor(v: Bbox): Cell[] {
 
 // Each attempt gets its own timeout so a hanging mirror cannot eat the whole retry
 // chain; the react-query signal still aborts everything when the viewport moves on.
+// anySignal keeps that true even where AbortSignal.any is missing - falling back to
+// the bare timeout there left superseded viewports downloading to their deadline.
 function attemptSignal(outer: AbortSignal | undefined, ms: number): AbortSignal | undefined {
   if (typeof AbortSignal === "undefined" || typeof AbortSignal.timeout !== "function") {
     return outer;
   }
   const t = AbortSignal.timeout(ms);
-  if (!outer) return t;
-  return typeof AbortSignal.any === "function" ? AbortSignal.any([outer, t]) : t;
+  return outer ? anySignal(outer, t) : t;
 }
 
 async function fetchPois(
@@ -264,6 +266,28 @@ const PREFETCH_TTL_MS = 7 * 24 * 3600 * 1000;
 const PREFETCH_CAP = 12_000;
 const AMS_CORE: Bbox = { south: 52.32, west: 4.8, north: 52.43, east: 4.99 };
 
+// The cells the sweep can prove empty: only those the swept bbox covers whole. The
+// old Math.floor bounds also took every boundary cell that pokes past the sweep
+// (the top row spans 52.43-52.44 against a query that stops at 52.43) and marked it
+// known-empty - and a stored [] is an answer (see poiStore.getCell), so the
+// on-demand path never repaired those cells for a week. Exported for the
+// cell-arithmetic regression test. The epsilon absorbs IEEE division noise on
+// exactly-aligned edges (4.8 / 0.015 lands a hair above 320); at ~a millionth of a
+// cell it is far below any real coordinate step, so a truly partial cell can never
+// slip back in.
+const CELL_EPS = 1e-6;
+export function fullyCoveredCellKeys(v: Bbox): string[] {
+  const i0 = Math.ceil(v.south / CELL_LAT - CELL_EPS);
+  const i1 = Math.floor(v.north / CELL_LAT + CELL_EPS) - 1;
+  const j0 = Math.ceil(v.west / CELL_LON - CELL_EPS);
+  const j1 = Math.floor(v.east / CELL_LON + CELL_EPS) - 1;
+  const keys: string[] = [];
+  for (let i = i0; i <= i1; i++) {
+    for (let j = j0; j <= j1; j++) keys.push(`${i}:${j}`);
+  }
+  return keys;
+}
+
 export async function prefetchAmsterdamPois(): Promise<void> {
   if (!isLive()) return;
   try {
@@ -292,11 +316,8 @@ export async function prefetchAmsterdamPois(): Promise<void> {
     pois.sort((a, b) => KIND_PRIORITY[a.kind] - KIND_PRIORITY[b.kind]).slice(0, MAX_POIS),
   ]);
   if (all.length < PREFETCH_CAP) {
-    for (let i = Math.floor(AMS_CORE.south / CELL_LAT); i <= Math.floor(AMS_CORE.north / CELL_LAT); i++) {
-      for (let j = Math.floor(AMS_CORE.west / CELL_LON); j <= Math.floor(AMS_CORE.east / CELL_LON); j++) {
-        const key = `${i}:${j}`;
-        if (!byCell.has(key)) entries.push([key, []]);
-      }
+    for (const key of fullyCoveredCellKeys(AMS_CORE)) {
+      if (!byCell.has(key)) entries.push([key, []]);
     }
   }
   putMany(entries);

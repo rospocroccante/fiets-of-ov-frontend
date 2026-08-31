@@ -1,4 +1,4 @@
-import { prefetchAmsterdamPois } from "./usePois";
+import { prefetchAmsterdamPois, fullyCoveredCellKeys } from "./usePois";
 import { getCell, __resetPoiStore } from "../lib/poiStore";
 
 // The prefetch is a live-mode feature; force the live path (the rest of the suite
@@ -34,4 +34,28 @@ test("bulk prefetch chunks the city into cells and marks the rest known-empty", 
   fetchMock.mockClear();
   await prefetchAmsterdamPois();
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+test("the sweep marks known-empty only the cells it covered whole", async () => {
+  const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ elements: [] }) }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  await prefetchAmsterdamPois();
+
+  // An interior cell is proven empty by the sweep.
+  expect(getCell("5233:321")).toEqual([]);
+  // The top row (52.43-52.44) and the east column (4.98-4.995) poke past the swept bbox (north 52.43, east 4.99).
+  // The old Math.floor bounds marked them known-empty and pinned that for a week; they must stay unknown.
+  expect(getCell("5243:321")).toBeNull();
+  expect(getCell("5233:332")).toBeNull();
+});
+
+test("fullyCoveredCellKeys: aligned edges stay in, partial rows and columns stay out", () => {
+  // An unaligned box proves only the one cell it contains whole (52.33-52.34 x 4.815-4.83).
+  const keys = new Set(fullyCoveredCellKeys({ south: 52.325, west: 4.81, north: 52.345, east: 4.844 }));
+  expect(keys).toEqual(new Set(["5233:321"]));
+
+  // Cell-aligned edges are covered exactly, without float-noise off-by-ones.
+  const aligned = new Set(fullyCoveredCellKeys({ south: 52.32, west: 4.8, north: 52.34, east: 4.83 }));
+  expect(aligned).toEqual(new Set(["5232:320", "5232:321", "5233:320", "5233:321"]));
 });

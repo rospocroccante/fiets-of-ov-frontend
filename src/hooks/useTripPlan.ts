@@ -36,12 +36,15 @@ export function useTripPlan(trip: Trip | null): TripPlanView {
     // hand back the first plan forever, departure times and all.
     queryKey: ["plan", trip?.from, trip?.to, trip?.submit],
     enabled: trip !== null,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const t = trip!;
-      const plan = await getPlan(t.from, t.to);
+      // react-query aborts `signal` when this query is superseded (a new submit, a
+      // changed endpoint) or unmounted; forwarding it is what actually stops the
+      // old request - without it the stale plan kept downloading to its timeout.
+      const plan = await getPlan(t.from, t.to, signal);
       const destination = coords(plan.destination);
       const stops = destination
-        ? await getStops(destination.lat, destination.lon).catch(() => [])
+        ? await getStops(destination.lat, destination.lon, 500, signal).catch(() => [])
         : [];
       return { plan, origin: coords(plan.origin), destination, stops };
     },

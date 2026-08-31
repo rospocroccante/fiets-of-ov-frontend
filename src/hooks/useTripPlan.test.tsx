@@ -40,6 +40,14 @@ test("idle when trip is null", () => {
   expect(result.current.status).toBe("idle");
 });
 
+test("react-query's abort signal reaches the fetch chain", async () => {
+  vi.mocked(getPlan).mockClear();
+  const { result } = renderHook(() => useTripPlan({ from: "Centraal", to: "Dam" }), { wrapper });
+  await waitFor(() => expect(result.current.status).toBe("ready"));
+  // getPlan(from, to, signal): a superseded query must be able to abort its own request.
+  expect(vi.mocked(getPlan).mock.calls[0][2]).toBeInstanceOf(AbortSignal);
+});
+
 test("re-submitting the same route re-plans instead of replaying the cached answer", async () => {
   vi.mocked(getPlan).mockClear();
   const { result, rerender } = renderHook(({ trip }: { trip: Trip }) => useTripPlan(trip), {

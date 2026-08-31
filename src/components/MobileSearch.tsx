@@ -95,6 +95,10 @@ interface SheetProps {
   onSelectTo: (place: Place) => void;
   onLocateFrom: (ep: Endpoint) => void;
   onLocateTo: (ep: Endpoint) => void;
+  // Start-of-locate hooks (see UseMyLocationButton.beginLocate): App claims the
+  // slot's geocode seq at the click so a slow fix cannot overwrite later input.
+  beginLocateFrom?: () => (ep: Endpoint) => void;
+  beginLocateTo?: () => (ep: Endpoint) => void;
   savedPlaces?: Place[];
   history?: HistoryEntry[];
   onPickHistoryFrom: (h: HistoryEntry) => void;
@@ -118,6 +122,8 @@ export function MobileSearchSheet({
   onSelectTo,
   onLocateFrom,
   onLocateTo,
+  beginLocateFrom,
+  beginLocateTo,
   savedPlaces,
   history,
   onPickHistoryFrom,
@@ -345,6 +351,7 @@ export function MobileSearchSheet({
           <UseMyLocationButton
             withLabel
             onLocated={activeField === "to" ? onLocateTo : onLocateFrom}
+            beginLocate={activeField === "to" ? beginLocateTo : beginLocateFrom}
           />
         </div>
 

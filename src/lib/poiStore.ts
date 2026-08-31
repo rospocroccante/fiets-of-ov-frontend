@@ -58,7 +58,30 @@ function persist(): void {
 
 function schedulePersist(): void {
   if (persistHandle) clearTimeout(persistHandle);
-  persistHandle = setTimeout(persist, PERSIST_DEBOUNCE_MS);
+  persistHandle = setTimeout(() => {
+    persistHandle = null;
+    persist();
+  }, PERSIST_DEBOUNCE_MS);
+}
+
+// A tab that dies inside the debounce window used to lose the whole batch - worst
+// case the multi-MB weekly prefetch, whose "done" timestamp is written separately
+// and did survive, so the next session believed the cells were there for up to a
+// week. pagehide is the last event iOS Safari reliably delivers before unload; the
+// hidden state covers desktop closes and Android's silent tab kills. Both can fire
+// for one close - the cleared handle makes the second flush a no-op.
+function flushPersist(): void {
+  if (!persistHandle) return;
+  clearTimeout(persistHandle);
+  persistHandle = null;
+  persist();
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", flushPersist);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushPersist();
+  });
 }
 
 // A stored empty array is meaningful: "this cell is known to have no POIs", which

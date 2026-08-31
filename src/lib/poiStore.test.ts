@@ -21,6 +21,15 @@ test("put/get roundtrip; a debounced persist survives a memory reset", () => {
   expect(getCell("5237:326")?.[0].name).toBe("Bar X");
 });
 
+test("a pending persist is flushed on pagehide, so a dying tab loses nothing", () => {
+  vi.useFakeTimers();
+  putCell("5237:326", [POI]);
+  // The debounce timer never fires because the tab is closing: pagehide must write the blob out itself.
+  window.dispatchEvent(new Event("pagehide"));
+  __resetPoiStore();
+  expect(getCell("5237:326")?.[0].name).toBe("Bar X");
+});
+
 test("entries expire after the TTL; known-empty cells are served, not refetched", () => {
   vi.useFakeTimers({ now: new Date("2026-07-07T10:00:00Z") });
   putCell("1:1", []);

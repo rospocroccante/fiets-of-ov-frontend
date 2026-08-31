@@ -23,12 +23,17 @@ export function FilterBar({
   onToggleRadar,
   kinds,
   onToggleKind,
+  hideMapDisabled = false,
   phone = false,
   compact = false,
 }: {
   count: number;
   hideMap: boolean;
   onToggleMap: () => void;
+  // While navigating, the map pane is the nav UI (banner, Exit): hiding it would
+  // strand a live session with the GPS watch and wake lock still running, so the
+  // toggle locks rather than misfires. Everything else on the bar stays live.
+  hideMapDisabled?: boolean;
   armed: Armed;
   onArm: (which: "start" | "end") => void;
   radar: boolean;
@@ -90,6 +95,7 @@ export function FilterBar({
         chip={chip}
         hideMap={hideMap}
         onToggleMap={onToggleMap}
+        hideMapDisabled={hideMapDisabled}
         armed={armed}
         onArm={onArm}
         radar={radar}
@@ -151,7 +157,8 @@ export function FilterBar({
             button would nudge the whole right cluster on every toggle. */}
         <button
           onClick={onToggleMap}
-          className="inline-flex min-h-[44px] min-w-[6.5rem] items-center justify-center rounded-full border border-gray-200 px-4 text-center text-sm mouse:min-h-[36px] dark:border-night-border dark:text-night-muted dark:hover:bg-night-hover"
+          disabled={hideMapDisabled}
+          className="inline-flex min-h-[44px] min-w-[6.5rem] items-center justify-center rounded-full border border-gray-200 px-4 text-center text-sm mouse:min-h-[36px] disabled:cursor-not-allowed disabled:opacity-40 dark:border-night-border dark:text-night-muted dark:hover:bg-night-hover"
         >
           {hideMap ? t("showMap") : t("hideMap")}
         </button>
@@ -188,6 +195,7 @@ function PhoneFilterBar({
   chip,
   hideMap,
   onToggleMap,
+  hideMapDisabled,
   armed,
   onArm,
   radar,
@@ -199,6 +207,7 @@ function PhoneFilterBar({
   chip: (pressed: boolean) => string;
   hideMap: boolean;
   onToggleMap: () => void;
+  hideMapDisabled: boolean;
   armed: Armed;
   onArm: (which: "start" | "end") => void;
   radar: boolean;
@@ -404,7 +413,12 @@ function PhoneFilterBar({
                   {t("radar")}
                 </button>
               )}
-              <button type="button" onClick={onToggleMap} className={chip(false)}>
+              <button
+                type="button"
+                onClick={onToggleMap}
+                disabled={hideMapDisabled}
+                className={`${chip(false)} disabled:cursor-not-allowed disabled:opacity-40`}
+              >
                 {hideMap ? t("showMap") : t("hideMap")}
               </button>
             </div>

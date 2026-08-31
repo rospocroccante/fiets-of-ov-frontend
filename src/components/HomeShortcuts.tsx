@@ -56,12 +56,15 @@ export function HomeShortcuts({
       {recents.length > 0 && (
         <div className="rounded-card border border-white/60 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-white/10">
           <div className="flex items-center justify-between px-4 pt-2.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            {/* slate-500, not 400: 400 measured 2.56:1 on this frosted card, under
+                the 4.5:1 the 11px meta text needs; the dark side takes the night
+                ramp's own tertiary step instead of bleeding through. */}
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-night-subtle">
               {t("recent")}
             </span>
             <button
               onClick={onClearRecents}
-              className="-mr-2 inline-flex min-h-[44px] items-center px-2 text-[11px] font-medium text-slate-400 transition hover:text-slate-600"
+              className="-mr-2 inline-flex min-h-[44px] items-center px-2 text-[11px] font-medium text-slate-500 transition hover:text-slate-700 dark:text-night-subtle dark:hover:text-night-text"
             >
               {t("clear")}
             </button>
@@ -82,7 +85,7 @@ export function HomeShortcuts({
                   <span className="min-w-0 flex-1 truncate text-sm text-slate-800 dark:text-night-text">
                     {trip.fromLabel} <span className="text-slate-400">{"→"}</span> {trip.toLabel}
                   </span>
-                  <span className="shrink-0 text-[11px] text-slate-400">{timeAgo(trip.at, now, t)}</span>
+                  <span className="shrink-0 text-[11px] text-slate-500 dark:text-night-subtle">{timeAgo(trip.at, now, t)}</span>
                 </button>
               </li>
             ))}

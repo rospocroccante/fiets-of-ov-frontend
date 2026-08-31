@@ -80,12 +80,17 @@ export function RadarReadout({
   rainError: boolean;
   windError: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const frameTime = useRadarFrame();
   const rainLive = layers.rain && !rainError;
   const label =
     rainLive && frameTime != null
-      ? new Date(frameTime * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      ? // Pinned to the app language, not the browser locale ([]): this clock has to
+        // format like every other time the UI prints (see ItineraryDetails' hhmm).
+        new Date(frameTime * 1000).toLocaleTimeString(lang === "nl" ? "nl-NL" : "en-GB", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
       : null;
   return (
     <div className="absolute right-3 top-3 z-[1000] flex flex-col items-end gap-1.5">

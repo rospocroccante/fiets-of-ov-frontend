@@ -26,3 +26,27 @@ test("tracks matchMedia changes", () => {
   act(() => listener?.());
   expect(result.current).toBe(true);
 });
+
+test("falls back to addListener/removeListener where MediaQueryList predates EventTarget (legacy Safari)", () => {
+  let listener: (() => void) | null = null;
+  const removeListener = vi.fn();
+  const mql = {
+    matches: false,
+    addListener: (fn: () => void) => {
+      listener = fn;
+    },
+    removeListener,
+  };
+  vi.stubGlobal("matchMedia", () => mql);
+
+  const { result, unmount } = renderHook(() => useMediaQuery("(min-width: 1024px)"));
+  expect(result.current).toBe(false);
+
+  mql.matches = true;
+  act(() => listener?.());
+  expect(result.current).toBe(true);
+
+  // The cleanup must use the same legacy spelling, or the listener leaks.
+  unmount();
+  expect(removeListener).toHaveBeenCalledTimes(1);
+});

@@ -28,7 +28,11 @@ export function PlaceInfoCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="truncate text-[15px] font-semibold text-slate-900 dark:text-night-text">{place.name}</h3>
-          {place.address && <p className="mt-0.5 truncate text-xs text-slate-500">{place.address}</p>}
+          {place.address && (
+            // slate-500 alone was 3.18:1 on night-raised/95; the night ramp's own
+            // tertiary step holds the 4.5:1 the 12px line needs on both themes.
+            <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-night-subtle">{place.address}</p>
+          )}
           <p className="mt-0.5 text-[11px] text-slate-400">
             {place.lat.toFixed(5)}, {place.lon.toFixed(5)}
           </p>
