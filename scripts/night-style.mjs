@@ -16,14 +16,18 @@
 //              224 - 20 = 204) and clamp into [196, 212], so fiord's internal hue
 //              spread survives, compressed around the brand hue.
 //   lightness  background/fill/line layers compress toward the ramp's dark end:
-//              L' = 0.05 + 0.5·L  (ground #45516E L.35 → L.23, next to `surface` L.25;
-//              water #38435C L.29 → L.20, next to `night.bg` L.18 — canals stay one
-//              step darker than land, as in the light theme). Symbol layers keep their
-//              lightness: label text stays light, halos stay dark, contrast holds.
+//              L' = 0.05 + 0.5·L  (ground #45516E L.35 → L.23, next to `surface` L.25).
+//              Symbol layers keep their lightness: label text stays light, halos stay
+//              dark, contrast holds.
 //   saturation solved from L', following the ramp's own saturation-vs-lightness curve
 //              (shade hsl(205 82% 11%) → border hsl(204 44% 44%) → faint 24% → muted
 //              60%), so dark ground comes out at brand saturation (~80%) and the light
 //              text steps come out blue-tinted like `muted`/`subtle`, not dyed navy.
+//   water      pinned, not derived — the owner asked for pale water ("azzurrino oppure
+//              bianco"). The water fill, the waterway lines and the water-name halo are
+//              `night.muted` (#CEE2F3, hsl(207 60% 88%)), and the water-name type flips
+//              to `night.bg` navy so it reads on the light ground: rivers and lakes cut
+//              light through the navy map, the light theme's water inverted.
 //
 // Regenerate with: node scripts/night-style.mjs   (then commit the JSON; the snapshot
 // is deliberate — a live fetch would let an upstream restyle repaint the app unseen).
@@ -129,6 +133,19 @@ for (const layer of style.layers) {
     for (const [key, value] of Object.entries(bag)) {
       if (key.includes("color")) bag[key] = walk(value, keepLightness);
     }
+  }
+}
+
+// Water, pinned after the derivation (see the note in the header). The three layers are
+// fiord's complete water story: the polygon fill, the thin waterway lines, the names.
+const WATER = "hsl(207,60%,88%)"; // night.muted — the azzurrino
+const WATER_TEXT = "hsl(204,78%,18%)"; // night.bg — navy type on light water
+for (const layer of style.layers) {
+  if (layer.id === "water") layer.paint["fill-color"] = WATER;
+  if (layer.id === "waterway") layer.paint["line-color"] = WATER;
+  if (layer.id === "water_name") {
+    layer.paint["text-color"] = WATER_TEXT;
+    layer.paint["text-halo-color"] = WATER;
   }
 }
 

@@ -41,10 +41,11 @@ import type { BasemapHandle } from "../lib/basemapGL";
 // the mapping). Fiord itself was tried and rejected by the owner: its ground is
 // #45516E — hue ~224, 23% saturation, L 35% — a pale grey-slate against the page's
 // night.bg #0A3552 (hue 204, 78%, L 18%), so the map floated on the UI as a lighter,
-// greyer island. The recoloured style puts ground and water on the ramp's own hue and
-// lightness (land next to `surface`, canals next to `night.bg`, labels blue-tinted like
-// `muted`/`subtle`), so the basemap and the night UI read as one surface. Tiles, glyphs
-// and sprites still come from tiles.openfreemap.org; only the style document is ours.
+// greyer island. The recoloured style puts the ground on the ramp's own hue and
+// lightness (land next to `surface`, labels blue-tinted like `muted`/`subtle`) and pins
+// water pale — `night.muted` — at the owner's request, so rivers and lakes read light
+// against the navy ground and the basemap and the night UI read as one surface. Tiles,
+// glyphs and sprites still come from tiles.openfreemap.org; the style document is ours.
 export const BASEMAP_STYLE = {
   light: "https://tiles.openfreemap.org/styles/bright",
   dark: "/styles/night.json",

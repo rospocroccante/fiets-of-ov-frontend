@@ -234,8 +234,9 @@ map that owns every other layer (`src/components/Basemap.tsx`, `src/lib/basemapG
 Daylight is the `bright` style; night is `/styles/night.json`, a snapshot of
 OpenFreeMap's `fiord` recoloured onto the night ramp by `scripts/night-style.mjs` and
 served from this origin — fiord as published is a paler grey-slate (ground `#45516E`)
-that floated on the navy UI, so ground and water are re-solved onto the ramp's own hue,
-saturation and lightness (land next to `surface`, canals next to `night.bg`). Tiles,
+that floated on the navy UI, so the ground is re-solved onto the ramp's own hue,
+saturation and lightness (land next to `surface`) and water is pinned pale on
+`night.muted`, light rivers and lakes cutting through the navy ground. Tiles,
 glyphs and sprites still come from tiles.openfreemap.org; only the style document is
 ours. Switching theme calls `setStyle` on the map already on the screen, so the canvas,
 the camera and the radar frames above it all survive the swap.
