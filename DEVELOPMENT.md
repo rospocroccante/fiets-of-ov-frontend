@@ -235,9 +235,9 @@ Daylight is the `bright` style; night is `/styles/night.json`, a snapshot of
 OpenFreeMap's `fiord` recoloured onto the night ramp by `scripts/night-style.mjs` and
 served from this origin — fiord as published is a paler grey-slate (ground `#45516E`)
 that floated on the dark UI, so the ground is re-solved onto the ramp's own hue,
-saturation and lightness (land next to `raised`, the Dark Matter move of a compressed
-near-black range) and water is pinned pale on `#B0CCE4`, light rivers and lakes
-cutting through the near-black ground. Tiles,
+saturation and lightness (land between `surface` and `raised`, a compressed
+navy range) and water is pinned pale on `#B0CCE4`, light rivers and lakes
+cutting through the navy ground. Tiles,
 glyphs and sprites still come from tiles.openfreemap.org; only the style document is
 ours. Switching theme calls `setStyle` on the map already on the screen, so the canvas,
 the camera and the radar frames above it all survive the swap.
@@ -295,25 +295,25 @@ privacy notice next to OpenFreeMap, in both languages, and the privacy notice na
 
 ## Night palette
 
-The dark theme (v2, "canale di notte") is the canal blue taken to its near-black end:
-large areas sit at L 4-14% and low chroma, elevation is micro-steps of lightness plus
-hairline borders, and geel is the only vivid colour — the modern dark-UI grammar
-(Radix steps 1-2, Linear, CARTO Dark Matter) on the app's own hue. Everything lives in
+The dark theme (v3, navy) is a true deep-navy ground: the surfaces climb hue ~216 at
+S 55-65% from L 6% to L 20%, elevation is micro-steps of lightness plus hairline
+borders, and geel is the only non-blue vivid colour. v2's near-black "canale di notte"
+read black rather than blue and was rejected by the owner. Everything lives in
 the `night` block of `tailwind.config.js`; nothing else in the app hard-codes a dark
 colour.
 
 | token | value | what it is |
 | --- | --- | --- |
-| `night.shade` | `#050810` | below the page — the map-label halo |
-| `night.bg` | `#0A0F1A` | page / `body` — near-black canal blue |
-| `night.surface` | `#101724` | cards, pills, chips |
-| `night.raised` | `#131C2B` | menus, dropdowns, popovers |
-| `night.hover` | `#16202F` | hover on an opaque night surface |
-| `night.border` | `#2A3548` | hairline dividers — ≈ white @9% over `surface` |
+| `night.shade` | `#050B18` | below the page — the map-label halo |
+| `night.bg` | `#0A192F` | page / `body` — deep navy |
+| `night.surface` | `#0F2038` | cards, pills, chips |
+| `night.raised` | `#132644` | menus, dropdowns, popovers |
+| `night.hover` | `#172D4F` | hover on an opaque night surface |
+| `night.border` | `#2E4568` | hairline dividers — a navy step, not a grey |
 | `night.text` | `#E7ECF3` | primary text — off-white, never pure white |
 | `night.muted` | `#96A3B8` | secondary text |
-| `night.subtle` | `#7C8BA1` | tertiary / meta text |
-| `night.faint` | `#5C6B82` | separator glyphs only |
+| `night.subtle` | `#8496AD` | tertiary / meta text |
+| `night.faint` | `#60708A` | separator glyphs only |
 | `night.accent` | `#FFC917` | NS geel — detail text, small fills, rings |
 | `night.accent-soft` | `#FFE38A` | lighter accent step — fine text on tinted chips |
 | `night.accent-deep` | `#6B4E00` | translucent chip backgrounds and borders only |

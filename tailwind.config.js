@@ -18,19 +18,18 @@ export default {
           sky: "#0284C7",
           ns: "#FFC917",
         },
-        // Night palette v2 — "canale di notte": the canal blue taken to its near-black
-        // end. The first ramp sat on saturated mid-navy (bg #0A3552, surface = brand
-        // #0D4A73) and read as 2010-corporate; modern dark UIs (Radix steps 1-2,
-        // Linear, CARTO Dark Matter) keep large areas near-black at low chroma and do
-        // elevation with micro-steps of lightness plus hairline borders, saving
-        // saturation for ONE accent. So: the hue stays canal blue (216-221, the light
-        // theme after dark) but lightness collapses to L 4-14% on the surfaces and
-        // saturation falls from 44% at the dark end to ~17% mid-ramp — blue as
-        // temperature, not as colour. Geel remains the only vivid thing on screen.
+        // Night palette v3 — navy. v1 sat on saturated mid-navy (bg #0A3552, surface =
+        // brand #0D4A73) and read as 2010-corporate; v2 went the other way, near-black
+        // "canale di notte" (L 4-14%, chroma falling to ~17% mid-ramp), and the owner
+        // rejected the mix — pale water and geel floated on a ground that read black,
+        // not blue. v3 is the middle: a true navy ground (hue ~216, S 55-65%, L 6-20%
+        // up the ladder) so the page reads *blue* at a glance; elevation is still
+        // micro-steps of lightness plus hairline borders, and geel is still the only
+        // non-blue vivid thing on screen.
         //
         // Each text step clears its WCAG floor on the *lightest* surface it is ever
-        // used on — `text` 16.14:1 on `bg` (AAA) and 13.80:1 on `hover`, `muted`
-        // 6.70:1 and `subtle` 4.94:1 on `raised` (AA for body text), `faint` 3.32:1
+        // used on — `text` 14.83:1 on `bg` (AAA) and 11.60:1 on `hover`, `muted`
+        // 5.93:1 and `subtle` 5.00:1 on `raised` (AA for body text), `faint` 3.26:1
         // on `surface` (the non-text floor; it is only ever a separator glyph). Move
         // a surface step lighter and those must be rechecked — theme.night.test.ts
         // holds the line.
@@ -38,21 +37,21 @@ export default {
         // Retuning: change the hue on all six surface steps together, or nudge one
         // step's lightness. Nothing else in the app hard-codes a dark surface.
         night: {
-          shade: "#050810", // hsl(224 52% 4%) — below the page; the map-label halo
-          bg: "#0A0F1A", // hsl(221 44% 7%) — page/body, near-black canal blue
-          surface: "#101724", // hsl(219 38% 10%) — cards, pills, chips
-          raised: "#131C2B", // hsl(218 39% 12%) — menus, dropdowns, popovers
-          hover: "#16202F", // hsl(216 36% 14%) — hover on an opaque night surface
-          border: "#2A3548", // hsl(218 26% 22%) — hairline; ≈ white @9% over `surface`
-          text: "#E7ECF3", // off-white — never pure white on a near-black ground
+          shade: "#050B18", // hsl(221 66% 6%) — below the page; the map-label halo
+          bg: "#0A192F", // hsl(216 65% 11%) — page/body, deep navy
+          surface: "#0F2038", // hsl(215 58% 14%) — cards, pills, chips
+          raised: "#132644", // hsl(217 56% 17%) — menus, dropdowns, popovers
+          hover: "#172D4F", // hsl(216 55% 20%) — hover on an opaque night surface
+          border: "#2E4568", // hsl(216 39% 29%) — hairline; a navy step, not a grey
+          text: "#E7ECF3", // off-white — never pure white on a navy ground
           muted: "#96A3B8", // hsl(217 19% 65%) — secondary
-          subtle: "#7C8BA1", // hsl(216 16% 56%) — tertiary/meta
-          faint: "#5C6B82", // hsl(217 17% 44%) — decorative separators only
+          subtle: "#8496AD", // hsl(214 20% 60%) — tertiary/meta
+          faint: "#60708A", // hsl(217 18% 46%) — decorative separators only
           // Dark accent — NS geel, used the way ns.nl uses it: details only. Icon and
           // link text, the small filled controls (filter pills, "Vai", badges — geel
           // ground, navy type, the signage pairing), the selected-card ring, the
           // slogan's accent line. Never a surface, never the backdrop. It holds
-          // 10.63:1 as text on `hover` (the lightest surface it lands on) and 12.42:1
+          // 8.93:1 as text on `hover` (the lightest surface it lands on) and 11.42:1
           // under `night.bg` text when it is the fill. `accent-soft` is fine text on
           // tinted chips; `accent-deep` never carries text — translucent tint only.
           // The one non-geel accent left is the primary Search action, which goes
