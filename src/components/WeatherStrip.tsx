@@ -61,7 +61,7 @@ export function WeatherStrip({
   return (
     <div
       data-fov="weather-strip"
-      className={`flex items-center rounded-card border border-slate-100 bg-white/80 shadow-sm backdrop-blur dark:border-white/10 dark:bg-night-surface/80 ${
+      className={`flex items-center rounded-card border border-slate-100 bg-white/80 shadow-sm backdrop-blur dark:border-night-rim/20 dark:bg-night-surface/80 ${
         compact ? "mb-2 gap-3 px-3 py-1.5" : "mb-3 gap-4 px-4 py-3"
       }`}
     >

@@ -843,7 +843,7 @@ export function MapView({
       {menu && (
         <div
           ref={menuRef}
-          className="absolute z-[1000] overflow-hidden rounded-lg border border-slate-200 bg-white text-sm shadow-lg dark:border-white/10 dark:bg-night-raised"
+          className="absolute z-[1000] overflow-hidden rounded-lg border border-slate-200 bg-white text-sm shadow-lg dark:border-night-rim/20 dark:bg-night-raised"
           style={{ left: menuPos?.left ?? menu.x, top: menuPos?.top ?? menu.y }}
         >
           <button
@@ -868,7 +868,7 @@ export function MapView({
           </button>
           <button
             type="button"
-            className="flex min-h-[44px] w-full items-center border-t border-slate-100 px-4 text-left hover:bg-slate-100 dark:border-white/10 dark:hover:bg-night-hover"
+            className="flex min-h-[44px] w-full items-center border-t border-slate-100 px-4 text-left hover:bg-slate-100 dark:border-night-rim/20 dark:hover:bg-night-hover"
             onClick={() => {
               onWhatsHere?.({ lat: menu.lat, lon: menu.lon });
               setMenu(null);

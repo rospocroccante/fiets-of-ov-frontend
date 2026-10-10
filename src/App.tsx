@@ -912,7 +912,7 @@ export default function App() {
               type="button"
               aria-label={t("switchLanguage")}
               onClick={toggleLang}
-              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 px-3 text-xs font-semibold leading-[20px] text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-night-accent dark:hover:bg-white/20"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 px-3 text-xs font-semibold leading-[20px] text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-night-rim/20 dark:bg-night-surface/70 dark:text-night-accent dark:hover:bg-night-hover/95"
             >
               {lang === "en" ? "NL" : "EN"}
             </button>
@@ -921,7 +921,7 @@ export default function App() {
               aria-label={dark ? t("switchToLight") : t("switchToDark")}
               aria-pressed={dark}
               onClick={toggleTheme}
-              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-night-accent dark:hover:bg-white/20"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-night-rim/20 dark:bg-night-surface/70 dark:text-night-accent dark:hover:bg-night-hover/95"
             >
               <span aria-hidden="true" className="material-symbols-rounded block text-[20px] leading-none">
                 {dark ? "light_mode" : "dark_mode"}
@@ -966,7 +966,7 @@ export default function App() {
                     data-fov="popular-trip"
                     onClick={() => pickPopular(trip)}
                     aria-label={`${trip.from} → ${trip.to}`}
-                    className="group flex flex-col gap-3 rounded-card border border-white/60 bg-white/70 p-5 text-left shadow-sm ring-1 ring-slate-900/5 backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-white/90 hover:shadow-lg dark:border-white/10 dark:bg-white/10 dark:ring-white/5 dark:hover:bg-white/15"
+                    className="group flex flex-col gap-3 rounded-card border border-white/60 bg-white/70 p-5 text-left shadow-sm ring-1 ring-slate-900/5 backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-white/90 hover:shadow-lg dark:border-night-rim/20 dark:bg-night-surface/70 dark:ring-night-rim/10 dark:hover:bg-night-hover/85"
                   >
                     {/* Mini route: origin dot, connector, destination flag. */}
                     <span className="flex items-center gap-2">
@@ -1025,7 +1025,7 @@ export default function App() {
             the header, which is inert: the two never share a visible moment (homeOpacity
             hits 0 at progress 0.5, chromeOpacity only leaves 0 from there on). */}
         <motion.header
-          className={`absolute inset-x-0 top-0 flex items-center justify-between border-b border-gray-100 bg-white/95 pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] dark:border-white/10 dark:bg-night-bg/95 sm:pl-[calc(1.5rem+env(safe-area-inset-left))] sm:pr-[calc(1.5rem+env(safe-area-inset-right))] ${
+          className={`absolute inset-x-0 top-0 flex items-center justify-between border-b border-gray-100 bg-white/95 pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] dark:border-night-rim/20 dark:bg-night-bg/95 sm:pl-[calc(1.5rem+env(safe-area-inset-left))] sm:pr-[calc(1.5rem+env(safe-area-inset-right))] ${
             // Decided in JS rather than by a media variant: the short tier has to beat
             // `lg` on a wide short window, and which of two arbitrary variants wins is
             // a question about the generated stylesheet's order, not about the design.

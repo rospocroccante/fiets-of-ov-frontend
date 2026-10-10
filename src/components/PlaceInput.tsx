@@ -269,7 +269,7 @@ export function PlaceInput({
   // the cap stopped the list at y=452 of 844 with 390px of white below it — a suggestion
   // list that scrolls internally while half the screen sits empty. There the height is
   // measured instead (listMaxHeight below), so the list ends where the sheet does.
-  const listClass = `absolute left-0 right-0 top-full z-20 mt-1 overflow-auto rounded-2xl border border-gray-100 bg-white shadow-lg dark:border-white/10 dark:bg-night-raised${
+  const listClass = `absolute left-0 right-0 top-full z-20 mt-1 overflow-auto rounded-2xl border border-gray-100 bg-white shadow-lg dark:border-night-rim/20 dark:bg-night-raised${
     listAnchor === "container" ? "" : " max-h-72"
   }`;
   const listStyle = listAnchor === "container" ? { maxHeight: listMaxHeight } : undefined;

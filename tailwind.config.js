@@ -18,47 +18,65 @@ export default {
           sky: "#0284C7",
           ns: "#FFC917",
         },
-        // Night palette v3 — navy. v1 sat on saturated mid-navy (bg #0A3552, surface =
-        // brand #0D4A73) and read as 2010-corporate; v2 went the other way, near-black
-        // "canale di notte" (L 4-14%, chroma falling to ~17% mid-ramp), and the owner
-        // rejected the mix — pale water and geel floated on a ground that read black,
-        // not blue. v3 is the middle: a true navy ground (hue ~216, S 55-65%, L 6-20%
-        // up the ladder) so the page reads *blue* at a glance; elevation is still
-        // micro-steps of lightness plus hairline borders, and geel is still the only
-        // non-blue vivid thing on screen.
+        // Night palette v4, "Grachtenlicht". v1 sat on saturated mid-navy (bg #0A3552,
+        // surface = brand #0D4A73) and read as 2010-corporate; v2 went near-black
+        // ("canale di notte", L 4-14%) and read black rather than blue; v3 went back to
+        // a true navy (hue ~216, S 55-65%, L 6-20%, bg #0A192F) and the owner called it
+        // too sad. Three things made it sad. The home aurora at night was white mist
+        // only, which on navy is grey fog. The frosted cards and pills were
+        // `bg-white/10` inside a `border-white/10` rim, which on navy is grey glass.
+        // And the rain advice card's amber-900/25 composited to mud brown.
         //
-        // Each text step clears its WCAG floor on the *lightest* surface it is ever
-        // used on — `text` 14.83:1 on `bg` (AAA) and 11.60:1 on `hover`, `muted`
-        // 5.93:1 and `subtle` 5.00:1 on `raised` (AA for body text), `faint` 3.26:1
-        // on `surface` (the non-text floor; it is only ever a separator glyph). Move
-        // a surface step lighter and those must be rechecked — theme.night.test.ts
-        // holds the line.
+        // v4 keeps the navy and lifts it. The hue moves to ~210 (214 at `shade`, easing
+        // to 207 at `border`), the upper steps gain lightness (`surface` L 14 to 17%,
+        // `raised` 17 to 21%, `hover` 20 to 25%, `bg` only 11 to 12%), and the type
+        // warms to ivory (`text` hsl(40 65% 95%)) against the cool ground. The colour
+        // itself lives in the backdrop: the night aurora is teal and cobalt water with
+        // warm lamp glows (NIGHT_BLOBS in HomeAurora.tsx), and the basemap
+        // (public/styles/night.json) is rotated 6 degrees to follow the ramp. Glass is
+        // tinted instead of white: translucent fills are night surfaces (`surface/60`,
+        // `surface/70`, `hover/75` and up), and translucent hairlines and rings are
+        // `rim`, a light blue, at 10-50%. Elevation is still small steps of lightness
+        // plus hairlines, and geel is still the only vivid colour in the foreground.
+        //
+        // Each text step clears its WCAG floor on the lightest surface it is ever used
+        // on: `text` 15.63:1 on `bg` (AAA) and 9.72:1 on `hover`, `muted` 7.64:1 and
+        // `subtle` 6.37:1 on `raised` (AA for body text), `faint` 4.33:1 on `surface`
+        // (it is only ever a separator glyph, so it answers to the 3:1 non-text floor).
+        // Move a surface step lighter and those must be rechecked; theme.night.test.ts
+        // holds the line, and also fails any `dark:` fill, border or ring that goes
+        // back to translucent white.
         //
         // Retuning: change the hue on all six surface steps together, or nudge one
         // step's lightness. Nothing else in the app hard-codes a dark surface.
         night: {
-          shade: "#050B18", // hsl(221 66% 6%) — below the page; the map-label halo
-          bg: "#0A192F", // hsl(216 65% 11%) — page/body, deep navy
-          surface: "#0F2038", // hsl(215 58% 14%) — cards, pills, chips
-          raised: "#132644", // hsl(217 56% 17%) — menus, dropdowns, popovers
-          hover: "#172D4F", // hsl(216 55% 20%) — hover on an opaque night surface
-          border: "#2E4568", // hsl(216 39% 29%) — hairline; a navy step, not a grey
-          text: "#E7ECF3", // off-white — never pure white on a navy ground
-          muted: "#96A3B8", // hsl(217 19% 65%) — secondary
-          subtle: "#8496AD", // hsl(214 20% 60%) — tertiary/meta
-          faint: "#60708A", // hsl(217 18% 46%) — decorative separators only
-          // Dark accent — NS geel, used the way ns.nl uses it: details only. Icon and
-          // link text, the small filled controls (filter pills, "Vai", badges — geel
-          // ground, navy type, the signage pairing), the selected-card ring, the
-          // slogan's accent line. Never a surface, never the backdrop. It holds
-          // 8.93:1 as text on `hover` (the lightest surface it lands on) and 11.42:1
-          // under `night.bg` text when it is the fill. `accent-soft` is fine text on
-          // tinted chips; `accent-deep` never carries text — translucent tint only.
+          shade: "#050E1A", // hsl(214 68% 6%): below the page; the map-label halo
+          bg: "#0C1E32", // hsl(212 61% 12%): page/body, deep navy
+          surface: "#142B43", // hsl(211 54% 17%): cards, pills, chips
+          raised: "#1B3650", // hsl(209 50% 21%): menus, dropdowns, popovers
+          hover: "#21425E", // hsl(208 48% 25%): hover on an opaque night surface
+          border: "#39607F", // hsl(207 38% 36%): opaque hairline, a navy step
+          // The light-blue hairline for tinted glass. Only ever used translucent, for
+          // borders and rings at 10-50%; never text, never a surface.
+          rim: "#82B8ED", // hsl(210 75% 72%)
+          text: "#FBF6EC", // hsl(40 65% 95%): warm ivory, never pure white on navy
+          muted: "#BACED8", // hsl(200 28% 79%): secondary
+          subtle: "#A8BDC7", // hsl(199 22% 72%): tertiary/meta
+          faint: "#7890A1", // hsl(205 18% 55%): decorative separators only
+          // Dark accent: NS geel, used the way ns.nl uses it, on details only. Icon and
+          // link text, the small filled controls (filter pills, "Vai", badges, the rain
+          // card's tag: geel ground, navy type, the signage pairing), the selected-card
+          // ring, the rain card's rim, the slogan's accent line. Never a surface; in the
+          // backdrop it is a single faint lamp glow in the night aurora (12% opacity).
+          // It holds 6.79:1 as text on `hover` (the lightest surface it lands on) and
+          // 10.92:1 under `night.bg` text when it is the fill.
+          // `accent-soft` is fine text on tinted chips (9.83:1 on `raised`);
+          // `accent-deep` never carries text, translucent tint only.
           // The one non-geel accent left is the primary Search action, which goes
           // shaded white (from-white to-brand-light) so the single biggest control
           // reads as light, not gold.
-          accent: "#FFC917", // NS geel — detail text, small fills, rings
-          "accent-soft": "#FFE38A", // lighter step — fine text on tinted chips
+          accent: "#FFC917", // NS geel: detail text, small fills, rings
+          "accent-soft": "#FFE38A", // lighter step: fine text on tinted chips
           "accent-deep": "#6B4E00", // translucent backgrounds/borders only
         },
       },

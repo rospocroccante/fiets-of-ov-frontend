@@ -118,7 +118,7 @@ function MetricNotes({ itinerary }: { itinerary: Itinerary }) {
   const straightLine = itinerary.legs.some((l) => l.distance_m == null && legDistanceM(l) != null);
   const greenTraction = itinerary.legs.some((l) => GREEN_TRACTION_MODES.has(l.mode));
   return (
-    <details className="group mt-3 border-t border-gray-100 dark:border-white/10">
+    <details className="group mt-3 border-t border-gray-100 dark:border-night-rim/20">
       {/* A 44px row, not a 16px line of text. `list-none` plus the webkit rule drops
           the native triangle so the chevron can carry the state instead; the rotation
           is motion-safe, like every other transition in the app. */}

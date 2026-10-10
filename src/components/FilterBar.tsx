@@ -364,7 +364,7 @@ function PhoneFilterBar({
               the coverage assertion at 320 is what says so. */}
           <div
             data-fov="filter-panel"
-            className="absolute right-0 top-full z-[1200] mt-1 w-max max-w-[min(15rem,calc(100vw-5rem))] rounded-card border border-gray-100 bg-white p-3 shadow-lg dark:border-white/10 dark:bg-night-raised"
+            className="absolute right-0 top-full z-[1200] mt-1 w-max max-w-[min(15rem,calc(100vw-5rem))] rounded-card border border-gray-100 bg-white p-3 shadow-lg dark:border-night-rim/20 dark:bg-night-raised"
           >
             {!hideMap && (
               <>

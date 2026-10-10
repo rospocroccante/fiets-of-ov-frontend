@@ -48,7 +48,7 @@ export function NavigationOverlay({
   const arrived = next === null;
   const glyph = arrived ? "sports_score" : (GLYPH[next.direction] ?? "straight");
   return (
-    <div className="absolute left-3 right-3 top-3 z-[1000] rounded-card border border-slate-100 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-white/10 dark:bg-night-raised/95">
+    <div className="absolute left-3 right-3 top-3 z-[1000] rounded-card border border-slate-100 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-night-rim/20 dark:bg-night-raised/95">
       <div className="flex items-center gap-3">
         <span
           aria-hidden="true"
@@ -75,7 +75,7 @@ export function NavigationOverlay({
           </span>
         </button>
       </div>
-      <div className="mt-2 flex items-center gap-1.5 border-t border-slate-100 pt-2 text-xs text-slate-500 dark:border-white/10 dark:text-night-subtle">
+      <div className="mt-2 flex items-center gap-1.5 border-t border-slate-100 pt-2 text-xs text-slate-500 dark:border-night-rim/20 dark:text-night-subtle">
         <span>{formatM(remaining)}</span>
         <span aria-hidden="true">·</span>
         <span>~{etaMinutes} min</span>

@@ -39,7 +39,7 @@ export function HomeShortcuts({
               key={p.id}
               onClick={() => onPickSaved(p)}
               title={t("directionsToX", { x: p.name })}
-              className="flex min-h-[44px] items-center gap-1.5 rounded-full border border-white/60 bg-white/70 px-3 text-sm font-medium text-slate-700 shadow-sm backdrop-blur-md transition hover:bg-white/90 hover:shadow dark:border-white/10 dark:bg-white/10 dark:text-night-text dark:hover:bg-white/15"
+              className="flex min-h-[44px] items-center gap-1.5 rounded-full border border-white/60 bg-white/70 px-3 text-sm font-medium text-slate-700 shadow-sm backdrop-blur-md transition hover:bg-white/90 hover:shadow dark:border-night-rim/20 dark:bg-night-surface/70 dark:text-night-text dark:hover:bg-night-hover/85"
             >
               <span
                 aria-hidden="true"
@@ -54,7 +54,7 @@ export function HomeShortcuts({
         </div>
       )}
       {recents.length > 0 && (
-        <div className="rounded-card border border-white/60 bg-white/70 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-white/10">
+        <div className="rounded-card border border-white/60 bg-white/70 shadow-sm backdrop-blur-md dark:border-night-rim/20 dark:bg-night-surface/70">
           <div className="flex items-center justify-between px-4 pt-2.5">
             {/* slate-500, not 400: 400 measured 2.56:1 on this frosted card, under
                 the 4.5:1 the 11px meta text needs; the dark side takes the night
@@ -74,7 +74,7 @@ export function HomeShortcuts({
               <li key={`${trip.fromQuery}-${trip.toQuery}`}>
                 <button
                   onClick={() => onPickRecent(trip)}
-                  className="flex min-h-[44px] w-full items-center gap-2.5 px-4 text-left transition hover:bg-white/80 dark:hover:bg-white/10"
+                  className="flex min-h-[44px] w-full items-center gap-2.5 px-4 text-left transition hover:bg-white/80 dark:hover:bg-night-hover/75"
                 >
                   <span
                     aria-hidden="true"

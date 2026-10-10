@@ -125,7 +125,7 @@ export function UseMyLocationButton({
           className={
             withLabel
               ? `mt-1 text-xs ${tone}`
-              : `absolute left-1/2 top-full z-20 mt-1 w-max max-w-[13rem] -translate-x-1/2 rounded-lg bg-white px-2.5 py-1.5 text-xs shadow-lg ring-1 ring-black/5 dark:bg-night-raised dark:ring-white/10 ${tone}`
+              : `absolute left-1/2 top-full z-20 mt-1 w-max max-w-[13rem] -translate-x-1/2 rounded-lg bg-white px-2.5 py-1.5 text-xs shadow-lg ring-1 ring-black/5 dark:bg-night-raised dark:ring-night-rim/20 ${tone}`
           }
         >
           {status.text}

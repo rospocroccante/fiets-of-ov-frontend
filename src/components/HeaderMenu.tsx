@@ -101,7 +101,7 @@ export function HeaderMenu({
               the tallest this panel is ever anchored at, so the clamp only bites where
               the panel would otherwise overflow: at 390x844 it is 780px against a 453px
               panel and nothing changes. */}
-          <div className="absolute right-0 top-full z-50 mt-1 max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-64 overflow-y-auto overscroll-contain rounded-card border border-gray-100 bg-white py-2 shadow-lg dark:border-white/10 dark:bg-night-raised">
+          <div className="absolute right-0 top-full z-50 mt-1 max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-64 overflow-y-auto overscroll-contain rounded-card border border-gray-100 bg-white py-2 shadow-lg dark:border-night-rim/20 dark:bg-night-raised">
             <button type="button" aria-pressed={dark} className={item} onClick={onToggleTheme}>
               <span
                 aria-hidden="true"

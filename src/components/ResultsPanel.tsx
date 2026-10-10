@@ -31,16 +31,23 @@ function WeatherBanner({ view }: { view: PlanView }) {
   const { t } = useI18n();
   const wet = view.rainExpected === true;
   const unknown = view.rainExpected === null;
+  // At night the rain card is a raised navy card with a geel rim. The amber tint it
+  // had before (amber-900/25) composited to mud brown on the navy page.
   const tone = wet
-    ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-900/25 dark:text-amber-200 dark:border-amber-800/40"
+    ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-night-raised dark:text-night-text dark:border-night-accent/45"
     : unknown
-      ? "bg-gray-50 text-gray-600 border-gray-200 dark:bg-white/5 dark:text-night-muted dark:border-white/10"
+      ? "bg-gray-50 text-gray-600 border-gray-200 dark:bg-night-surface/60 dark:text-night-muted dark:border-night-rim/20"
       : "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-night-accent-deep/25 dark:text-night-accent-soft dark:border-night-accent-deep/40";
+  // The tag at night: on the rain card a geel pill with navy type, the signage
+  // pairing (10.92:1); otherwise one step up the ramp on `raised`, where the card's
+  // muted or accent-soft text keeps a pinned floor. A translucent surface step would
+  // measure 1.05:1 or less against the card under it, and the pill would vanish.
+  const tagTone = wet ? "dark:bg-night-accent dark:text-night-bg" : "dark:bg-night-raised";
   const tag = wet ? t("rainExpected") : unknown ? t("forecastUnavailable") : t("dry");
   return (
     <div data-fov="weather-banner" className={`rounded-card border p-4 ${tone}`}>
       <div className="flex items-center gap-2">
-        <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs font-semibold dark:bg-white/10">{tag}</span>
+        <span className={`rounded-full bg-white/70 px-2 py-0.5 text-xs font-semibold ${tagTone}`}>{tag}</span>
         {view.maxRain != null && view.maxRain > 0 && (
           <span className="text-xs">{t("upToMmH", { x: view.maxRain })}</span>
         )}
@@ -96,9 +103,9 @@ export function ResultsPanel({
   if (state.status === "loading") {
     return (
       <div className="space-y-4 p-2">
-        <div className="h-20 animate-pulse rounded-card bg-gray-100 dark:bg-white/10" />
-        <div className="h-40 animate-pulse rounded-card bg-gray-100 dark:bg-white/10" />
-        <div className="h-56 animate-pulse rounded-card bg-gray-100 dark:bg-white/10" />
+        <div className="h-20 animate-pulse rounded-card bg-gray-100 dark:bg-night-surface/70" />
+        <div className="h-40 animate-pulse rounded-card bg-gray-100 dark:bg-night-surface/70" />
+        <div className="h-56 animate-pulse rounded-card bg-gray-100 dark:bg-night-surface/70" />
       </div>
     );
   }
@@ -116,7 +123,7 @@ export function ResultsPanel({
   // All options can be filtered away by the mode chips; say so instead of crashing.
   if (!selected) {
     return (
-      <div className="m-2 rounded-card border border-gray-100 bg-white p-4 text-sm text-gray-500 dark:border-white/10 dark:bg-night-surface dark:text-night-subtle">
+      <div className="m-2 rounded-card border border-gray-100 bg-white p-4 text-sm text-gray-500 dark:border-night-rim/20 dark:bg-night-surface dark:text-night-subtle">
         {t("noOptionsMatch")}
       </div>
     );
@@ -152,7 +159,7 @@ export function ResultsPanel({
               className={`overflow-hidden rounded-card border bg-white transition dark:bg-night-surface ${
                 isSelected
                   ? "border-brand ring-1 ring-inset ring-brand dark:border-ams-ns dark:ring-ams-ns"
-                  : "border-gray-200 hover:border-gray-300 dark:border-night-border dark:hover:border-white/25"
+                  : "border-gray-200 hover:border-gray-300 dark:border-night-border dark:hover:border-night-rim/50"
               }`}
             >
               <AdviceCard
@@ -218,7 +225,7 @@ function SelectedDetails({
     <div
       id={id}
       data-fov="option-details"
-      className="border-t border-gray-100 px-3 pb-3 pt-2.5 dark:border-white/10"
+      className="border-t border-gray-100 px-3 pb-3 pt-2.5 dark:border-night-rim/20"
     >
       {narrow ? (
         // A named group, not the bare `group` the estimates note uses: nested groups

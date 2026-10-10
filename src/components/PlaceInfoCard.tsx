@@ -24,7 +24,7 @@ export function PlaceInfoCard({
 }) {
   const { t } = useI18n();
   return (
-    <div className="absolute bottom-3 left-3 z-[1000] w-72 rounded-card border border-slate-100 bg-white/95 p-4 shadow-lg backdrop-blur dark:border-white/10 dark:bg-night-raised/95">
+    <div className="absolute bottom-3 left-3 z-[1000] w-72 rounded-card border border-slate-100 bg-white/95 p-4 shadow-lg backdrop-blur dark:border-night-rim/20 dark:bg-night-raised/95">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="truncate text-[15px] font-semibold text-slate-900 dark:text-night-text">{place.name}</h3>
