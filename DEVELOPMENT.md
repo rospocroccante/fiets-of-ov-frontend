@@ -235,9 +235,9 @@ Daylight is the `bright` style; night is `/styles/night.json`, a snapshot of
 OpenFreeMap's `fiord` recoloured onto the night ramp by `scripts/night-style.mjs` and
 served from this origin — fiord as published is a paler grey-slate (ground `#45516E`)
 that floated on the dark UI, so the ground is re-solved onto the ramp's own hue,
-saturation and lightness (land between `surface` and `raised`, a compressed
-navy range) and water is pinned pale on `#B0CCE4`, light rivers and lakes
-cutting through the navy ground. Tiles,
+saturation and lightness (ground between `bg` and `surface`, a compressed
+navy range) and water is pinned pale on `#AFD0E4` (hsl(202 49% 79%)), light rivers
+and lakes cutting through the navy ground. Tiles,
 glyphs and sprites still come from tiles.openfreemap.org; only the style document is
 ours. Switching theme calls `setStyle` on the map already on the screen, so the canvas,
 the camera and the radar frames above it all survive the swap.
@@ -295,44 +295,51 @@ privacy notice next to OpenFreeMap, in both languages, and the privacy notice na
 
 ## Night palette
 
-The dark theme (v3, navy) is a true deep-navy ground: the surfaces climb hue ~216 at
-S 55-65% from L 6% to L 20%, elevation is micro-steps of lightness plus hairline
-borders, and geel is the only non-blue vivid colour. v2's near-black "canale di notte"
-read black rather than blue and was rejected by the owner. Everything lives in
-the `night` block of `tailwind.config.js`; nothing else in the app hard-codes a dark
-colour.
+The dark theme is v4, "Grachtenlicht": a lifted navy ramp at hue ~210 (214 at `shade`,
+easing to 207 at `border`), warm ivory text, and the colour moved into the backdrop.
+The night aurora is teal and cobalt water with warm lamp glows, the basemap is turned
+onto the same hue, and glass is tinted with night surfaces and a light-blue `rim`
+hairline instead of translucent white. v3 (navy, hue ~216, `bg #0A192F`) was called too
+sad: its aurora was white mist, which on navy reads as grey fog, its frosted cards were
+white glass, which reads grey, and the rain card's amber tint composited to mud brown.
+Everything lives in the `night` block of `tailwind.config.js`; nothing else in the app
+hard-codes a dark colour.
 
 | token | value | what it is |
 | --- | --- | --- |
-| `night.shade` | `#050B18` | below the page — the map-label halo |
-| `night.bg` | `#0A192F` | page / `body` — deep navy |
-| `night.surface` | `#0F2038` | cards, pills, chips |
-| `night.raised` | `#132644` | menus, dropdowns, popovers |
-| `night.hover` | `#172D4F` | hover on an opaque night surface |
-| `night.border` | `#2E4568` | hairline dividers — a navy step, not a grey |
-| `night.text` | `#E7ECF3` | primary text — off-white, never pure white |
-| `night.muted` | `#96A3B8` | secondary text |
-| `night.subtle` | `#8496AD` | tertiary / meta text |
-| `night.faint` | `#60708A` | separator glyphs only |
-| `night.accent` | `#FFC917` | NS geel — detail text, small fills, rings |
-| `night.accent-soft` | `#FFE38A` | lighter accent step — fine text on tinted chips |
+| `night.shade` | `#050E1A` | below the page; the map-label halo |
+| `night.bg` | `#0C1E32` | page / `body`, deep navy |
+| `night.surface` | `#142B43` | cards, pills, chips |
+| `night.raised` | `#1B3650` | menus, dropdowns, popovers |
+| `night.hover` | `#21425E` | hover on an opaque night surface |
+| `night.border` | `#39607F` | opaque hairline dividers, a navy step |
+| `night.rim` | `#82B8ED` | light-blue hairline for tinted glass; translucent only (borders and rings at 10-50%), never text or a surface |
+| `night.text` | `#FBF6EC` | primary text, warm ivory, never pure white |
+| `night.muted` | `#BACED8` | secondary text |
+| `night.subtle` | `#A8BDC7` | tertiary / meta text |
+| `night.faint` | `#7890A1` | separator glyphs only |
+| `night.accent` | `#FFC917` | NS geel: detail text, small fills, rings |
+| `night.accent-soft` | `#FFE38A` | lighter accent step: fine text on tinted chips |
 | `night.accent-deep` | `#6B4E00` | translucent chip backgrounds and borders only |
 
-**Why hue 216-221.** The surfaces are still the light theme's blue after dark — but as
-temperature, not as colour: saturation falls from 44% at the near-black end to ~17%
-mid-ramp, so nothing on screen competes with the geel details or the pale water on the
-map. The first ramp sat on saturated mid-navy (`bg #0A3552`, `surface` = brand
-`#0D4A73`) and read as dated; the hexes live on in the light theme, where they belong.
-Primary text on `night.bg` measures 16.14:1 — comfortably past AAA.
+**Why hue ~210, lifted.** The surfaces are the light theme's blue after dark. v4 keeps
+v3's navy and raises the upper steps (`surface` L 14 to 17%, `raised` 17 to 21%,
+`hover` 20 to 25%, `bg` only 11 to 12%) so cards stand off the page, and it leaves the
+vivid colour to the backdrop: the aurora and the pale water on the map. The first ramp
+sat on saturated mid-navy (`bg #0A3552`, `surface` = brand `#0D4A73`) and read as dated;
+those hexes live on in the light theme. v2's near-black "canale di notte" read black
+rather than blue. Primary text measures 15.63:1 on `night.bg` (AAA) and 9.72:1 on
+`hover`; `muted` 7.64:1 and `subtle` 6.37:1 on `raised`; `faint` 4.33:1 on `surface`.
 
 **The accent is NS geel** (`#FFC917`, the same hex as `ams.ns`), used the way ns.nl
 uses it: details, never surfaces. Icon and link text, the small filled controls
-(filter pills, "Vai", badges — geel ground, navy type, the signage pairing), the
-selected-card ring, and the headline accent line of the slogan. It holds 10.63:1 as
-text on `hover`, the lightest surface it lands on, and 12.42:1 under `night.bg` text
-when it is the fill. The primary Search action is the one deliberate exception: it
-stays white (`from-white to-brand-light`, navy text) so the single biggest control
-reads as light, not gold — and the home aurora is white mist only, no geel blob.
+(filter pills, "Vai", badges, the rain card's tag: geel ground, navy type, the signage
+pairing), the selected-card ring, and the headline accent line of the slogan. It holds
+6.79:1 as text on `hover`, the lightest surface it lands on, and 10.92:1 under
+`night.bg` text when it is the fill. The primary Search action is the one deliberate
+exception: it stays white (`from-white to-brand-light`, navy text) so the single
+biggest control reads as light, not gold. In the backdrop geel is one faint lamp glow
+in the night aurora (12% opacity), next to an amber and an orange one.
 `theme.night.test.ts` pins the accent's contrast floors and fails any
 `dark:*-emerald/lime/green-*` class a component reintroduces.
 
@@ -347,14 +354,17 @@ one step's lightness. Two things have to follow:
 
 `src/theme.night.test.ts` enforces both of those plus the ramp's ordering, and fails if
 any component reintroduces a `dark:bg-[#hex]` or a `dark:*-slate-*` that the tokens
-replaced.
+replaced, or a translucent-white `dark:` fill, border or ring (`dark:bg-white/10`,
+`dark:border-white/10`).
 
-**Two things that are deliberately *not* tokens.** `dark:border-white/10` and the
-`dark:bg-white/10` frosted surfaces on the home stay white-alpha: they composite over the
-animated aurora and over the basemap, where no fixed backdrop exists to derive a solid
-colour from. And the basemap has no night token either: it carries a night style of its
-own (see Basemap above), so the dark map is a restyle rather than a CSS filter over
-daylight tiles.
+**Translucent, but tokens.** The frosted surfaces on the home and the overlays on the
+map composite over the animated aurora and the basemap, where no fixed backdrop exists
+to derive a solid colour from, so they stay translucent. Up to v3 they were white-alpha
+(`dark:bg-white/10`, `dark:border-white/10`), which on navy reads as grey glass; v4
+tints them with night tokens instead (`night-surface/60` and `/70`, `night-hover/75`
+to `/95` on hover, `night-rim/10` to `/50` for hairlines and rings). The basemap has
+no night token: it carries a night style of its own (see Basemap above), so the dark
+map is a restyle rather than a CSS filter over daylight tiles.
 
 **The dev server does not hot-reload `tailwind.config.js`.** After changing a token you
 have to restart `npm run dev`; an already-open tab will keep serving the old values and
