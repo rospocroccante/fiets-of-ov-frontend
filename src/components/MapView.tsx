@@ -343,23 +343,31 @@ function boundsCenter(coords: [number, number][]): [number, number] {
 //
 // Under reduced motion the camera does not glide at all: it is put where it is going
 // in one step. Asked at the moment of moving, so a change of the setting counts.
+//
+// `bottomInset` is the part of the map a results sheet covers on a phone, in px. The fit
+// pads the bottom by that much more, so the route lands in the part still on screen.
 function applyDefaultView(
   map: L.Map,
   coords: [number, number][],
   fallback: LatLon | null,
   empty: "keep" | "city",
+  bottomInset = 0,
 ) {
   const instant = prefersReducedMotion();
   if (coords.length >= 2) {
+    const padding = {
+      paddingTopLeft: [50, 50] as [number, number],
+      paddingBottomRight: [50, 50 + bottomInset] as [number, number],
+    };
     if (instant && typeof map.fitBounds === "function") {
-      map.fitBounds(coords as LatLngBoundsExpression, { padding: [50, 50], animate: false });
+      map.fitBounds(coords as LatLngBoundsExpression, { ...padding, animate: false });
     } else if (typeof map.flyToBounds === "function") {
       map.flyToBounds(coords as LatLngBoundsExpression, {
-        padding: [50, 50],
+        ...padding,
         ...flyOpts(map, boundsCenter(coords)),
       });
     } else if (typeof map.fitBounds === "function") {
-      map.fitBounds(coords as LatLngBoundsExpression, { padding: [50, 50] });
+      map.fitBounds(coords as LatLngBoundsExpression, padding);
     }
     return;
   }
@@ -379,17 +387,20 @@ function FitRoute({
   coords,
   fallback,
   active,
+  bottomInset,
 }: {
   coords: [number, number][];
   fallback: LatLon | null;
   active: boolean;
+  bottomInset: number;
 }) {
   const map = useMap();
   useEffect(() => {
     // Navigation owns the camera: a refit on every replan would snap it off the fix.
     if (!active) return;
-    applyDefaultView(map, coords, fallback, "keep");
-  }, [map, coords, fallback, active]);
+    // The inset is a dependency so a sheet settling at a new height refits once.
+    applyDefaultView(map, coords, fallback, "keep", bottomInset);
+  }, [map, coords, fallback, active, bottomInset]);
   return null;
 }
 
@@ -601,6 +612,7 @@ export function MapView({
   dark = false,
   liveFix = null,
   navigating = false,
+  bottomInset = 0,
 }: {
   origin: LatLon | null;
   destination: LatLon | null;
@@ -625,6 +637,10 @@ export function MapView({
   // the camera (follow the fix, suppress route refits).
   liveFix?: { lat: number; lon: number; accuracy: number } | null;
   navigating?: boolean;
+  // How much of the map's bottom edge a results sheet covers, in px (the phone's sheet
+  // reports it when it settles). The route fit, the reset and the bottom controls keep
+  // clear of it.
+  bottomInset?: number;
 }) {
   const { t } = useI18n();
   const legs = route?.legs ?? [];
@@ -750,7 +766,7 @@ export function MapView({
         {showWeather && wLayers.rain && <RadarOverlay frames={rain.frames} />}
         {showWeather && wLayers.wind && <WindVelocityLayer data={wind.data} />}
         <MapEvents onPick={onPick} onContextMenu={handleMenu} />
-        <FitRoute coords={allCoords} fallback={origin ?? destination} active={!navigating} />
+        <FitRoute coords={allCoords} fallback={origin ?? destination} active={!navigating} bottomInset={bottomInset} />
         <FollowCamera target={liveFix} active={navigating} />
 
       {/* White casing under the route for contrast on the light basemap. */}
@@ -850,9 +866,9 @@ export function MapView({
           siblings both pinned to bottom-3 right-3, which was fine only because nobody
           had hit the state where both are true: a dead Overpass at city zoom drew the
           error chip straight on top of the zoom-in chip. Stacked, each takes its own
-          line. */}
+          line. Lifted by the inset, so a results sheet does not cover them. */}
       {interactive && (
-        <div className="absolute bottom-3 right-3 z-[1000] flex flex-col items-end gap-2">
+        <div className="absolute right-3 z-[1000] flex flex-col items-end gap-2" style={{ bottom: 12 + bottomInset }}>
           {/* A dead POI feed must say so, or an Overpass outage reads as "no places". The
               amber variant is the half-dead case: part of the view loaded, so the labels
               on screen are real but incomplete, worth a softer warning than
@@ -902,7 +918,10 @@ export function MapView({
           // and the two line up because they are the same box rather than because a
           // number here says so. A round pill sat 2px left of the + and the -, which is
           // Leaflet's 2px bar border, and there is no good number to write for that.
-          <div className={zoomCorner ? "leaflet-bar leaflet-control" : "absolute bottom-3 left-3 z-[1000]"}>
+          <div
+            className={zoomCorner ? "leaflet-bar leaflet-control" : "absolute left-3 z-[1000]"}
+            style={zoomCorner ? undefined : { bottom: 12 + bottomInset }}
+          >
             <button
               ref={resetRef}
               type="button"
@@ -911,7 +930,7 @@ export function MapView({
               title={t("resetView")}
               onClick={() => {
                 const m = mapRef.current;
-                if (m) applyDefaultView(m, allCoords, origin ?? destination, "city");
+                if (m) applyDefaultView(m, allCoords, origin ?? destination, "city", bottomInset);
               }}
               // The colours are the ones index.css already gives .leaflet-bar a, written
               // out because those rules select the <a> Leaflet builds and this is a real

@@ -114,13 +114,24 @@ export const __wheelZoom = { enabled: null as boolean | null };
 // Test spy: counts imperative camera calls (FitRoute vs FollowCamera assertions).
 // Tests should compare before/after deltas taken inside the test; __resetMapMock zeroes
 // them between tests, so an absolute value only means anything within one case.
-export const __mapCalls = { fitBounds: 0, setView: 0, panTo: 0, setZoom: 0, flyTo: 0, flyToBounds: 0 };
+// lastBoundsOptions is the options object of the latest fitBounds or flyToBounds, which
+// is where the padding that keeps a route clear of the results sheet shows up.
+export const __mapCalls = {
+  fitBounds: 0,
+  setView: 0,
+  panTo: 0,
+  setZoom: 0,
+  flyTo: 0,
+  flyToBounds: 0,
+  lastBoundsOptions: undefined as unknown,
+};
 
 // A single stable map object, like the real useMap: effects keyed on map identity
 // must not re-fire every render.
 const _map = {
-  fitBounds: () => {
+  fitBounds: (_bounds?: unknown, options?: unknown) => {
     __mapCalls.fitBounds += 1;
+    __mapCalls.lastBoundsOptions = options;
   },
   setView: () => {
     __mapCalls.setView += 1;
@@ -134,8 +145,9 @@ const _map = {
   flyTo: () => {
     __mapCalls.flyTo += 1;
   },
-  flyToBounds: () => {
+  flyToBounds: (_bounds?: unknown, options?: unknown) => {
     __mapCalls.flyToBounds += 1;
+    __mapCalls.lastBoundsOptions = options;
   },
   scrollWheelZoom: {
     enable: () => {
@@ -205,5 +217,6 @@ export function __resetMapMock(): void {
   __mapCalls.setZoom = 0;
   __mapCalls.flyTo = 0;
   __mapCalls.flyToBounds = 0;
+  __mapCalls.lastBoundsOptions = undefined;
   __polylines.length = 0;
 }

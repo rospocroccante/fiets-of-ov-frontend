@@ -12,18 +12,24 @@ export interface PlaceInfo {
 // Maps-style place card, shown over the map after "What's here?" (or a saved chip):
 // name, address, coordinates, save star, and directions shortcuts. App mounts it inside
 // AnimatePresence: it rises into place and drops away, inert while it does.
+//
+// `bottomInset` lifts it above a results sheet covering the bottom of the map (px). The
+// leaving props carry a style of their own, so the two are merged rather than one
+// replacing the other.
 export function PlaceInfoCard({
   place,
   saved,
   onToggleSave,
   onDirections,
   onClose,
+  bottomInset = 0,
 }: {
   place: PlaceInfo;
   saved: boolean;
   onToggleSave: () => void;
   onDirections: (which: "start" | "end") => void;
   onClose: () => void;
+  bottomInset?: number;
 }) {
   const { t } = useI18n();
   const motionProps = useMotionPreset(overlay);
@@ -32,7 +38,8 @@ export function PlaceInfoCard({
     <motion.div
       {...motionProps}
       {...leavingProps}
-      className="absolute bottom-3 left-3 z-[1000] w-72 rounded-card border border-slate-100 bg-white/95 p-4 shadow-lg backdrop-blur dark:border-night-rim/20 dark:bg-night-raised/95">
+      style={{ ...leavingProps.style, bottom: 12 + bottomInset }}
+      className="absolute left-3 z-[1000] w-72 rounded-card border border-slate-100 bg-white/95 p-4 shadow-lg backdrop-blur dark:border-night-rim/20 dark:bg-night-raised/95">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="truncate text-[15px] font-semibold text-slate-900 dark:text-night-text">{place.name}</h3>

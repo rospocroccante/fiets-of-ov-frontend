@@ -68,3 +68,17 @@ test("inside AnimatePresence, a closed card is out of reach until it has gone", 
 
   await waitForExit(card);
 });
+
+test("the card rises above a sheet covering the bottom of the map", () => {
+  const { container } = render(
+    <PlaceInfoCard
+      place={place}
+      saved={false}
+      onToggleSave={() => {}}
+      onDirections={() => {}}
+      onClose={() => {}}
+      bottomInset={200}
+    />,
+  );
+  expect(container.firstElementChild).toHaveStyle({ bottom: "212px" });
+});

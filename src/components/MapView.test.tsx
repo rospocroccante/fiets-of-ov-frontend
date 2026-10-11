@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, act } from "@testing-library/react";
+import { fireEvent, render, screen, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import type L from "leaflet";
@@ -461,4 +461,19 @@ test("under reduced motion the camera jumps instead of flying, and the route doe
   } finally {
     restore();
   }
+});
+
+test("the route fit leaves room for the sheet at the bottom", async () => {
+  renderMap(
+    <MapView
+      origin={{ lat: 52.379, lon: 4.9 }}
+      destination={{ lat: 52.358, lon: 4.868 }}
+      stops={[]}
+      route={route}
+      bottomInset={300}
+    />
+  );
+  await waitFor(() =>
+    expect(__mapCalls.lastBoundsOptions).toMatchObject({ paddingTopLeft: [50, 50], paddingBottomRight: [50, 350] }),
+  );
 });
