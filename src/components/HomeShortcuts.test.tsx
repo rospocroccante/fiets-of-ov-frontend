@@ -114,3 +114,30 @@ test("no history renders as glass: chips are solid and recents sit on no panel",
     expect([...n.classList].filter((c) => /^(bg-|border|rounded-card|shadow)/.test(c)), n.tagName).toEqual([]);
   }
 });
+
+// The file's own fixtures, one saved place and one recent trip, with no-op handlers
+// unless a test passes its own.
+function shortcutsElement(props: Partial<Parameters<typeof HomeShortcuts>[0]> = {}) {
+  return (
+    <HomeShortcuts
+      saved={saved}
+      recents={recents}
+      onPickSaved={() => {}}
+      onPickRecent={() => {}}
+      onClearRecents={() => {}}
+      now={10 * 60000}
+      {...props}
+    />
+  );
+}
+
+const renderShortcuts = (props?: Partial<Parameters<typeof HomeShortcuts>[0]>) => render(shortcutsElement(props));
+
+test("See all appears only when the host asks for it", () => {
+  const onSeeAll = vi.fn();
+  const { rerender } = renderShortcuts({ onSeeAll: undefined });
+  expect(screen.queryByRole("button", { name: /see all/i })).toBeNull();
+  rerender(shortcutsElement({ onSeeAll }));
+  fireEvent.click(screen.getByRole("button", { name: /see all/i }));
+  expect(onSeeAll).toHaveBeenCalledTimes(1);
+});

@@ -55,5 +55,15 @@ export function useSavedPlaces(now: () => number = Date.now) {
     saveJson(KEY, []);
   }, []);
 
-  return { places, isSaved, toggle, clearAll };
+  // Undo for a delete: back in its own place in the newest-first list, never twice.
+  const restore = useCallback((p: SavedPlace) => {
+    setPlaces((prev) => {
+      if (prev.some((s) => s.id === p.id)) return prev;
+      const next = [...prev, p].sort((a, b) => b.savedAt - a.savedAt).slice(0, MAX);
+      saveJson(KEY, next);
+      return next;
+    });
+  }, []);
+
+  return { places, isSaved, toggle, clearAll, restore };
 }

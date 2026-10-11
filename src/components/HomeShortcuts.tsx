@@ -11,6 +11,37 @@ function timeAgo(at: number, now: number, t: Translator): string {
   return t("daysAgo", { n: Math.round(h / 24) });
 }
 
+// One recent trip as a short grey metro line (see the comment in HomeShortcuts). Shared
+// with the Saved tab, so a recent trip looks the same wherever it is listed.
+export function RecentTripRow({ trip, now, onPick }: { trip: RecentTrip; now: number; onPick: () => void }) {
+  const { t } = useI18n();
+  return (
+    <button
+      onClick={onPick}
+      className="flex min-h-[44px] w-full flex-col justify-center rounded-card px-1 py-2 text-left transition-colors hover:bg-slate-900/5 dark:hover:bg-night-hover/60"
+    >
+      {/* The line: a 2px track between two 10px stations, all in the
+          tertiary grey, the track a step fainter than its stations.
+          Centred stations hang 5px past each end of the track, which is
+          why it is inset by that much. */}
+      <span aria-hidden="true" className="relative mx-[5px] block h-2.5">
+        <span className="absolute inset-x-0 top-1 h-0.5 rounded-full bg-slate-500/60 dark:bg-night-subtle/60" />
+        <span className="absolute -left-[5px] top-0 h-2.5 w-2.5 rounded-full border-2 border-slate-500 bg-white dark:border-night-subtle dark:bg-night-bg" />
+        <span className="absolute -right-[5px] top-0 h-2.5 w-2.5 rounded-full border-2 border-slate-500 bg-white dark:border-night-subtle dark:bg-night-bg" />
+      </span>
+      <span className="mt-1 grid w-full grid-cols-2 gap-3 text-[13px] font-medium text-slate-800 dark:text-night-muted">
+        <span className="truncate">{trip.fromLabel}</span>
+        <span className="flex min-w-0 items-baseline justify-end gap-1.5">
+          <span className="truncate">{trip.toLabel}</span>
+          <span className="shrink-0 text-xs font-normal text-slate-800 dark:text-night-subtle">
+            {timeAgo(trip.at, now, t)}
+          </span>
+        </span>
+      </span>
+    </button>
+  );
+}
+
 // Maps-style shortcuts on the home: saved places as chips, recent searches as rows.
 // Renders nothing until the user has history, so a first visit stays pristine.
 //
@@ -25,6 +56,7 @@ export function HomeShortcuts({
   onPickSaved,
   onPickRecent,
   onClearRecents,
+  onSeeAll,
   now = Date.now(),
 }: {
   saved: SavedPlace[];
@@ -32,6 +64,7 @@ export function HomeShortcuts({
   onPickSaved: (p: SavedPlace) => void;
   onPickRecent: (t: RecentTrip) => void;
   onClearRecents: () => void;
+  onSeeAll?: () => void;
   now?: number;
 }) {
   const { t } = useI18n();
@@ -88,32 +121,21 @@ export function HomeShortcuts({
           <ul className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
             {recents.slice(0, 3).map((trip) => (
               <li key={`${trip.fromQuery}-${trip.toQuery}`}>
-                <button
-                  onClick={() => onPickRecent(trip)}
-                  className="flex min-h-[44px] w-full flex-col justify-center rounded-card px-1 py-2 text-left transition-colors hover:bg-slate-900/5 dark:hover:bg-night-hover/60"
-                >
-                  {/* The line: a 2px track between two 10px stations, all in the
-                      tertiary grey, the track a step fainter than its stations.
-                      Centred stations hang 5px past each end of the track, which is
-                      why it is inset by that much. */}
-                  <span aria-hidden="true" className="relative mx-[5px] block h-2.5">
-                    <span className="absolute inset-x-0 top-1 h-0.5 rounded-full bg-slate-500/60 dark:bg-night-subtle/60" />
-                    <span className="absolute -left-[5px] top-0 h-2.5 w-2.5 rounded-full border-2 border-slate-500 bg-white dark:border-night-subtle dark:bg-night-bg" />
-                    <span className="absolute -right-[5px] top-0 h-2.5 w-2.5 rounded-full border-2 border-slate-500 bg-white dark:border-night-subtle dark:bg-night-bg" />
-                  </span>
-                  <span className="mt-1 grid w-full grid-cols-2 gap-3 text-[13px] font-medium text-slate-800 dark:text-night-muted">
-                    <span className="truncate">{trip.fromLabel}</span>
-                    <span className="flex min-w-0 items-baseline justify-end gap-1.5">
-                      <span className="truncate">{trip.toLabel}</span>
-                      <span className="shrink-0 text-xs font-normal text-slate-800 dark:text-night-subtle">
-                        {timeAgo(trip.at, now, t)}
-                      </span>
-                    </span>
-                  </span>
-                </button>
+                <RecentTripRow trip={trip} now={now} onPick={() => onPickRecent(trip)} />
               </li>
             ))}
           </ul>
+        </div>
+      )}
+      {onSeeAll && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={onSeeAll}
+            className="-mr-2 inline-flex min-h-[44px] items-center px-2 text-[13px] font-semibold text-brand transition-colors hover:text-brand-dark dark:text-night-accent dark:hover:text-night-accent-soft"
+          >
+            {t("seeAll")}
+          </button>
         </div>
       )}
     </section>
