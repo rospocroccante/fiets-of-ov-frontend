@@ -10,14 +10,19 @@ import { HomeAurora } from "./components/HomeAurora";
 import { HomeShortcuts } from "./components/HomeShortcuts";
 import { AdviceAttribution } from "./components/Attribution";
 import { PrivacyNotice } from "./components/PrivacyNotice";
+import { ProfileScreen } from "./components/ProfileScreen";
 import { NavigationOverlay } from "./components/NavigationOverlay";
 import { PlaceInfoCard } from "./components/PlaceInfoCard";
 import type { PlaceInfo } from "./components/PlaceInfoCard";
 import { WeatherStrip } from "./components/WeatherStrip";
 import { CARD_ACCENTS, PRIMARY_GRADIENT, TEXT_GRADIENT } from "./lib/gradients";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
+import { SavedScreen } from "./components/SavedScreen";
+import { TabBar } from "./components/TabBar";
+import { TabScreen } from "./components/TabScreen";
 import { LazyMapView as MapView, isMapLoaded, preloadMap } from "./components/lazyMap";
 import type { WeatherLayersState } from "./components/RainRadar";
+import { useAppNav, useNavLayer, type Layer, type Tab } from "./hooks/useAppNav";
 import { useLiveLocation } from "./hooks/useLiveLocation";
 import { useMediaQuery } from "./hooks/useMediaQuery";
 import { prefetchAmsterdamPois } from "./hooks/usePois";
@@ -31,6 +36,7 @@ import { useTripPlan } from "./hooks/useTripPlan";
 import { useWakeLock } from "./hooks/useWakeLock";
 import { translate, useI18n } from "./lib/i18n";
 import { buildNavRoute, progressAlong } from "./lib/routeProgress";
+import type { Detent } from "./lib/sheetDetents";
 import { isLive } from "./api/client";
 import { reverseGeocode, reverseGeocodeDetail } from "./geocode";
 import type { Mode, Place } from "./api/types";
@@ -115,7 +121,7 @@ const POPULAR: PopularTrip[] = [
 
 export default function App() {
   const { progress, containerRef, toMap, toHome, reduced } = useMorphProgress();
-  const { dark, toggle: toggleTheme } = useTheme();
+  const { dark, mode: themeMode, toggle: toggleTheme, setMode: setThemeMode } = useTheme();
   const { lang, t, toggle: toggleLang } = useI18n();
 
   const [fromText, setFromText] = useState("");
@@ -147,6 +153,10 @@ export default function App() {
   // could see and planned that trip. Invisible now means untouchable, at the same
   // number the fade uses.
   const [homeLive, setHomeLive] = useState(true);
+  // Whether the map stage is the screen the user is on, for the Back button. Separate
+  // from progressIs1 and with a gap between its two thresholds, so a scroll-snap wobble
+  // near the end of the morph does not push and pop a history entry.
+  const [mapOpen, setMapOpen] = useState(false);
   // Whether the map subtree may render at all. It starts false so a visitor who never
   // leaves the home never downloads leaflet; the morph moving off zero is the last
   // possible moment to turn it on, and by then WARM_EVENTS has normally had the chunk
@@ -156,6 +166,7 @@ export default function App() {
   useMotionValueEvent(progress, "change", (v) => {
     setProgressIs1(v > 0.99);
     setHomeLive(v < HOME_FADED_AT);
+    setMapOpen((open) => (v > 0.99 ? true : v < 0.01 ? false : open));
     if (v > 0) setMapWanted(true);
   });
 
@@ -204,7 +215,13 @@ export default function App() {
   // Maps-style local memory: search history and saved places, plus the place-info
   // card opened from the map's "What's here?".
   const { trips: recentTrips, record: recordTrip, clear: clearRecents } = useRecentTrips();
-  const { places: savedPlaces, isSaved, toggle: toggleSaved, clearAll: clearSaved } = useSavedPlaces();
+  const {
+    places: savedPlaces,
+    isSaved,
+    toggle: toggleSaved,
+    clearAll: clearSaved,
+    restore: restoreSaved,
+  } = useSavedPlaces();
   const [placeInfo, setPlaceInfo] = useState<PlaceInfo | null>(null);
   // Real filters: which option kinds show (one chip per kind in the filter bar).
   const [kinds, setKinds] = useState<KindFilter>({ bike: true, transit: true, bike_and_ride: true });
@@ -350,6 +367,40 @@ export default function App() {
     setSelectedMode(null);
     submitted();
     toMap();
+  }
+
+  // The phone's tabs. Each screen keeps its own scroller, and tapping the tab that is
+  // already on screen takes that scroller back to its top.
+  const homeScrollerRef = useRef<HTMLDivElement>(null);
+  const savedRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
+  function scrollTop(el: HTMLElement | null) {
+    if (!el) return;
+    if (typeof el.scrollTo === "function") el.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
+    else el.scrollTop = 0;
+  }
+  function selectTab(next: Tab) {
+    if (next === nav.tab) {
+      scrollTop(next === "saved" ? savedRef.current : next === "profile" ? profileRef.current : homeScrollerRef.current);
+      return;
+    }
+    nav.selectTab(next);
+  }
+  // A saved place from the Saved tab: plan to it straight away if the trip has a start,
+  // otherwise open the search screen with the destination filled and the start to type.
+  function planToSaved(p: SavedPlace) {
+    nav.selectTab("plan");
+    setToText(p.name);
+    setDestination({ label: p.name, query: coordQuery(p.lat, p.lon) });
+    setSelectedMode(null);
+    if (origin) {
+      submitted();
+      toMap();
+    } else {
+      setSearchFocusField("from");
+      setSearchSession((n) => n + 1);
+      setSearchOpen(true);
+    }
   }
 
   // "What's here?" is a reverse geocode too, so card writes follow the same
@@ -645,7 +696,6 @@ export default function App() {
   // reader cannot read the map out from under it, and a stray touch cannot reach the
   // home. The scroll lock that goes with it lives in MobileSearchSheet.
   const searchBlocking = isPhone && searchOpen;
-  const behindSheet = searchBlocking ? { "aria-hidden": true as const } : {};
   function openSearch() {
     // The keyboard opens on the field that still needs something. With a whole trip
     // already entered the reason to come back is nearly always a new destination.
@@ -653,6 +703,33 @@ export default function App() {
     setSearchSession((n) => n + 1);
     setSearchOpen(true);
   }
+
+  // Placeholders until the results sheet is wired in: no sheet layout yet, and its detent.
+  const sheetLayout = false;
+  const [detent, setDetent] = useState<Detent>("half");
+
+  // The Back button. Each layer the app can open has one history entry while it is open;
+  // a Back press closes the top one here, the same way its own close control would.
+  const nav = useAppNav((layer: Layer) => {
+    if (layer === "map") toHome();
+    else if (layer === "search") setSearchOpen(false);
+    else if (layer === "privacy") setPrivacyOpen(false);
+    else if (layer === "place") {
+      placeSeq.current++;
+      setPlaceInfo(null);
+    } else if (layer === "sheet-full") setDetent("half");
+  });
+  // The order of these calls matters: `map` before `sheet-full`, so a stack built in one
+  // render matches the order the user sees.
+  useNavLayer(nav, "map", mapOpen);
+  useNavLayer(nav, "sheet-full", sheetLayout && mapOpen && detent === "full");
+  useNavLayer(nav, "place", placeInfo !== null);
+  useNavLayer(nav, "search", isPhone && searchOpen);
+  useNavLayer(nav, "privacy", privacyOpen);
+  // A Saved or Profile screen is over both stages: they go inert and hidden under it, the
+  // same way they do under the phone search screen.
+  const tabCovering = isPhone && nav.tab !== "plan";
+  const behindSheet = searchBlocking || tabCovering ? { "aria-hidden": true as const } : {};
 
   return (
     <div
@@ -706,8 +783,8 @@ export default function App() {
               ? "pt-[calc(4rem+env(safe-area-inset-top))]"
               : "pt-[calc(8.25rem+env(safe-area-inset-top))] [@media(max-height:500px)]:pt-[calc(6rem+env(safe-area-inset-top))] lg:pt-[calc(6rem+env(safe-area-inset-top))]"
           }`}
-          style={{ opacity: mapOpacity, pointerEvents: progressIs1 && !searchBlocking ? "auto" : "none" }}
-          {...inertUnless(progressIs1 && !searchBlocking)}
+          style={{ opacity: mapOpacity, pointerEvents: progressIs1 && !searchBlocking && !tabCovering ? "auto" : "none" }}
+          {...inertUnless(progressIs1 && !searchBlocking && !tabCovering)}
           {...behindSheet}
         >
           <div className="px-4 md:px-6">
@@ -919,8 +996,8 @@ export default function App() {
             // trip focused the To field instead. Nothing scrolls under the pill now.
             isPhone ? "flex flex-col overflow-y-hidden" : "overflow-y-auto"
           }`}
-          style={{ opacity: homeOpacity, y: homeY, pointerEvents: homeLive && !searchBlocking ? "auto" : "none" }}
-          {...inertUnless(homeLive && !searchBlocking)}
+          style={{ opacity: homeOpacity, y: homeY, pointerEvents: homeLive && !searchBlocking && !tabCovering ? "auto" : "none" }}
+          {...inertUnless(homeLive && !searchBlocking && !tabCovering)}
           {...behindSheet}
         >
           {/* Theme and language switches reachable from the home too (the header only
@@ -929,7 +1006,9 @@ export default function App() {
               painted over this corner and swallowed both clicks on every window too
               narrow for max-w-4xl to clear the buttons (under ~1050px) — the home had
               no working language switch at all there. The inset offsets keep the pair
-              clear of a notch/status bar now that the page paints under it. */}
+              clear of a notch/status bar now that the page paints under it. On a phone
+              both live in the Profile tab instead. */}
+          {!isPhone && (
           <div className="absolute right-[calc(1rem+env(safe-area-inset-right))] top-[calc(1rem+env(safe-area-inset-top))] z-10 flex items-center gap-2">
             <button
               type="button"
@@ -951,6 +1030,7 @@ export default function App() {
               </span>
             </button>
           </div>
+          )}
           {/* The measured hero. Its height is what tells the pill where to rest on a
               phone, so the wrapper is the thing observed, not the section inside it. */}
           <div ref={heroRef} data-fov="home-hero" className={isPhone ? "shrink-0" : undefined}>
@@ -973,8 +1053,16 @@ export default function App() {
             <div aria-hidden="true" className="shrink-0" style={{ height: pillSlot }} />
           )}
           {/* Everything the user scrolls. `contents` above `sm` so the desktop home is
-              byte-for-byte the single flow it has always been. */}
-          <div className={isPhone ? "min-h-0 flex-1 overflow-y-auto overflow-x-hidden" : "contents"}>
+              byte-for-byte the single flow it has always been. On a phone its foot
+              clears the tab bar. */}
+          <div
+            ref={homeScrollerRef}
+            className={
+              isPhone
+                ? "min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))]"
+                : "contents"
+            }
+          >
           <section className="mx-auto mt-6 w-full max-w-4xl px-6 text-left sm:mt-[7.5rem]">
             <h2 className="mb-2 text-xl font-semibold text-slate-900 dark:text-night-text">{t("popularTrips")}</h2>
             {/* Two columns from `sm` up, never four: each line carries both of its names
@@ -1025,6 +1113,7 @@ export default function App() {
             onPickSaved={pickSaved}
             onPickRecent={pickRecent}
             onClearRecents={clearRecents}
+            onSeeAll={isPhone ? () => nav.selectTab("saved") : undefined}
           />
           {/* The home has no header, so the notice needs its own way in here. It is the
               last thing on the page, where a footer link belongs. */}
@@ -1062,8 +1151,8 @@ export default function App() {
                 ? "h-[calc(3rem+env(safe-area-inset-top))]"
                 : "h-[calc(3.5rem+env(safe-area-inset-top))] lg:h-[calc(5rem+env(safe-area-inset-top))]"
           }`}
-          style={{ opacity: chromeOpacity, pointerEvents: progressIs1 && !searchBlocking ? "auto" : "none" }}
-          {...inertUnless(progressIs1 && !searchBlocking)}
+          style={{ opacity: chromeOpacity, pointerEvents: progressIs1 && !searchBlocking && !tabCovering ? "auto" : "none" }}
+          {...inertUnless(progressIs1 && !searchBlocking && !tabCovering)}
           {...behindSheet}
         >
           <div className="flex min-w-0 items-center gap-1">
@@ -1105,13 +1194,16 @@ export default function App() {
               Fiets of OV
             </button>
           </div>
-          <HeaderMenu
-            onClearRecents={clearRecents}
-            onClearSaved={clearSaved}
-            onOpenPrivacy={() => setPrivacyOpen(true)}
-            dark={dark}
-            onToggleTheme={toggleTheme}
-          />
+          {/* On a phone the menu's contents live in the Profile tab. */}
+          {!isPhone && (
+            <HeaderMenu
+              onClearRecents={clearRecents}
+              onClearSaved={clearSaved}
+              onOpenPrivacy={() => setPrivacyOpen(true)}
+              dark={dark}
+              onToggleTheme={toggleTheme}
+            />
+          )}
         </motion.header>
 
         {/* Shared morphing search pill: usable in both stages, flies center -> top bar.
@@ -1141,11 +1233,11 @@ export default function App() {
                   shortChrome ? "p-1" : "p-1.5 sm:p-2"
                 }`
           }`}
-          style={{ y: searchY, pointerEvents: searchBlocking ? "none" : "auto" }}
+          style={{ y: searchY, pointerEvents: searchBlocking || tabCovering ? "none" : "auto" }}
           // The pill opened the sheet, so it is behind it now — including for the focus
           // ring, which is why inert leaves before the close handler puts focus back on
           // the trigger (React commits the DOM, then runs the effect).
-          {...inertUnless(!searchBlocking)}
+          {...inertUnless(!searchBlocking && !tabCovering)}
           {...behindSheet}
         >
           {isPhone ? (
@@ -1247,8 +1339,56 @@ export default function App() {
         {privacyOpen && <PrivacyNotice key="privacy" onClose={() => setPrivacyOpen(false)} />}
       </AnimatePresence>
 
+      {/* The phone's tabs, outside both morph stages for the same reason as the dialogs
+          above: the stages go inert under a tab screen, and the screens and the bar must
+          not go with them. */}
+      {isPhone && (
+        <>
+          <TabScreen ref={savedRef} name="saved" active={nav.tab === "saved"}>
+            <SavedScreen
+              places={savedPlaces}
+              recents={recentTrips}
+              onPickPlace={planToSaved}
+              onPickRecent={(t) => {
+                nav.selectTab("plan");
+                pickRecent(t);
+              }}
+              onDeletePlace={(p) => toggleSaved(p)}
+              onRestorePlace={restoreSaved}
+              onClearRecents={clearRecents}
+              onSearch={() => {
+                nav.selectTab("plan");
+                openSearch();
+              }}
+            />
+          </TabScreen>
+          <TabScreen ref={profileRef} name="profile" active={nav.tab === "profile"}>
+            <ProfileScreen
+              themeMode={themeMode}
+              onThemeMode={setThemeMode}
+              onClearRecents={clearRecents}
+              onClearSaved={clearSaved}
+              onOpenPrivacy={() => setPrivacyOpen(true)}
+            />
+          </TabScreen>
+          <TabBar
+            tab={nav.tab}
+            onSelect={selectTab}
+            compact={landscapePhone}
+            hidden={searchOpen || navigating || (nav.tab === "plan" && !homeLive)}
+          />
+        </>
+      )}
+
+      {/* On a phone the badge sits above the tab bar, and over its top edge. */}
       {!isLive() && (
-        <div className="pointer-events-none fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))] rounded-full bg-brand px-3 py-1 text-xs text-white">
+        <div
+          className={`pointer-events-none fixed ${
+            isPhone
+              ? "bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-[1850]"
+              : "bottom-[calc(0.75rem+env(safe-area-inset-bottom))]"
+          } left-[calc(0.75rem+env(safe-area-inset-left))] rounded-full bg-brand px-3 py-1 text-xs text-white`}
+        >
           mock
         </div>
       )}

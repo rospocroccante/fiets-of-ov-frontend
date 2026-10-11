@@ -6,6 +6,7 @@ import { I18nProvider } from "./lib/i18n";
 import { whenMapMounted } from "./test/mapReady";
 import { isMapLoaded, mapChunkRequests } from "./components/lazyMap";
 import { waitForExit } from "./test/exit";
+import { morphTo, phoneViewport, stubHeights } from "./test/phone";
 
 // The mobile pass's own guardrails: the map chunk stays out of the first render, the
 // plan outcome is announced out of band, and the controls a thumb has to hit keep their
@@ -20,60 +21,6 @@ function renderApp() {
       </I18nProvider>
     </QueryClientProvider>,
   );
-}
-
-// jsdom answers `false` to every media query, which is what keeps the whole existing
-// suite (and the desktop layout it describes) on the unchanged path. A phone is the
-// one query answering true; restore the real matchMedia afterwards or the next test in
-// the file inherits a phone.
-function phoneViewport(): () => void {
-  const real = window.matchMedia;
-  window.matchMedia = ((query: string) => ({
-    matches: /max-width:\s*639\.98px/.test(query),
-    media: query,
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })) as unknown as typeof window.matchMedia;
-  return () => {
-    window.matchMedia = real;
-  };
-}
-
-// jsdom has no layout, so every offsetHeight is 0 and the phone geometry falls back to
-// its desktop constants. These are the two boxes that geometry is solved from; give
-// them the heights a real 390x844 phone measures and the arithmetic becomes testable.
-function stubHeights(byName: Record<string, number>): () => void {
-  const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight");
-  Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
-    configurable: true,
-    get(this: HTMLElement) {
-      const name = this.getAttribute("data-fov");
-      return name != null && name in byName ? byName[name] : 0;
-    },
-  });
-  return () => {
-    if (original) Object.defineProperty(HTMLElement.prototype, "offsetHeight", original);
-    else Reflect.deleteProperty(HTMLElement.prototype, "offsetHeight");
-  };
-}
-
-// Park the morph at a given progress. useMorphProgress divides window.scrollY by
-// window.innerHeight, so this is the whole story.
-async function morphTo(progress: number) {
-  Object.defineProperty(window, "scrollY", {
-    configurable: true,
-    value: Math.round(window.innerHeight * progress),
-  });
-  await act(async () => {
-    window.dispatchEvent(new Event("scroll"));
-    // framer paints motion values on its own frame loop, so the opacity this test
-    // reads only lands after one has run.
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  });
 }
 
 function pillEntry(): HTMLElement {
@@ -184,7 +131,8 @@ test("the controls added by the public-facing pass are 44px too", () => {
   );
 });
 
-test("the home's language and theme pills are 44px square", () => {
+test("on desktop the home's language and theme pills are 44px square", () => {
+  // No phoneViewport(): a phone has no pills, their switches live in the Profile tab.
   renderApp();
   for (const name of [/switch language/i, /switch to dark mode/i]) {
     expect(screen.getByRole("button", { name })).toHaveClass("min-h-[44px]", "min-w-[44px]");
