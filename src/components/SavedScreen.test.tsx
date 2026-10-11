@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { vi } from "vitest";
+import { waitForExit } from "../test/exit";
 import { SavedScreen, type SavedScreenProps } from "./SavedScreen";
 
 const artis = { id: "52.3660,4.9166", name: "Artis", label: "Plantage Kerklaan", lat: 52.366, lon: 4.9166, savedAt: 2 };
@@ -40,7 +41,7 @@ test("tapping a place or a trip hands it to the host", () => {
   expect(p.onPickRecent).toHaveBeenCalledWith(trip);
 });
 
-test("Edit shows a delete button per place; deleting offers Undo", () => {
+test("Edit shows a delete button per place; deleting offers Undo", async () => {
   const p = renderSaved();
   expect(screen.queryByRole("button", { name: "Delete Artis" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Edit" }));
@@ -52,6 +53,8 @@ test("Edit shows a delete button per place; deleting offers Undo", () => {
   expect(status).toHaveTextContent("Removed Artis");
   fireEvent.click(within(status).getByRole("button", { name: "Undo" }));
   expect(p.onRestorePlace).toHaveBeenCalledWith(artis);
+  // Undo also puts the snackbar away; the test ends once its exit has finished.
+  await waitForExit(status);
 });
 
 test("Clear all asks twice", () => {

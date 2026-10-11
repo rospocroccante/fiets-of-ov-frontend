@@ -147,6 +147,9 @@ test("Hide map on a portrait phone takes the sheet to full and back", async () =
   // The control is a plain button in the map tools panel (as FilterBar.test.tsx selects it).
   fireEvent.click(await screen.findByRole("button", { name: /hide map/i }));
   expect(sheet).toHaveAttribute("data-detent", "full");
+  // The sheet reports its settled height once the move ends; let that land inside act.
+  await settle();
+  expect(sheet).toHaveAttribute("data-detent", "full");
 });
 
 // The rule from the pill hole: nothing scrolls under fixed chrome. The home's scroller
