@@ -17,6 +17,7 @@ import type { PlaceInfo } from "./components/PlaceInfoCard";
 import { WeatherStrip } from "./components/WeatherStrip";
 import { CARD_ACCENTS, PRIMARY_GRADIENT, TEXT_GRADIENT } from "./lib/gradients";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
+import { ResultsSheet } from "./components/ResultsSheet";
 import { SavedScreen } from "./components/SavedScreen";
 import { TabBar } from "./components/TabBar";
 import { TabScreen } from "./components/TabScreen";
@@ -641,6 +642,19 @@ export default function App() {
   // the 567px of bar between the wordmark and the menu with room either side — which is
   // exactly the arrangement the app already uses from `lg` up.
   const landscapePhone = isPhone && shortChrome;
+  // Portrait phone: the results live in a sheet over a full-screen map. A phone on its
+  // side is wider than md and keeps the side-by-side panes.
+  const sheetLayout = isPhone && !landscapePhone;
+  const [detent, setDetent] = useState<Detent>("half");
+  // The visible height of the sheet once it has settled, for the map's bottom padding.
+  const [sheetInset, setSheetInset] = useState(0);
+  // A new search opens at half height; navigation drops the sheet to its peek.
+  useEffect(() => {
+    setDetent("half");
+  }, [search]);
+  useEffect(() => {
+    if (navigating) setDetent("peek");
+  }, [navigating]);
   const heroRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLDivElement>(null);
   const heroHeight = useLiveHeight(heroRef, isPhone);
@@ -704,10 +718,6 @@ export default function App() {
     setSearchOpen(true);
   }
 
-  // Placeholders until the results sheet is wired in: no sheet layout yet, and its detent.
-  const sheetLayout = false;
-  const [detent, setDetent] = useState<Detent>("half");
-
   // The Back button. Each layer the app can open has one history entry while it is open;
   // a Back press closes the top one here, the same way its own close control would.
   const nav = useAppNav((layer: Layer) => {
@@ -730,6 +740,144 @@ export default function App() {
   // same way they do under the phone search screen.
   const tabCovering = isPhone && nav.tab !== "plan";
   const behindSheet = searchBlocking || tabCovering ? { "aria-hidden": true as const } : {};
+
+  // The results and the map, built once and placed by whichever layout is on screen:
+  // the results column and the map pane side by side (or stacked), or, on a portrait
+  // phone, the map filling the stage under the results sheet.
+
+  // On a phone turned sideways the column is ~262px tall and this strip's 55px is the
+  // difference between one readable option row and two. The forecast still reaches the
+  // rider there — in the banner under the list, with the Open-Meteo credit beside it.
+  // Everywhere else the strip leads the column as before.
+  const weatherStrip = !landscapePhone && (
+    <WeatherStrip
+      lat={view.origin?.lat ?? AMS_CENTER.lat}
+      lon={view.origin?.lon ?? AMS_CENTER.lon}
+      compact={isPhone}
+    />
+  );
+  const resultsPanel = (
+    <ResultsPanel
+      state={panel}
+      onStartNav={
+        route
+          ? () => {
+              // The nav UI (banner, Exit, follow camera) lives in the map
+              // pane: starting nav with the map hidden left the GPS watch
+              // and wake lock running with no banner and no way out.
+              setHideMap(false);
+              setNavigating(true);
+            }
+          : undefined
+      }
+      narrow={isPhone}
+    />
+  );
+  // Weather and OpenStreetMap credit for the advice itself, which stays on screen whether
+  // or not the map is showing. Open-Meteo's CC BY 4.0 terms ask for a link next to where
+  // its data is shown, and the forecast strip is at the top of this column.
+  const attribution = <AdviceAttribution />;
+  // In the sheet the advice comes first and the strip follows it, so the peek shows the
+  // start of the advice rather than the forecast.
+  const resultsBody = sheetLayout ? (
+    <>
+      {resultsPanel}
+      {weatherStrip}
+      {attribution}
+    </>
+  ) : (
+    <>
+      {weatherStrip}
+      {resultsPanel}
+      {attribution}
+    </>
+  );
+  const mapPane = (
+    <>
+      {armed && (
+        <div className="absolute left-3 top-3 z-[1000] rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow dark:bg-night-accent dark:text-night-bg">
+          {armed === "start" ? t("clickMapSetStart") : t("clickMapSetEnd")}
+        </div>
+      )}
+      {/* Both branches render the identical box in the map container's own
+          resting colour, so whether the chunk is here yet or not the stage has
+          the same shape and the same fill: no layout shift, no flash of a hole
+          mid-morph. With the warm-up above, the placeholder is normally gone
+          before the stage is visible at all. */}
+      {!mapWanted ? (
+        <MapPlaceholder />
+      ) : (
+      <Suspense fallback={<MapPlaceholder />}>
+        <MapView
+          origin={view.origin}
+          destination={view.destination}
+          stops={view.stops}
+          route={route}
+          onPick={handlePick}
+          picking={armed !== null}
+          onMovePoint={onMovePoint}
+          onContextPick={onContextPick}
+          onWhatsHere={whatsHere}
+          onPoiPick={(p) => {
+            placeSeq.current++;
+            setPlaceInfo({ name: p.name, address: p.kindLabel, lat: p.lat, lon: p.lon });
+          }}
+          interactive={progressIs1}
+          radar={radar}
+          wLayers={wLayers}
+          onLayerToggle={(k) => setWLayers((s) => ({ ...s, [k]: !s[k] }))}
+          dark={dark}
+          liveFix={fix}
+          navigating={navigating}
+          bottomInset={sheetLayout ? sheetInset : 0}
+        />
+      </Suspense>
+      )}
+      {/* The banner and the place card arrive and leave (overlay in
+          lib/motion); each keeps one key, so new content in an open one is an
+          update, not a second card. */}
+      <AnimatePresence>
+        {navigating && navProgress && (
+          <NavigationOverlay
+            key="navigation"
+            next={navProgress.next}
+            toNext={navProgress.toNext}
+            remaining={navProgress.remaining}
+            etaMinutes={etaMinutes}
+            onExit={() => setNavigating(false)}
+          />
+        )}
+      </AnimatePresence>
+      {farFromRoute && (
+        <div className="absolute left-3 top-24 z-[1000] rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-amber-700 shadow dark:bg-night-surface/95 dark:text-amber-300">
+          {t("farFromRoute")}
+        </div>
+      )}
+      <AnimatePresence>
+        {placeInfo && (
+          <PlaceInfoCard
+            key="place-info"
+            place={placeInfo}
+            saved={isSaved(placeInfo.lat, placeInfo.lon)}
+            onToggleSave={() =>
+              toggleSaved({
+                name: placeInfo.name,
+                label: placeInfo.address ?? placeInfo.name,
+                lat: placeInfo.lat,
+                lon: placeInfo.lon,
+              })
+            }
+            onDirections={infoDirections}
+            bottomInset={sheetLayout ? sheetInset : 0}
+            onClose={() => {
+              placeSeq.current++;
+              setPlaceInfo(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  );
 
   return (
     <div
@@ -790,8 +938,10 @@ export default function App() {
           <div className="px-4 md:px-6">
             <FilterBar
               count={count}
-              hideMap={hideMap}
-              onToggleMap={() => setHideMap((v) => !v)}
+              // A full sheet already covers the map, so on the sheet layout "Hide map"
+              // takes the sheet to full and back.
+              hideMap={sheetLayout ? detent === "full" : hideMap}
+              onToggleMap={sheetLayout ? () => setDetent((d) => (d === "full" ? "half" : "full")) : () => setHideMap((v) => !v)}
               hideMapDisabled={navigating}
               armed={armed}
               onArm={armPick}
@@ -804,152 +954,58 @@ export default function App() {
             />
           </div>
           {/* Below md the two panes stack, map first (Maps-style: map on top, results
-              scrolling under it); from md up they sit side by side, results left. */}
+              scrolling under it); from md up they sit side by side, results left. On a
+              portrait phone the map fills the stage and the results are a sheet over it. */}
           {/* tabIndex -1 so the skip link can put focus here; without it the browser
               scrolls to the anchor but focus stays where it was and the next Tab
               starts again from the top. */}
           <main
             id="fov-map-main"
             tabIndex={-1}
-            className={`flex min-h-0 flex-1 flex-col gap-3 px-4 focus:outline-none md:flex-row md:gap-4 md:px-6 ${
-              // 24px of floor is a portrait margin. On a phone turned sideways it is the
-              // last 16px between the advice and two thirds of the screen.
-              landscapePhone
-                ? "pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
-                : "pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
-            }`}
+            className={
+              sheetLayout
+                ? "relative min-h-0 flex-1 overflow-hidden focus:outline-none"
+                : `flex min-h-0 flex-1 flex-col gap-3 px-4 focus:outline-none md:flex-row md:gap-4 md:px-6 ${
+                  // 24px of floor is a portrait margin. On a phone turned sideways it is the
+                  // last 16px between the advice and two thirds of the screen.
+                  landscapePhone
+                    ? "pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
+                    : "pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+                }`
+            }
           >
-            <section
-              data-fov="results-column"
-              className={`order-2 min-h-0 flex-1 overflow-y-auto md:order-1 md:flex-none ${
-                hideMap ? "md:w-full" : "md:w-1/2"
-              }`}
-            >
-              {/* On a phone turned sideways the column is ~262px tall and this strip's
-                  55px is the difference between one readable option row and two. The
-                  forecast still reaches the rider there — in the banner under the list,
-                  with the Open-Meteo credit beside it. Everywhere else the strip leads
-                  the column as before. */}
-              {!landscapePhone && (
-                <WeatherStrip
-                  lat={view.origin?.lat ?? AMS_CENTER.lat}
-                  lon={view.origin?.lon ?? AMS_CENTER.lon}
-                  compact={isPhone}
-                />
-              )}
-              <ResultsPanel
-                state={panel}
-                onStartNav={
-                  route
-                    ? () => {
-                        // The nav UI (banner, Exit, follow camera) lives in the map
-                        // pane: starting nav with the map hidden left the GPS watch
-                        // and wake lock running with no banner and no way out.
-                        setHideMap(false);
-                        setNavigating(true);
-                      }
-                    : undefined
-                }
-                narrow={isPhone}
-              />
-              {/* Weather and OpenStreetMap credit for the advice itself, which stays on
-                  screen whether or not the map is showing. Open-Meteo's CC BY 4.0 terms
-                  ask for a link next to where its data is shown, and the forecast strip
-                  is at the top of this column. */}
-              <AdviceAttribution />
-            </section>
-            {/* The phone split. 40dvh of map left the results column 246px on a 360x800
-                phone, which is not enough for the option rows to arrive on screen
-                whatever is above them: the map took 40% of the window, the chrome above
-                it 29%, and the product got the 31% left over. 32dvh puts the column at
-                310px against 256px of map — the larger half now belongs to the advice,
-                and the map is still bigger than the whole column used to be. From `md`
-                up the two panes are side by side and this height does not apply at all.
-                "Hide map" in the filter bar remains the way to give the column the
-                whole screen. */}
-            {!hideMap && (
-              <section className="relative order-1 h-[32dvh] shrink-0 md:order-2 md:h-auto md:w-1/2">
-                {armed && (
-                  <div className="absolute left-3 top-3 z-[1000] rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow dark:bg-night-accent dark:text-night-bg">
-                    {armed === "start" ? t("clickMapSetStart") : t("clickMapSetEnd")}
-                  </div>
+            {sheetLayout ? (
+              <>
+                <section className="absolute inset-0">{mapPane}</section>
+                <ResultsSheet detent={detent} onDetent={setDetent} onSettle={setSheetInset}>
+                  {resultsBody}
+                </ResultsSheet>
+              </>
+            ) : (
+              <>
+                <section
+                  data-fov="results-column"
+                  className={`order-2 min-h-0 flex-1 overflow-y-auto md:order-1 md:flex-none ${
+                    hideMap ? "md:w-full" : "md:w-1/2"
+                  }`}
+                >
+                  {resultsBody}
+                </section>
+                {/* The phone split. 40dvh of map left the results column 246px on a 360x800
+                    phone, which is not enough for the option rows to arrive on screen
+                    whatever is above them: the map took 40% of the window, the chrome above
+                    it 29%, and the product got the 31% left over. 32dvh puts the column at
+                    310px against 256px of map — the larger half now belongs to the advice,
+                    and the map is still bigger than the whole column used to be. From `md`
+                    up the two panes are side by side and this height does not apply at all.
+                    "Hide map" in the filter bar remains the way to give the column the
+                    whole screen. */}
+                {!hideMap && (
+                  <section className="relative order-1 h-[32dvh] shrink-0 md:order-2 md:h-auto md:w-1/2">
+                    {mapPane}
+                  </section>
                 )}
-                {/* Both branches render the identical box in the map container's own
-                    resting colour, so whether the chunk is here yet or not the stage has
-                    the same shape and the same fill: no layout shift, no flash of a hole
-                    mid-morph. With the warm-up above, the placeholder is normally gone
-                    before the stage is visible at all. */}
-                {!mapWanted ? (
-                  <MapPlaceholder />
-                ) : (
-                <Suspense fallback={<MapPlaceholder />}>
-                  <MapView
-                    origin={view.origin}
-                    destination={view.destination}
-                    stops={view.stops}
-                    route={route}
-                    onPick={handlePick}
-                    picking={armed !== null}
-                    onMovePoint={onMovePoint}
-                    onContextPick={onContextPick}
-                    onWhatsHere={whatsHere}
-                    onPoiPick={(p) => {
-                      placeSeq.current++;
-                      setPlaceInfo({ name: p.name, address: p.kindLabel, lat: p.lat, lon: p.lon });
-                    }}
-                    interactive={progressIs1}
-                    radar={radar}
-                    wLayers={wLayers}
-                    onLayerToggle={(k) => setWLayers((s) => ({ ...s, [k]: !s[k] }))}
-                    dark={dark}
-                    liveFix={fix}
-                    navigating={navigating}
-                  />
-                </Suspense>
-                )}
-                {/* The banner and the place card arrive and leave (overlay in
-                    lib/motion); each keeps one key, so new content in an open one is an
-                    update, not a second card. */}
-                <AnimatePresence>
-                  {navigating && navProgress && (
-                    <NavigationOverlay
-                      key="navigation"
-                      next={navProgress.next}
-                      toNext={navProgress.toNext}
-                      remaining={navProgress.remaining}
-                      etaMinutes={etaMinutes}
-                      onExit={() => setNavigating(false)}
-                    />
-                  )}
-                </AnimatePresence>
-                {farFromRoute && (
-                  <div className="absolute left-3 top-24 z-[1000] rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-amber-700 shadow dark:bg-night-surface/95 dark:text-amber-300">
-                    {t("farFromRoute")}
-                  </div>
-                )}
-                <AnimatePresence>
-                  {placeInfo && (
-                    <PlaceInfoCard
-                      key="place-info"
-                      place={placeInfo}
-                      saved={isSaved(placeInfo.lat, placeInfo.lon)}
-                      onToggleSave={() =>
-                        toggleSaved({
-                          name: placeInfo.name,
-                          label: placeInfo.address ?? placeInfo.name,
-                          lat: placeInfo.lat,
-                          lon: placeInfo.lon,
-                        })
-                      }
-                      onDirections={infoDirections}
-                      onClose={() => {
-                        placeSeq.current++;
-                        setPlaceInfo(null);
-                      }}
-                    />
-                  )}
-                </AnimatePresence>
-              </section>
+              </>
             )}
           </main>
         </motion.div>

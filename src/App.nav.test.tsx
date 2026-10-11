@@ -114,3 +114,37 @@ test("Profile holds the theme, and System is the first-visit choice", () => {
   });
   expect(within(group).getByRole("button", { name: "System" })).toHaveAttribute("aria-pressed", "true");
 });
+
+test("on a portrait phone a plan lands in the sheet at half height", async () => {
+  renderApp();
+  fireEvent.click(screen.getAllByRole("button", { name: /Amsterdam Centraal/ })[0]);
+  await morphTo(1);
+  const sheet = await screen.findByRole("region", { name: "Trip results" });
+  expect(sheet).toHaveAttribute("data-detent", "half");
+  expect(document.querySelector('[data-fov="results-column"]')).toBeNull();
+  await waitFor(() => expect(within(sheet).getByRole("list", { name: /travel options/i })).toBeInTheDocument());
+});
+
+test("Back from a full sheet drops it to half, the next Back goes home", async () => {
+  renderApp();
+  fireEvent.click(screen.getAllByRole("button", { name: /Amsterdam Centraal/ })[0]);
+  await morphTo(1);
+  const sheet = await screen.findByRole("region", { name: "Trip results" });
+  fireEvent.click(within(sheet).getByRole("button", { name: "Expand results" }));
+  expect(sheet).toHaveAttribute("data-detent", "full");
+  await pressBack();
+  expect(sheet).toHaveAttribute("data-detent", "half");
+  await pressBack();
+  expect(window.scrollTo).toHaveBeenLastCalledWith(expect.objectContaining({ top: 0 }));
+});
+
+test("Hide map on a portrait phone takes the sheet to full and back", async () => {
+  renderApp();
+  fireEvent.click(screen.getAllByRole("button", { name: /Amsterdam Centraal/ })[0]);
+  await morphTo(1);
+  const sheet = await screen.findByRole("region", { name: "Trip results" });
+  fireEvent.click(document.querySelector('[data-fov="filter-more"]') as HTMLElement);
+  // The control is a plain button in the map tools panel (as FilterBar.test.tsx selects it).
+  fireEvent.click(await screen.findByRole("button", { name: /hide map/i }));
+  expect(sheet).toHaveAttribute("data-detent", "full");
+});
