@@ -5,10 +5,14 @@ import { vi } from "vitest";
 // suite (and the desktop layout it describes) on the unchanged path. A phone is the
 // one query answering true; restore the real matchMedia afterwards or the next test in
 // the file inherits a phone.
-export function phoneViewport(): () => void {
+//
+// `landscape` is the same phone on its side: 844 wide and 390 tall, so the width
+// breakpoint stays false and the short-screen queries answer true instead.
+export function phoneViewport({ landscape = false }: { landscape?: boolean } = {}): () => void {
   const real = window.matchMedia;
+  const phone = landscape ? /max-height:\s*500px/ : /max-width:\s*639\.98px/;
   window.matchMedia = ((query: string) => ({
-    matches: /max-width:\s*639\.98px/.test(query),
+    matches: phone.test(query),
     media: query,
     onchange: null,
     addListener: vi.fn(),

@@ -19,7 +19,7 @@ import { CARD_ACCENTS, PRIMARY_GRADIENT, TEXT_GRADIENT } from "./lib/gradients";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
 import { ResultsSheet } from "./components/ResultsSheet";
 import { SavedScreen } from "./components/SavedScreen";
-import { TabBar } from "./components/TabBar";
+import { TAB_BAR_COMPACT_PX, TAB_BAR_PX, TabBar } from "./components/TabBar";
 import { TabScreen } from "./components/TabScreen";
 import { LazyMapView as MapView, isMapLoaded, preloadMap } from "./components/lazyMap";
 import type { WeatherLayersState } from "./components/RainRadar";
@@ -740,6 +740,15 @@ export default function App() {
   // same way they do under the phone search screen.
   const tabCovering = isPhone && nav.tab !== "plan";
   const behindSheet = searchBlocking || tabCovering ? { "aria-hidden": true as const } : {};
+  // The tab bar steps away while the search screen, navigation or the map stage owns
+  // the screen.
+  const tabBarHidden = searchOpen || navigating || (nav.tab === "plan" && !homeLive);
+  // Whether the home's scroller stops above the bar. The search screen and the map stage
+  // cover or replace the home while the bar is away, so the box keeps its size under
+  // them: growing it there would clamp the scroll, and the home would come back short of
+  // where it was left. Navigation is the one case where the bar is away with the home on
+  // screen (the back arrow leaves navigation running), and there the box runs to the foot.
+  const homeClearsTabBar = !navigating;
 
   // The results and the map, built once and placed by whichever layout is on screen:
   // the results column and the map pane side by side (or stacked), or, on a portrait
@@ -1109,15 +1118,16 @@ export default function App() {
             <div aria-hidden="true" className="shrink-0" style={{ height: pillSlot }} />
           )}
           {/* Everything the user scrolls. `contents` above `sm` so the desktop home is
-              byte-for-byte the single flow it has always been. On a phone its foot
-              clears the tab bar. */}
+              byte-for-byte the single flow it has always been. On a phone the box ends
+              where the tab bar starts, by the same rule as the pill's hole: padding only
+              the content left the box running under the bar, and at 844x390 a touch on a
+              popular trip half above the bar's edge reached a tab. The stage's own
+              bottom padding is the safe area, so the margin is the bar's height. */}
           <div
             ref={homeScrollerRef}
-            className={
-              isPhone
-                ? "min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))]"
-                : "contents"
-            }
+            data-fov={isPhone ? "home-scroller" : undefined}
+            className={isPhone ? "min-h-0 flex-1 overflow-y-auto overflow-x-hidden" : "contents"}
+            style={isPhone ? { marginBottom: homeClearsTabBar ? (landscapePhone ? TAB_BAR_COMPACT_PX : TAB_BAR_PX) : 0 } : undefined}
           >
           <section className="mx-auto mt-6 w-full max-w-4xl px-6 text-left sm:mt-[7.5rem]">
             <h2 className="mb-2 text-xl font-semibold text-slate-900 dark:text-night-text">{t("popularTrips")}</h2>
@@ -1431,7 +1441,7 @@ export default function App() {
             tab={nav.tab}
             onSelect={selectTab}
             compact={landscapePhone}
-            hidden={searchOpen || navigating || (nav.tab === "plan" && !homeLive)}
+            hidden={tabBarHidden}
           />
         </>
       )}

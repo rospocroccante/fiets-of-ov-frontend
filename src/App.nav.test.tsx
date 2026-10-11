@@ -148,3 +148,43 @@ test("Hide map on a portrait phone takes the sheet to full and back", async () =
   fireEvent.click(await screen.findByRole("button", { name: /hide map/i }));
   expect(sheet).toHaveAttribute("data-detent", "full");
 });
+
+// The rule from the pill hole: nothing scrolls under fixed chrome. The home's scroller
+// used to run to the foot of the screen with its content padded clear of the bar, so the
+// box itself sat under the bar, and a touch on a card half above the bar's edge reached a
+// tab. Its box now stops where the bar starts: the bar's height above the stage's
+// safe-area padding.
+function homeScroller() {
+  return document.querySelector('[data-fov="home-scroller"]') as HTMLElement;
+}
+
+test("the phone home's scroller ends above the 56px tab bar instead of running under it", () => {
+  renderApp();
+  const scroller = homeScroller();
+  expect(scroller).toHaveClass("overflow-y-auto");
+  expect(scroller.style.marginBottom).toBe("56px");
+  expect(scroller.className).not.toMatch(/(^|\s)pb-/);
+});
+
+test("on a phone turned sideways the home's scroller ends above the 44px bar", () => {
+  restore();
+  restore = phoneViewport({ landscape: true });
+  renderApp();
+  expect(screen.getByRole("button", { name: "Plan" })).toHaveAttribute("aria-current", "page");
+  expect(homeScroller().style.marginBottom).toBe("44px");
+});
+
+test("while navigation keeps the tab bar away, the home's scroller runs to the foot", async () => {
+  renderApp();
+  fireEvent.click(screen.getAllByRole("button", { name: /Amsterdam Centraal/ })[0]);
+  await morphTo(1);
+  const sheet = await screen.findByRole("region", { name: "Trip results" });
+  fireEvent.click(await within(sheet).findByRole("button", { name: /start navigation/i }));
+  // The back arrow goes home and leaves navigation running, with the bar still away.
+  // Coming home by scroll steps the app's own history back; let that land in this test.
+  await morphTo(0);
+  await settle();
+  const bar = document.querySelector('[data-fov="tab-bar"]') as HTMLElement;
+  expect(bar).toHaveAttribute("aria-hidden", "true");
+  expect(homeScroller().style.marginBottom).toBe("0px");
+});
