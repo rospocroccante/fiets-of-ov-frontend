@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { AnimatePresence } from "framer-motion";
 import { NavigationOverlay } from "./NavigationOverlay";
 import type { NavManeuver } from "../lib/routeProgress";
+import { waitForExit } from "../test/exit";
 
 const right: NavManeuver = { at: 650, direction: "RIGHT", street: "Prinsengracht", legIndex: 0 };
 
@@ -79,5 +80,5 @@ test("inside AnimatePresence, an exited banner is out of reach until it has gone
   expect(banner).toHaveStyle({ pointerEvents: "none" });
   expect(screen.queryByRole("button", { name: /exit navigation/i })).toBeNull();
 
-  await waitFor(() => expect(banner).not.toBeInTheDocument());
+  await waitForExit(banner);
 });

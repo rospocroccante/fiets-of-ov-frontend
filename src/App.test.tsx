@@ -9,6 +9,7 @@ import {
 import { whenMapMounted } from "./test/mapReady";
 import { glassClasses } from "./test/glass";
 import { CARD_ACCENTS } from "./lib/gradients";
+import { waitForExit } from "./test/exit";
 
 function renderApp() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -202,8 +203,11 @@ test("menu clears recent searches", async () => {
     if (trips.length === 0) throw new Error("not recorded yet");
   });
   fireEvent.click(screen.getByRole("button", { name: /menu/i }));
-  fireEvent.click(screen.getByRole("button", { name: /clear recent searches/i }));
+  const row = screen.getByRole("button", { name: /clear recent searches/i });
+  fireEvent.click(row);
   expect(JSON.parse(window.localStorage.getItem("fov.recentTrips.v1") ?? "[]")).toEqual([]);
+  // The row closes the menu.
+  await waitForExit(row);
 });
 
 test("Start begins navigation with the overlay up, recents untouched; Exit ends it", async () => {
@@ -227,8 +231,10 @@ test("Start begins navigation with the overlay up, recents untouched; Exit ends 
   // Starting navigation must not touch the persisted recents.
   expect(window.localStorage.getItem("fov.recentTrips.v1")).toBe(recentsBefore);
 
-  fireEvent.click(screen.getByRole("button", { name: /exit navigation/i }));
+  const exit = screen.getByRole("button", { name: /exit navigation/i });
+  fireEvent.click(exit);
   expect(screen.queryByRole("button", { name: /exit navigation/i })).toBeNull();
+  await waitForExit(exit);
 });
 
 test("Search keeps coordinates for endpoints set via the map (no free-text downgrade)", async () => {

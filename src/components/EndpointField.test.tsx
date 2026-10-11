@@ -1,8 +1,9 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { EndpointField } from "./EndpointField";
 import type { Place } from "../api/types";
 import type { Endpoint } from "../trip";
+import { waitForExit } from "../test/exit";
 
 describe("EndpointField", () => {
   it("typing in the input calls onText with the typed text", () => {
@@ -48,11 +49,14 @@ describe("EndpointField", () => {
     });
 
     const option = await screen.findByText(/Vondelpark/);
+    const list = screen.getByRole("listbox");
     fireEvent.click(option);
 
     expect(onSelect).toHaveBeenCalledTimes(1);
     const place: Place = onSelect.mock.calls[0][0];
     expect(place.name).toMatch(/Vondelpark/i);
+    // Picking closes the list.
+    await waitForExit(list);
   });
 
   it("renders the GPS button", () => {
@@ -98,7 +102,9 @@ describe("EndpointField", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /use my location/i }));
 
-    const ep: Endpoint = await vi.waitFor(() => {
+    // Testing Library's waitFor, not vi.waitFor: the button sets state when the fix
+    // arrives, and only the former tells React an async update is expected.
+    const ep: Endpoint = await waitFor(() => {
       expect(onLocate).toHaveBeenCalledTimes(1);
       return onLocate.mock.calls[0][0];
     });
@@ -169,7 +175,8 @@ test("clear is only drawn when there is something to clear, and does not blur th
   // mousedown is what would blur the input and close the suggestion list under it, so
   // it has to be swallowed: on a phone that blur also drops the keyboard.
   const field = screen.getByPlaceholderText("From");
-  field.focus();
+  // The field's focus handler sets state, so the focus goes through act().
+  act(() => field.focus());
   const mousedown = fireEvent.mouseDown(clear);
   expect(mousedown).toBe(false); // preventDefault() was called
   expect(document.activeElement).toBe(field);

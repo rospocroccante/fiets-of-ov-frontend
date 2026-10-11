@@ -20,6 +20,7 @@ import {
   useLeaving,
   useMotionPreset,
 } from "./motion";
+import { waitForExit } from "../test/exit";
 
 // framer reads the system setting once per process and caches it, so stubbing
 // matchMedia between tests cannot flip it. The hook's input is mocked instead; the
@@ -159,6 +160,14 @@ describe("presets", () => {
     const el = screen.getByTestId("m");
     await waitFor(() => expect(el.style.opacity).toBe("1"));
     expect(el.style.transform).toBe("none");
+  });
+
+  // PlaceInput re-measures the phone's suggestion list when the list's own arrival ends,
+  // on the grounds that the sheet around it, which opens no later, has arrived by then.
+  // That holds only while the two arrive over the same duration with no delay.
+  test("the dropdown and the sheet arrive over the same duration, undelayed", () => {
+    expect(dropdown.animate.transition).toEqual(sheet.animate.transition);
+    expect(dropdown.animate.transition).not.toHaveProperty("delay");
   });
 
   test("fade spreads onto a motion element, comes to rest fully shown and never moves", async () => {
@@ -334,7 +343,7 @@ describe("useLeaving", () => {
     expect(el).toHaveAttribute("inert", "");
     expect(el).toHaveAttribute("aria-hidden", "true");
     expect(el.style.pointerEvents).toBe("none");
-    await waitFor(() => expect(el).not.toBeInTheDocument());
+    await waitForExit(el);
   });
 
   test("brought back during its exit, it is live again", () => {

@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { AnimatePresence } from "framer-motion";
 import { PrivacyNotice } from "./PrivacyNotice";
 import { I18nProvider } from "../lib/i18n";
+import { waitForExit } from "../test/exit";
 
 // aria-modal="true" tells assistive technology that the page behind the scrim does not
 // exist for now. The markup declared it while Tab walked straight out of the dialog and
@@ -125,5 +126,5 @@ test("a closing notice is out of reach for its whole exit, and then removed", as
   fireEvent.keyDown(behind, { key: "Tab" });
   expect(document.activeElement).toBe(behind);
 
-  await waitFor(() => expect(dialog).not.toBeInTheDocument());
+  await waitForExit(dialog);
 });

@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { AnimatePresence } from "framer-motion";
 import { PlaceInfoCard } from "./PlaceInfoCard";
+import { waitForExit } from "../test/exit";
 
 const place = { name: "NDSM Werf", address: "Noord, Amsterdam", lat: 52.401, lon: 4.8935 };
 
@@ -65,5 +66,5 @@ test("inside AnimatePresence, a closed card is out of reach until it has gone", 
   expect(card).toHaveStyle({ pointerEvents: "none" });
   expect(screen.queryByRole("button", { name: /from here/i })).toBeNull();
 
-  await waitFor(() => expect(card).not.toBeInTheDocument());
+  await waitForExit(card);
 });

@@ -5,6 +5,7 @@ import App from "./App";
 import { I18nProvider } from "./lib/i18n";
 import { whenMapMounted } from "./test/mapReady";
 import { isMapLoaded, mapChunkRequests } from "./components/lazyMap";
+import { waitForExit } from "./test/exit";
 
 // The mobile pass's own guardrails: the map chunk stays out of the first render, the
 // plan outcome is announced out of band, and the controls a thumb has to hit keep their
@@ -307,13 +308,13 @@ test("the phone search screen takes focus, and every way out gives it back", asy
     fireEvent.click(within(dialog).getByRole("button", { name: /close search/i }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(pillEntry());
-    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await waitForExit(dialog);
   } finally {
     restore();
   }
 });
 
-test("with a trip already entered the phone screen opens on the destination", () => {
+test("with a trip already entered the phone screen opens on the destination", async () => {
   const restore = phoneViewport();
   try {
     renderApp();
@@ -322,12 +323,15 @@ test("with a trip already entered the phone screen opens on the destination", ()
     fireEvent.change(within(dialog).getByPlaceholderText("From"), {
       target: { value: "Centraal" },
     });
+    const first = dialog;
     fireEvent.click(within(dialog).getByRole("button", { name: /close search/i }));
 
     fireEvent.click(pillEntry());
     dialog = screen.getByRole("dialog");
     // The start is settled; the reason to come back is the destination.
     expect(document.activeElement).toBe(within(dialog).getByPlaceholderText("To"));
+    // The first screen was reopened over while it still played its exit.
+    await waitForExit(first);
   } finally {
     restore();
   }
@@ -511,7 +515,7 @@ test("the page behind the phone search screen is locked, inert and hidden", asyn
       expect(stage).not.toHaveAttribute("aria-hidden");
     }
     expect(home).not.toHaveAttribute("inert");
-    await waitFor(() => expect(sheet).not.toBeInTheDocument());
+    await waitForExit(sheet);
   } finally {
     restore();
   }
@@ -531,7 +535,7 @@ test("closing the phone search screen puts the scroll back where it was", async 
     // the screen, not after its exit, which is too late for a search's morph to the map.
     expect(sheet).toBeInTheDocument();
     expect(window.scrollTo).toHaveBeenCalledWith(0, 485);
-    await waitFor(() => expect(sheet).not.toBeInTheDocument());
+    await waitForExit(sheet);
   } finally {
     // scrollY is the morph's only input; a test that leaves it parked mid-morph decides
     // the next test's stage, and the suite runs in a random order.
@@ -560,7 +564,7 @@ test("a closing phone search screen is out of reach for its exit, and then remov
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(pillEntry());
 
-    await waitFor(() => expect(sheet).not.toBeInTheDocument());
+    await waitForExit(sheet);
   } finally {
     restore();
   }
@@ -594,12 +598,13 @@ test("a search screen reopened during the last one's exit is a new one, not the 
     // An opening moves focus in, and the page behind is locked again.
     expect(document.activeElement).toBe(within(second).getByPlaceholderText("To"));
     expect(document.body.style.overflow).toBe("hidden");
-    // Only the new screen's trap is listening: a Tab from outside lands in it.
-    entry.focus();
+    // Only the new screen's trap is listening: a Tab from outside lands in it. The focus
+    // goes through act(), since it blurs the To field and the field's handler sets state.
+    act(() => entry.focus());
     fireEvent.keyDown(window, { key: "Tab" });
     expect(second.contains(document.activeElement)).toBe(true);
 
-    await waitFor(() => expect(first).not.toBeInTheDocument());
+    await waitForExit(first);
     expect(second).toBeInTheDocument();
   } finally {
     restore();

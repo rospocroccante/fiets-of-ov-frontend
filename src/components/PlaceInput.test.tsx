@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { PlaceInput } from "./PlaceInput";
+import { waitForExit } from "../test/exit";
 
 // The real app wires PlaceInput as a controlled input: every keystroke goes up via
 // onChange and comes back down as `value`. The regression this guards: treating that
@@ -23,7 +24,7 @@ test("blurring the input closes the suggestion list", async () => {
   const list = await screen.findByRole("listbox");
   fireEvent.blur(input);
   expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-  await waitFor(() => expect(list).not.toBeInTheDocument());
+  await waitForExit(list);
 });
 
 test("shows suggestions and selects one (mock mode)", async () => {
@@ -35,9 +36,12 @@ test("shows suggestions and selects one (mock mode)", async () => {
   expect(onChange).toHaveBeenCalledWith("vondel");
 
   const option = await screen.findByText(/Vondelpark/);
+  const list = screen.getByRole("listbox");
   fireEvent.click(option);
   expect(onSelect).toHaveBeenCalledTimes(1);
   expect(onSelect.mock.calls[0][0].name).toMatch(/Vondelpark/);
+  // Picking closes the list.
+  await waitForExit(list);
 });
 
 test("no suggestion box for empty input", () => {
@@ -45,7 +49,7 @@ test("no suggestion box for empty input", () => {
   expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
 });
 
-test("focusing an empty field shows recent endpoints; picking one fires onPickHistory", () => {
+test("focusing an empty field shows recent endpoints; picking one fires onPickHistory", async () => {
   const picked: string[] = [];
   render(
     <PlaceInput
@@ -58,9 +62,12 @@ test("focusing an empty field shows recent endpoints; picking one fires onPickHi
     />,
   );
   fireEvent.focus(screen.getByPlaceholderText("From"));
-  expect(screen.getByRole("listbox")).toBeInTheDocument();
+  const list = screen.getByRole("listbox");
+  expect(list).toBeInTheDocument();
   fireEvent.click(screen.getByText("NDSM"));
   expect(picked).toEqual(["52.401,4.8935"]);
+  // The picked label fills the field, which is past the recents' two-character limit.
+  await waitForExit(list);
 });
 
 test("history hides as soon as the user types enough for live suggestions", async () => {
@@ -108,7 +115,7 @@ test("a closing list is out of reach for its whole exit, and then removed", asyn
   expect(screen.queryByRole("listbox")).toBeNull();
   expect(screen.queryAllByRole("option")).toHaveLength(0);
 
-  await waitFor(() => expect(list).not.toBeInTheDocument());
+  await waitForExit(list);
 });
 
 test("a list reopened during its exit is the same list back, never a second one", async () => {
@@ -164,7 +171,7 @@ test("keyboard: ArrowDown then Enter selects the highlighted suggestion", async 
   expect(onSelect).toHaveBeenCalledTimes(1);
   expect(onSelect.mock.calls[0][0].name).toMatch(/Vondelpark/);
   expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-  await waitFor(() => expect(list).not.toBeInTheDocument());
+  await waitForExit(list);
 });
 
 test("keyboard: ArrowUp wraps to the last suggestion", async () => {
@@ -197,7 +204,7 @@ test("Escape closes the list and it stays closed until the next keystroke", asyn
   expect(await screen.findByRole("listbox")).toBeInTheDocument();
 });
 
-test("keyboard also drives the recents list", () => {
+test("keyboard also drives the recents list", async () => {
   const picked: string[] = [];
   render(
     <PlaceInput
@@ -217,8 +224,10 @@ test("keyboard also drives the recents list", () => {
   fireEvent.keyDown(input, { key: "ArrowDown" });
   fireEvent.keyDown(input, { key: "ArrowDown" });
   expect(screen.getAllByRole("option")[1]).toHaveAttribute("aria-selected", "true");
+  const list = screen.getByRole("listbox");
   fireEvent.keyDown(input, { key: "Enter" });
   expect(picked).toEqual(["52.373,4.8926"]);
+  await waitForExit(list);
 });
 
 test("a saved place does not hide a remote namesake somewhere else in town", async () => {

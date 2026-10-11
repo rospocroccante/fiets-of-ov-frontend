@@ -437,6 +437,7 @@ function Listbox({
       {...motionProps}
       {...leavingProps}
       style={{ ...style, ...leavingProps.style }}
+      // Coupled to lib/motion: dropdown and sheet must arrive over one duration (motion.test).
       onAnimationComplete={() => {
         if (!leaving) onEntered();
       }}

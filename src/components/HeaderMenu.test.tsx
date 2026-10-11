@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { HeaderMenu } from "./HeaderMenu";
 import { I18nProvider } from "../lib/i18n";
+import { waitForExit } from "../test/exit";
 
 // HeaderMenu is the only place the language switch lives once the user is on the map
 // stage, and it is meaningless without a provider: the default context's toggle is a
@@ -157,7 +158,7 @@ test("a closing menu is out of reach while it leaves, and then removed", async (
   expect(panel).toHaveAttribute("inert", "");
   expect(panel).toHaveStyle({ pointerEvents: "none" });
 
-  await waitFor(() => expect(panel).not.toBeInTheDocument());
+  await waitForExit(panel);
   expect(screen.queryByText(/clear saved places/i)).toBeNull();
 });
 
@@ -184,7 +185,7 @@ test("the privacy row opens the notice and closes the menu", async () => {
   fireEvent.click(row);
   expect(onOpenPrivacy).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole("button", { name: /^privacy$/i })).toBeNull();
-  await waitFor(() => expect(row).not.toBeInTheDocument());
+  await waitForExit(row);
 });
 
 test("the about block names every source the app actually calls, Photon included", () => {
