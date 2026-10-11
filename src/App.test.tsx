@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import {
@@ -7,6 +7,8 @@ import {
   __fireMarkerDragEnd,
 } from "./__mocks__/react-leaflet";
 import { whenMapMounted } from "./test/mapReady";
+import { glassClasses } from "./test/glass";
+import { CARD_ACCENTS } from "./lib/gradients";
 
 function renderApp() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -30,6 +32,39 @@ test("home content is present at rest: headline and Popular trips", () => {
   // assert DOM presence, not visibility).
   expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
   expect(screen.getByText(/popular trips/i)).toBeInTheDocument();
+});
+
+// Each popular trip is a metro line: a track in the trip's own line colour between two
+// stations, from named on the left and to on the right. No card, no ring, no hover
+// lift, and none of the dot, fading rule and chequered flag the cards were decorated
+// with. Geometry and hit-testing are measured in browser-tests/.
+test("the popular trips are drawn as metro lines, one line colour each, with no card", () => {
+  const { container } = renderApp();
+  const trips = [...container.querySelectorAll<HTMLElement>('[data-fov="popular-trip"]')];
+  expect(trips).toHaveLength(4);
+  const [first] = trips;
+  expect(first.tagName).toBe("BUTTON");
+  expect(first).toHaveAccessibleName("Amsterdam Centraal → Vondelpark");
+  // The two ends, from on the left and to on the right, each truncating in its half.
+  const from = within(first).getByText("Amsterdam Centraal");
+  const to = within(first).getByText("Vondelpark");
+  expect(from.parentElement).toBe(to.parentElement);
+  expect(from.parentElement).toHaveClass("grid-cols-2", "font-semibold");
+  expect(from).toHaveClass("truncate");
+  expect(to).toHaveClass("truncate", "text-right");
+  // The track is the only colour, and it is the trip's own.
+  trips.forEach((trip, i) => {
+    const track = trip.querySelector<HTMLElement>('[aria-hidden="true"] [style]');
+    expect(track).toHaveStyle({ backgroundColor: CARD_ACCENTS[i] });
+  });
+  expect(screen.queryByText("sports_score")).not.toBeInTheDocument();
+  for (const trip of trips) {
+    expect(glassClasses(trip)).toEqual([]);
+    expect([...trip.classList].filter((c) => /^(bg-|border|shadow|ring)/.test(c))).toEqual([]);
+  }
+  // One column on a phone, two from `sm` up: four would not fit two names per line.
+  expect(first.parentElement).toHaveClass("grid-cols-1", "sm:grid-cols-2");
+  expect(first.parentElement!.className).not.toMatch(/lg:grid-cols-4/);
 });
 
 test("map region and pickers are present in the DOM at rest (no search yet)", () => {

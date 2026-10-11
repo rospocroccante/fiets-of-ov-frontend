@@ -2,6 +2,7 @@ import { render, screen, fireEvent, act, within } from "@testing-library/react";
 import { ResultsPanel } from "./ResultsPanel";
 import { buildPlanView } from "../lib/planView";
 import { mockPlanFor } from "../api/mock";
+import { glassClasses } from "../test/glass";
 
 test("idle shows a prompt", () => {
   render(<ResultsPanel state={{ status: "idle" }} />);
@@ -198,5 +199,89 @@ describe("the phone tier", () => {
     // and that is measured for real in the browser layer.
     expect(document.querySelectorAll('[data-fov="itinerary"]')).toHaveLength(1);
     expect(details.querySelector('[data-fov="itinerary"]')).not.toBeNull();
+  });
+});
+
+// The containers. The results column used to be a box of boxes: a bordered rain card,
+// option cards with a 2px ring on the chosen one, and a second bordered box for its
+// itinerary inside that. jsdom has no Tailwind, so what a unit test can hold is the
+// class each surface is given; contrast and geometry are measured in browser-tests/.
+describe("no box-in-box", () => {
+  function plan(to: string, selectedMode: "bike" | "transit" | "bike_and_ride", narrow = false) {
+    const view = buildPlanView(mockPlanFor("A", to));
+    return render(
+      <ResultsPanel
+        state={{ status: "ready", view, selectedMode, onSelect: () => {} }}
+        narrow={narrow}
+        onStartNav={() => {}}
+      />,
+    );
+  }
+
+  test("nothing in the ready panel wears glass, on a phone or wider", () => {
+    for (const narrow of [false, true]) {
+      const { container, unmount } = plan("Zuid", "transit", narrow);
+      // The Start button included: it is still a pill, but it no longer casts a shadow.
+      expect(within(container).getByRole("button", { name: "Start navigation", hidden: true })).toBeInTheDocument();
+      expect(glassClasses(container)).toEqual([]);
+      unmount();
+    }
+  });
+
+  test("the chosen option is a flat tint with an accent bar on its left edge and no ring", () => {
+    plan("Zuid", "transit");
+    const chosen = optionRows().find((r) => r.dataset.selected === "true")!;
+    expect(chosen).toHaveClass("rounded-card", "bg-brand-light/70", "dark:bg-night-hover/60");
+    expect(chosen).toHaveClass(
+      "shadow-[inset_3px_0_0_theme(colors.brand.DEFAULT)]",
+      "dark:shadow-[inset_3px_0_0_theme(colors.night.accent)]",
+    );
+    for (const row of optionRows()) {
+      expect(row.className).not.toMatch(/\bring\b|ring-|border-brand|border-ams-ns/);
+      expect(row).not.toHaveClass("bg-white", "dark:bg-night-surface");
+    }
+  });
+
+  test("the rows are divided by hairlines, drawn only between two plain rows", () => {
+    // Bike + transit, public transport, bike: the middle one chosen.
+    plan("Zuid", "transit");
+    const [before, chosen, after] = optionRows();
+    expect(chosen.dataset.selected).toBe("true");
+    // Every row keeps the same 1px line laid out, so no row changes height when
+    // another is chosen; only its colour comes and goes.
+    for (const row of [before, chosen, after]) expect(row).toHaveClass("border-b");
+    // Not into the chosen block's rounded corner from above, nor under the block.
+    expect(before).toHaveClass("border-transparent");
+    expect(chosen).toHaveClass("border-transparent");
+    expect(after).toHaveClass("border-slate-200", "dark:border-night-rim/20");
+  });
+
+  test("the itinerary is set off from its row by one hairline, with no box of its own", () => {
+    plan("Zuid", "transit");
+    const details = document.querySelector<HTMLElement>('[data-fov="option-details"]')!;
+    expect(details).toHaveClass("border-t", "dark:border-night-rim/20");
+    expect([...details.classList].filter((c) => /^(dark:)?(bg-|rounded|shadow|ring)/.test(c))).toEqual([]);
+  });
+
+  test("the advice banner is a tag and a sentence with no box", () => {
+    plan("Bijlmer rain", "transit");
+    const banner = document.querySelector<HTMLElement>('[data-fov="weather-banner"]')!;
+    expect([...banner.classList].filter((c) => /^(dark:)?(bg-|border|rounded|shadow|ring)/.test(c))).toEqual([]);
+    expect(within(banner).getByText(/take tram/i)).toHaveClass("text-sm", "font-medium", "text-slate-900", "dark:text-night-text");
+  });
+
+  // The tag carries the state, and none of the three may composite to olive at night:
+  // no accent-deep fill behind text, no translucent geel rim.
+  test.each([
+    ["rain", "Bijlmer rain", "Rain expected", ["bg-amber-500", "text-amber-950", "dark:bg-night-accent", "dark:text-night-bg"]],
+    ["dry", "Vondelpark", "Dry", ["bg-emerald-100", "text-emerald-800", "dark:bg-night-raised", "dark:text-night-accent-soft"]],
+    ["unknown", "fog", "Forecast unavailable", ["bg-gray-100", "text-gray-600", "dark:bg-night-raised", "dark:text-night-muted"]],
+  ])("the %s tag is a small solid tag in its own colours", (_, to, label, classes) => {
+    plan(to, "bike");
+    const banner = document.querySelector<HTMLElement>('[data-fov="weather-banner"]')!;
+    const tag = within(banner).getByText(label);
+    expect(tag).toHaveClass("rounded-md", "font-bold", ...classes);
+    expect(tag).not.toHaveClass("rounded-full");
+    expect(banner.outerHTML).not.toMatch(/accent-deep|night-accent\/\d+/);
   });
 });

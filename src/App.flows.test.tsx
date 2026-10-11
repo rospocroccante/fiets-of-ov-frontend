@@ -67,17 +67,26 @@ afterEach(() => {
 });
 
 test("the home language switch flips every visible string, both ways, and persists it", () => {
+  // A recent trip, so the home carries a parameterized string: the popular trips name
+  // both of their ends with no "to {x}" between them since they became metro lines,
+  // and the time-ago on a recent trip is the one left on this screen.
+  window.localStorage.setItem(
+    "fov.recentTrips.v1",
+    JSON.stringify([
+      { fromLabel: "Centraal", fromQuery: "Centraal", toLabel: "NDSM", toQuery: "NDSM", at: Date.now() - 10 * 60_000 },
+    ]),
+  );
   renderApp();
   // jsdom reports navigator.language "en-US", so the app starts in English.
   expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Bike or transit?");
-  expect(screen.getByText("to Vondelpark")).toBeInTheDocument();
+  expect(screen.getByText("10m ago")).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: /switch language/i }));
 
   expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Fiets of OV?");
   expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Laat het weer beslissen.");
   // Parameterized strings must follow the language, not just the static ones.
-  expect(screen.getByText("naar Vondelpark")).toBeInTheDocument();
+  expect(screen.getByText("10 min geleden")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Zoeken" })).toBeInTheDocument();
   expect(window.localStorage.getItem("fov.lang.v1")).toBe("nl");
 

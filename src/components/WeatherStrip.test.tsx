@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WeatherStrip } from "./WeatherStrip";
+import { glassClasses } from "../test/glass";
 
 function renderStrip(compact = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -65,4 +66,20 @@ test("compact keeps the condition readable to a screen reader after it stops bei
   expect(label.className).toContain("sr-only");
   // And the pointer still gets it, from the block's own title.
   expect(label.closest("[title]")).toHaveAttribute("title", "Partly cloudy");
+});
+
+// The strip is a plain row over the results now, with one hairline under it: the frosted
+// card it was is the first of the nested boxes the results column no longer draws.
+test("the strip is a row with a hairline under it and no box", async () => {
+  for (const compact of [false, true]) {
+    const { container, unmount } = renderStrip(compact);
+    await screen.findByText("Partly cloudy");
+    const strip = container.querySelector<HTMLElement>('[data-fov="weather-strip"]')!;
+    expect(strip).toHaveClass("border-b", "border-slate-200", "dark:border-night-rim/20");
+    expect([...strip.classList].filter((c) => /^(dark:)?(bg-|rounded|shadow|ring|border-[trlx]?$)/.test(c))).toEqual(
+      [],
+    );
+    expect(glassClasses(container)).toEqual([]);
+    unmount();
+  }
 });

@@ -58,11 +58,16 @@ export function WeatherStrip({
   if (!forecast) return null;
   const now = weatherLook(forecast.current.code, forecast.current.isDay, lang);
   const hours = forecast.hours.slice(0, roomy ? HOURS_WIDE : HOURS_NARROW);
+  // No box: a plain row over the column with one hairline under it, the way a station
+  // board's weather line sits over the departures. It was a frosted card with a border
+  // and a shadow, the first of four nested boxes in the results column. The 8px inset
+  // lines it up with the option rows below, so the temperature starts where their
+  // titles start and the hairline is as wide as theirs.
   return (
     <div
       data-fov="weather-strip"
-      className={`flex items-center rounded-card border border-slate-100 bg-white/80 shadow-sm backdrop-blur dark:border-night-rim/20 dark:bg-night-surface/80 ${
-        compact ? "mb-2 gap-3 px-3 py-1.5" : "mb-3 gap-4 px-4 py-3"
+      className={`mx-2 flex items-center border-b border-slate-200 px-3 dark:border-night-rim/20 ${
+        compact ? "mb-1 gap-3 pb-1.5 pt-1" : "mb-2 gap-4 pb-3 pt-2"
       }`}
     >
       <div className="flex shrink-0 items-center gap-2" title={now.label}>
@@ -85,7 +90,7 @@ export function WeatherStrip({
           </p>
         </div>
       </div>
-      <span className={`w-px shrink-0 bg-slate-100 dark:bg-night-border ${compact ? "h-6" : "h-8"}`} />
+      <span className={`w-px shrink-0 bg-slate-200 dark:bg-night-border ${compact ? "h-6" : "h-8"}`} />
       <ol data-fov="weather-hours" className="flex min-w-0 flex-1 items-center justify-between gap-2">
         {hours.map((h) => {
           const look = weatherLook(h.code, true, lang);

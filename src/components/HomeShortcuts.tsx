@@ -13,6 +13,12 @@ function timeAgo(at: number, now: number, t: Translator): string {
 
 // Maps-style shortcuts on the home: saved places as chips, recent searches as rows.
 // Renders nothing until the user has history, so a first visit stays pristine.
+//
+// Drawn in the popular trips' own language, one size down. A recent trip is a short
+// grey line between two stations with its two ends named under it: the same metro map,
+// greyed like a line already travelled. No panel round it: the frosted card with an
+// uppercase "RECENT" label held one row most of the time and was a box drawn for the
+// sake of a box.
 export function HomeShortcuts({
   saved,
   recents,
@@ -31,15 +37,18 @@ export function HomeShortcuts({
   const { t } = useI18n();
   if (saved.length === 0 && recents.length === 0) return null;
   return (
-    <section className="mx-auto mt-8 w-full max-w-4xl px-6 text-left">
+    <section className="mx-auto mt-6 w-full max-w-4xl px-6 text-left">
       {saved.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
           {saved.slice(0, 6).map((p) => (
+            // Chips are controls, so they keep the pill, with a solid fill: a white
+            // chip with a hairline by day and the night's own surface step after dark,
+            // answering a pointer with one flat step of tint and nothing else.
             <button
               key={p.id}
               onClick={() => onPickSaved(p)}
               title={t("directionsToX", { x: p.name })}
-              className="flex min-h-[44px] items-center gap-1.5 rounded-full border border-white/60 bg-white/70 px-3 text-sm font-medium text-slate-700 shadow-sm backdrop-blur-md transition hover:bg-white/90 hover:shadow dark:border-night-rim/20 dark:bg-night-surface/70 dark:text-night-text dark:hover:bg-night-hover/85"
+              className="flex min-h-[44px] items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-night-rim/20 dark:bg-night-surface dark:text-night-text dark:hover:bg-night-raised"
             >
               <span
                 aria-hidden="true"
@@ -54,38 +63,53 @@ export function HomeShortcuts({
         </div>
       )}
       {recents.length > 0 && (
-        <div className="rounded-card border border-white/60 bg-white/70 shadow-sm backdrop-blur-md dark:border-night-rim/20 dark:bg-night-surface/70">
-          <div className="flex items-center justify-between px-4 pt-2.5">
-            {/* slate-500, not 400: 400 measured 2.56:1 on this frosted card, under
-                the 4.5:1 the 11px meta text needs; the dark side takes the night
-                ramp's own tertiary step instead of bleeding through. */}
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-night-subtle">
-              {t("recent")}
-            </span>
+        <div>
+          <div className="flex items-center justify-between">
+            <span className="text-[15px] font-semibold text-slate-900 dark:text-night-text">{t("recent")}</span>
+            {/* A text button, with the 44px target it always had. */}
             <button
               onClick={onClearRecents}
-              className="-mr-2 inline-flex min-h-[44px] items-center px-2 text-[11px] font-medium text-slate-500 transition hover:text-slate-700 dark:text-night-subtle dark:hover:text-night-text"
+              className="-mr-2 inline-flex min-h-[44px] items-center px-2 text-[13px] font-medium text-slate-700 transition-colors hover:text-slate-900 dark:text-night-subtle dark:hover:text-night-text"
             >
               {t("clear")}
             </button>
           </div>
-          <ul>
+          {/* The popular trips' grid, so a recent line is as long as a popular one.
+
+              The text sits straight on the aurora now, with no frosted panel to lift
+              it, and by day the aurora is darker than it looks: sampled with the
+              foreground hidden over a full drift cycle, it reaches luminance 0.40
+              under these rows on a phone. Against that slate-500 measured 2.0:1,
+              slate-600 3.2:1 and slate-700 4.4:1, so the names and the time-ago take
+              slate-800 (6.2:1) and Clear, which sits over a lighter band, slate-700
+              (5.4:1). Size and weight keep them a step below the popular trips. At
+              night the ramp's muted and subtle steps clear 5.1:1 or better on the
+              brightest lamp glow, so the night side keeps them. */}
+          <ul className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
             {recents.slice(0, 3).map((trip) => (
               <li key={`${trip.fromQuery}-${trip.toQuery}`}>
                 <button
                   onClick={() => onPickRecent(trip)}
-                  className="flex min-h-[44px] w-full items-center gap-2.5 px-4 text-left transition hover:bg-white/80 dark:hover:bg-night-hover/75"
+                  className="flex min-h-[44px] w-full flex-col justify-center rounded-card px-1 py-2 text-left transition-colors hover:bg-slate-900/5 dark:hover:bg-night-hover/60"
                 >
-                  <span
-                    aria-hidden="true"
-                    className="material-symbols-rounded text-[18px] leading-none text-slate-400"
-                  >
-                    history
+                  {/* The line: a 2px track between two 10px stations, all in the
+                      tertiary grey, the track a step fainter than its stations.
+                      Centred stations hang 5px past each end of the track, which is
+                      why it is inset by that much. */}
+                  <span aria-hidden="true" className="relative mx-[5px] block h-2.5">
+                    <span className="absolute inset-x-0 top-1 h-0.5 rounded-full bg-slate-500/60 dark:bg-night-subtle/60" />
+                    <span className="absolute -left-[5px] top-0 h-2.5 w-2.5 rounded-full border-2 border-slate-500 bg-white dark:border-night-subtle dark:bg-night-bg" />
+                    <span className="absolute -right-[5px] top-0 h-2.5 w-2.5 rounded-full border-2 border-slate-500 bg-white dark:border-night-subtle dark:bg-night-bg" />
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-sm text-slate-800 dark:text-night-text">
-                    {trip.fromLabel} <span className="text-slate-400">{"→"}</span> {trip.toLabel}
+                  <span className="mt-1 grid w-full grid-cols-2 gap-3 text-[13px] font-medium text-slate-800 dark:text-night-muted">
+                    <span className="truncate">{trip.fromLabel}</span>
+                    <span className="flex min-w-0 items-baseline justify-end gap-1.5">
+                      <span className="truncate">{trip.toLabel}</span>
+                      <span className="shrink-0 text-xs font-normal text-slate-800 dark:text-night-subtle">
+                        {timeAgo(trip.at, now, t)}
+                      </span>
+                    </span>
                   </span>
-                  <span className="shrink-0 text-[11px] text-slate-500 dark:text-night-subtle">{timeAgo(trip.at, now, t)}</span>
                 </button>
               </li>
             ))}

@@ -80,7 +80,11 @@ export default {
           "accent-deep": "#6B4E00", // translucent backgrounds/borders only
         },
       },
-      borderRadius: { card: "1.25rem" },
+      // One radius for every surface that is still drawn as one: menus, popovers, the
+      // map frame and the chosen results block. It was 1.25rem on everything, cards
+      // inside cards included, and at 20px a stack of panels reads as a pile of
+      // pills. Status tags take rounded-md and on/off controls stay pills.
+      borderRadius: { card: "0.75rem" },
     },
   },
   plugins: [

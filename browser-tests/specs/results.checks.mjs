@@ -895,6 +895,106 @@ export const scenarios = [
   },
 
   {
+    // The leg bar under every option header. Two of its promises are about pixels and
+    // can only be held here: each segment is as wide as its leg's share of the minutes,
+    // and a label that does not fit its segment disappears whole instead of being cut
+    // to "Tra" by the segment's clip. The ink has to clear AA on the leg's own colour,
+    // which is the same pairing the step-by-step chips use. Dutch, because "Fiets 6"
+    // is the longer label.
+    name: "390x844 night nl the leg bars draw every leg in proportion, and each label fits or hides whole",
+    async run(ctx) {
+      const { checks } = ctx;
+      const page = await bootResults(ctx, { width: 390, height: 844, theme: "dark", lang: "nl" });
+      // Every segment of every bar on the page: its box, its label's box, and whether the
+      // label is wholly inside the segment, wholly below it (wrapped onto the clipped
+      // second line), or neither, which would be a label cut at the segment's edge.
+      const readBars = `
+        const F = window.__fov;
+        return [...document.querySelectorAll('${OPTION}')].map((li) => {
+          const bar = li.querySelector('[data-fov="leg-bar"]');
+          F.reveal(bar);
+          const b = F.rect(bar);
+          const segs = [...bar.querySelectorAll('[data-fov="leg-segment"]')].map((s) => {
+            const r = F.rect(s);
+            const label = s.lastElementChild;
+            const l = F.rect(label);
+            const inside = l.left >= r.left - 0.5 && l.right <= r.right + 0.5 && l.top >= r.top - 0.5 && l.bottom <= r.bottom + 0.5;
+            const below = l.top >= r.bottom - 0.5;
+            return { w: r.w, grow: parseFloat(getComputedStyle(s).flexGrow), text: label.textContent,
+                     inside, below, fill: getComputedStyle(s).backgroundColor, contrast: F.contrast(label) };
+          });
+          return { title: li.querySelector('[data-fov="option-title"]').textContent.trim(),
+                   hidden: bar.getAttribute("aria-hidden"), w: b.w, gap: parseFloat(getComputedStyle(bar).columnGap) || 0, segs };
+        });
+      `;
+      try {
+        const bars = await page.eval(readBars);
+        checks.equal("every option has a leg bar", bars.length, 3);
+        for (const bar of bars) {
+          const at = `"${bar.title}"`;
+          checks.equal(`${at}: the bar is hidden from assistive tech`, bar.hidden, "true");
+          const total = bar.segs.reduce((n, s) => n + s.grow, 0);
+          const room = bar.w - bar.gap * (bar.segs.length - 1);
+          for (const [i, seg] of bar.segs.entries()) {
+            const share = (room * seg.grow) / total;
+            checks.near(
+              `${at} segment ${i + 1} ("${seg.text}") is its leg's share of the bar`,
+              seg.w,
+              Math.max(4, share),
+              1,
+              `${round(seg.w)}px for ${seg.grow} of ${total} min in ${round(room)}px`,
+            );
+            checks.ok(
+              `${at} segment ${i + 1} ("${seg.text}") shows its label whole or not at all`,
+              seg.inside || seg.below,
+              `label inside ${seg.inside}, wrapped out ${seg.below}`,
+            );
+            if (seg.inside) {
+              checks.atLeast(
+                `${at} segment ${i + 1} label "${seg.text}" clears AA on its own colour`,
+                seg.contrast.ratio,
+                AA,
+                `${seg.contrast.ratio}:1 — ${seg.contrast.fg} on ${seg.contrast.bg} at ${seg.contrast.px}px/${seg.contrast.weight}`,
+              );
+            }
+          }
+        }
+
+        // Nothing in the fixture is too short for its label at this width, so squeeze one
+        // bar until most labels cannot fit and ask again: every label must be whole or
+        // gone, at least one must actually be gone, and every leg must keep its colour.
+        const squeezed = await page.eval(`
+          const bars = [...document.querySelectorAll('[data-fov="leg-bar"]')];
+          const widest = bars.sort((a, b) => b.children.length - a.children.length)[0];
+          widest.style.width = "96px";
+          return widest.children.length;
+        `);
+        const after = (await page.eval(readBars)).find((b) => b.segs.length === squeezed);
+        checks.ok("a squeezed bar is found", after != null, `${squeezed} segments`);
+        if (after) {
+          for (const [i, seg] of after.segs.entries()) {
+            checks.ok(
+              `squeezed segment ${i + 1} ("${seg.text}") shows its label whole or not at all`,
+              seg.inside || seg.below,
+              `${round(seg.w)}px wide, label inside ${seg.inside}, wrapped out ${seg.below}`,
+            );
+            checks.atLeast(`squeezed segment ${i + 1} keeps a visible width`, seg.w, 4, `${round(seg.w)}px`);
+            checks.ok(`squeezed segment ${i + 1} keeps its colour`, !/rgba\(0, 0, 0, 0\)|transparent/.test(seg.fill), seg.fill);
+          }
+          checks.atLeast(
+            "squeezed, at least one label hides whole",
+            after.segs.filter((s) => s.below).length,
+            1,
+            after.segs.map((s) => `"${s.text}" ${round(s.w)}px ${s.inside ? "shown" : "hidden"}`).join(", "),
+          );
+        }
+      } finally {
+        await page.close();
+      }
+    },
+  },
+
+  {
     name: "1280x900 the desktop results column keeps the same shape",
     async run(ctx) {
       const { checks } = ctx;

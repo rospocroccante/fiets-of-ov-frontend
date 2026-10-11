@@ -4,7 +4,7 @@
 // an "active" colour uses the solid brand navy. The family is Amsterdam's own: canal
 // navy flowing into GVB transit blue, headline in sky-into-canal (the weather is the
 // product), and the four semantic accents (position red, GVB blue, bike green, sun
-// yellow) on the popular-trip cards.
+// yellow) as the line colours of the popular trips.
 // Dark theme: the Search action goes shaded white — white easing into the palest
 // brand blue, navy text — and the headline accent line goes NS geel, the
 // yellow-for-details rule the dark UI borrows from ns.nl.
@@ -14,7 +14,7 @@ export const PRIMARY_GRADIENT =
 export const TEXT_GRADIENT =
   "bg-gradient-to-r from-[#0EA5E9] to-[#0D4A73] bg-clip-text text-transparent dark:from-night-accent-soft dark:to-night-accent";
 
-// Small, restrained accents for the popular-trip cards: used only on a dot and a
-// connector line, never as a card fill. One per semantic: position, transit, bike,
-// weather.
+// The popular trips' line colours. Each trip is drawn as a metro line and this is its
+// track, a 4px stroke and never a fill behind text. One per semantic: position,
+// transit, bike, weather.
 export const CARD_ACCENTS = ["#DA291C", "#0077C8", "#059669", "#EAB308"];

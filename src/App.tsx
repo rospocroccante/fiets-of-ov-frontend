@@ -953,12 +953,18 @@ export default function App() {
               byte-for-byte the single flow it has always been. */}
           <div className={isPhone ? "min-h-0 flex-1 overflow-y-auto overflow-x-hidden" : "contents"}>
           <section className="mx-auto mt-6 w-full max-w-4xl px-6 text-left sm:mt-[7.5rem]">
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-night-text">{t("popularTrips")}</h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <h2 className="mb-2 text-xl font-semibold text-slate-900 dark:text-night-text">{t("popularTrips")}</h2>
+            {/* Two columns from `sm` up, never four: each line carries both of its names
+                side by side, and a quarter of max-w-4xl cannot hold "Amsterdam Zuid" and
+                "Amsterdamse Poort" on one line. */}
+            <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
               {POPULAR.map((trip, i) => {
-                // Clean frosted card. Colour is confined to one small accent (the
-                // origin dot and the connector line) so the grid stays calm and the
-                // vivid background does the talking.
+                // Each trip is a metro line: a track in the trip's own line colour
+                // between two stations, its two ends named under it. The colour is the
+                // line's identity, the way 50 to 53 are Amsterdam's metro lines, and
+                // it is the only colour in the row. No card: these were four frosted
+                // cards with a ring, a shadow and a hover lift, decorated with a dot, a
+                // fading rule and a chequered flag that said nothing about the trip.
                 const accent = CARD_ACCENTS[i % CARD_ACCENTS.length];
                 return (
                   <button
@@ -966,29 +972,25 @@ export default function App() {
                     data-fov="popular-trip"
                     onClick={() => pickPopular(trip)}
                     aria-label={`${trip.from} → ${trip.to}`}
-                    className="group flex flex-col gap-3 rounded-card border border-white/60 bg-white/70 p-5 text-left shadow-sm ring-1 ring-slate-900/5 backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-white/90 hover:shadow-lg dark:border-night-rim/20 dark:bg-night-surface/70 dark:ring-night-rim/10 dark:hover:bg-night-hover/85"
+                    className="flex min-h-[44px] flex-col rounded-card px-1 py-3 text-left transition-colors hover:bg-slate-900/5 dark:hover:bg-night-hover/60"
                   >
-                    {/* Mini route: origin dot, connector, destination flag. */}
-                    <span className="flex items-center gap-2">
+                    {/* 4px track, 14px stations filled with the page colour and ringed
+                        in the text colour. The stations are centred on the track's
+                        ends, so the track is inset by half a station. */}
+                    <span aria-hidden="true" className="relative mx-[7px] block h-3.5 self-stretch">
                       <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        className="absolute inset-x-0 top-[5px] h-1 rounded-full"
                         style={{ backgroundColor: accent }}
                       />
-                      <span
-                        className="h-px flex-1"
-                        style={{ backgroundImage: `linear-gradient(to right, ${accent}, transparent)` }}
-                      />
-                      <span
-                        className="material-symbols-rounded text-[18px] leading-none text-slate-400"
-                        aria-hidden="true"
-                      >
-                        sports_score
-                      </span>
+                      <span className="absolute -left-[7px] top-0 h-3.5 w-3.5 rounded-full border-[3px] border-slate-900 bg-white dark:border-night-text dark:bg-night-bg" />
+                      <span className="absolute -right-[7px] top-0 h-3.5 w-3.5 rounded-full border-[3px] border-slate-900 bg-white dark:border-night-text dark:bg-night-bg" />
                     </span>
-                    <div>
-                      <p className="truncate text-[15px] font-semibold text-slate-900 dark:text-night-text">{trip.from}</p>
-                      <p className="truncate text-sm text-slate-500 dark:text-night-subtle">{t("toX", { x: trip.to })}</p>
-                    </div>
+                    {/* From under the first station, to under the second, each one
+                        truncating within its own half. */}
+                    <span className="mt-1.5 grid w-full grid-cols-2 gap-3 text-[15px] font-semibold leading-5 text-slate-900 dark:text-night-text">
+                      <span className="truncate">{trip.from}</span>
+                      <span className="truncate text-right">{trip.to}</span>
+                    </span>
                   </button>
                 );
               })}
