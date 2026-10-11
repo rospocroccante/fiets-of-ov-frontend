@@ -336,10 +336,14 @@ html { scroll-snap-type: y proximity; }
    fix is still on its way, and a frozen one reads as a hung app.
 
    Framer animations are not CSS and do not see this rule; MotionConfig in main.tsx
-   handles them. `*` does not match pseudo-elements other than ::before and ::after,
-   so motion on ::details-content or the ::view-transition ones needs its own
-   reduced-motion rule, kept out of this selector list: a pseudo-element a browser
-   does not know invalidates the whole list. */
+   and useMotionPreset (src/lib/motion.ts) handle them.
+
+   Not covered here: `*` matches no pseudo-element other than ::before and ::after.
+   Motion put on ::details-content (a <details> body opening) or on
+   ::view-transition-old(root) and ::view-transition-new(root) (a view transition)
+   needs a reduced-motion rule of its own, written as a separate rule next to that
+   motion. It cannot join this selector list: a pseudo-element a browser does not know
+   invalidates the whole list, and this rule with it. */
 @media (prefers-reduced-motion: reduce) {
   *:not(.animate-spin),
   ::before,

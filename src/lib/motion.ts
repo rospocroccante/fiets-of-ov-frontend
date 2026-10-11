@@ -1,4 +1,5 @@
-import type { TargetAndTransition } from "framer-motion";
+import { useMemo } from "react";
+import { transformProps, useReducedMotion, type TargetAndTransition } from "framer-motion";
 
 // The app's motion, defined once: durations, curves, the list stagger and the framer
 // presets for surfaces that arrive and leave. Anything that moves takes its timing
@@ -7,11 +8,12 @@ import type { TargetAndTransition } from "framer-motion";
 // tailwind.config.js, because the config cannot import TypeScript; motion.test.tsx
 // fails the moment the two disagree.
 //
-// Reduced motion is not handled per preset. MotionConfig reducedMotion="user" in
-// main.tsx makes framer drop every transform (x, y, scale) when the user asks for less
-// motion, so these presets fade in place, at their own durations; the global rule in
-// index.css does the same job for CSS transitions and animations; Leaflet code asks
-// prefersReducedMotion().
+// Reduced motion allows an opacity fade of at most `fast` and nothing that moves.
+// MotionConfig reducedMotion="user" in main.tsx makes framer drop every transform, but
+// it keeps each fade's own duration (`base` on the way in), so components spread
+// useMotionPreset(preset), which hands them the reduced form of the preset when the
+// user asks for less motion. The global rule in index.css covers CSS transitions and
+// animations; Leaflet code asks prefersReducedMotion().
 
 // Durations in ms, for CSS and Leaflet. `fast` is for exits and small state changes,
 // `base` for things arriving, `slow` for larger surfaces, `reveal` for the theme
@@ -57,7 +59,7 @@ export function staggerDelay(index: number): number {
 // A preset is spread straight onto a motion element inside AnimatePresence:
 // `<motion.div {...overlay}>`. Each state carries its own timing, so arriving and
 // leaving can use different curves and durations without the caller passing any.
-interface MotionPreset {
+export interface MotionPreset {
   initial: TargetAndTransition;
   animate: TargetAndTransition;
   exit: TargetAndTransition;
@@ -98,4 +100,59 @@ export const sheet = {
 export function prefersReducedMotion(): boolean {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+type Values = Record<string, unknown>;
+
+// x, y, scale and every other key framer composes into `transform`, plus the origin,
+// which only means something to a transform.
+const isTransformKey = (key: string) =>
+  transformProps.has(key) || key === "transform" || key === "originX" || key === "originY" || key === "originZ";
+
+const isPlainObject = (v: unknown): v is Values =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+function withoutTransforms(values: Values): Values {
+  return Object.fromEntries(Object.entries(values).filter(([key]) => !isTransformKey(key)));
+}
+
+// The same transition at `fast`. Curves and delays stay; a per-value override (an
+// object under a value's name) is shortened as well, or dropped with its transform.
+function atFast(transition: Values): Values {
+  const out: Values = { duration: DURATION.fast };
+  for (const [key, value] of Object.entries(transition)) {
+    if (key === "duration" || isTransformKey(key)) continue;
+    out[key] = isPlainObject(value) ? { ...value, duration: DURATION.fast } : value;
+  }
+  return out;
+}
+
+function reduceState(target: TargetAndTransition, animated: boolean): TargetAndTransition {
+  const { transition, transitionEnd, ...values } = target;
+  const out = withoutTransforms(values);
+  // An animated state always gets a transition: with none, framer would fall back to
+  // its default tween, which is longer than `fast`.
+  if (animated || transition) out.transition = atFast((transition ?? {}) as Values);
+  if (transitionEnd) out.transitionEnd = withoutTransforms(transitionEnd as Values);
+  return out as TargetAndTransition;
+}
+
+// The reduced-motion form of a preset: the same opacity keyframes, no transform in any
+// state, every transition at `fast`. Pure, so the preset it is given is left as it was.
+export function reducedPreset(preset: MotionPreset): MotionPreset {
+  return {
+    initial: reduceState(preset.initial, false),
+    animate: reduceState(preset.animate, true),
+    exit: reduceState(preset.exit, true),
+  };
+}
+
+// What a component spreads: `<motion.div {...useMotionPreset(overlay)}>`. The preset
+// as it is, or its reduced form when the user asks for less motion. framer reads the
+// setting when the component mounts, which is when an overlay opens, so a change of
+// the setting reaches the next overlay rather than one already on screen. Memoised, so
+// a re-render hands framer the same targets and starts nothing.
+export function useMotionPreset(preset: MotionPreset): MotionPreset {
+  const reduce = useReducedMotion();
+  return useMemo(() => (reduce ? reducedPreset(preset) : preset), [reduce, preset]);
 }

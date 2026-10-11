@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { render, screen, waitFor } from "@testing-library/react";
-import { AnimatePresence, motion } from "framer-motion";
+import { render, renderHook, screen, waitFor } from "@testing-library/react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   DURATION,
   DURATION_MS,
@@ -13,9 +13,19 @@ import {
   dropdown,
   overlay,
   prefersReducedMotion,
+  reducedPreset,
   sheet,
   staggerDelay,
+  useMotionPreset,
 } from "./motion";
+
+// framer reads the system setting once per process and caches it, so stubbing
+// matchMedia between tests cannot flip it. The hook's input is mocked instead; the
+// rest of framer is the real thing.
+vi.mock("framer-motion", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("framer-motion")>()),
+  useReducedMotion: vi.fn(() => false),
+}));
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -161,6 +171,102 @@ describe("presets", () => {
     rerender(<AnimatePresence>{null}</AnimatePresence>);
     await waitFor(() => expect(screen.queryByTestId("m")).toBeNull(), { timeout: 1000 });
     expect(performance.now() - started).toBeLessThan(DURATION_MS.fast);
+  });
+});
+
+describe("reduced forms", () => {
+  const presets = [
+    ["overlay", overlay],
+    ["dropdown", dropdown],
+    ["sheet", sheet],
+  ] as const;
+
+  // Under reduced motion only an opacity fade of at most `fast` is allowed. framer's
+  // MotionConfig already drops transforms but keeps each fade's own duration (base on
+  // the way in), so the reduced form has to carry both rules itself.
+  test.each(presets)("%s: opacity only, in every state", (_, preset) => {
+    const reduced = reducedPreset(preset);
+    for (const state of ["initial", "animate", "exit"] as const) {
+      const keys = Object.keys(reduced[state]).filter((k) => k !== "transition");
+      expect(keys, state).toEqual(["opacity"]);
+      expect(reduced[state].opacity, state).toBe(preset[state].opacity);
+    }
+  });
+
+  test.each(presets)("%s: every animated state lasts `fast`", (_, preset) => {
+    const reduced = reducedPreset(preset);
+    expect(reduced.animate.transition).toEqual({ duration: DURATION.fast, ease: EASE.enter });
+    expect(reduced.exit.transition).toEqual({ duration: DURATION.fast, ease: EASE.exit });
+  });
+
+  test("a state without a transition of its own still gets `fast`, not framer's default", () => {
+    const reduced = reducedPreset({
+      initial: { opacity: 0, x: 10 },
+      animate: { opacity: 1, x: 0 },
+      exit: { opacity: 0, scale: 0.9 },
+    });
+    expect(reduced.animate).toEqual({ opacity: 1, transition: { duration: DURATION.fast } });
+    expect(reduced.exit).toEqual({ opacity: 0, transition: { duration: DURATION.fast } });
+  });
+
+  test("per-value transitions and transitionEnd lose their transforms too", () => {
+    const reduced = reducedPreset({
+      initial: { opacity: 0, y: 6 },
+      animate: {
+        opacity: 1,
+        y: 0,
+        transition: { duration: 0.3, delay: 0.08, opacity: { duration: 0.5 }, y: { duration: 0.3 } },
+        transitionEnd: { y: 0, scale: 1 },
+      },
+      exit: { opacity: 0 },
+    });
+    expect(reduced.animate).toEqual({
+      opacity: 1,
+      transition: { duration: DURATION.fast, delay: 0.08, opacity: { duration: DURATION.fast } },
+      transitionEnd: {},
+    });
+  });
+
+  test("the preset itself is left alone", () => {
+    const before = JSON.stringify(overlay);
+    reducedPreset(overlay);
+    expect(JSON.stringify(overlay)).toBe(before);
+  });
+});
+
+describe("useMotionPreset", () => {
+  beforeEach(() => {
+    vi.mocked(useReducedMotion).mockReturnValue(false);
+  });
+
+  test("returns the preset unchanged when reduced motion is off", () => {
+    const { result } = renderHook(() => useMotionPreset(overlay));
+    expect(result.current).toBe(overlay);
+  });
+
+  test("returns the reduced form when reduced motion is on", () => {
+    vi.mocked(useReducedMotion).mockReturnValue(true);
+    const { result } = renderHook(() => useMotionPreset(dropdown));
+    expect(result.current).toEqual(reducedPreset(dropdown));
+  });
+
+  test("hands back the same object across renders, so framer sees no new target", () => {
+    vi.mocked(useReducedMotion).mockReturnValue(true);
+    const { result, rerender } = renderHook(() => useMotionPreset(sheet));
+    const first = result.current;
+    rerender();
+    expect(result.current).toBe(first);
+  });
+
+  test("its result spreads onto a motion element", async () => {
+    vi.mocked(useReducedMotion).mockReturnValue(true);
+    function Probe() {
+      return <motion.div data-testid="m" {...useMotionPreset(overlay)} />;
+    }
+    render(<Probe />);
+    const el = screen.getByTestId("m");
+    await waitFor(() => expect(el.style.opacity).toBe("1"));
+    expect(el.style.transform).toBe("");
   });
 });
 
