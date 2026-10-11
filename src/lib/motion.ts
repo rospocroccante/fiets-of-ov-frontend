@@ -102,6 +102,36 @@ export const sheet = {
   exit: { opacity: 0, y: 14, transition: leave },
 } satisfies MotionPreset;
 
+// A row of a list that arrives as a whole, the travel options of a new plan: the
+// overlay's fade and curve with a 6px rise, shorter than a card's 8 because a row is
+// smaller and several of them move at once. Spread it through staggered(), so each row
+// arrives after the one above it.
+export const listRow = {
+  initial: { opacity: 0, y: 6 },
+  animate: { opacity: 1, y: 0, transition: arrive },
+  exit: { opacity: 0, y: 6, transition: leave },
+} satisfies MotionPreset;
+
+const staggeredForms = new WeakMap<MotionPreset, MotionPreset[]>();
+
+// `preset` as item `index` of a list that arrives in sequence: its arrival waits
+// staggerDelay(index), and nothing else changes. Leaving is never staggered. Each form
+// is made once per preset and place and then handed back as the same object, so a
+// re-render gives useMotionPreset, and framer, the target they already have.
+export function staggered(preset: MotionPreset, index: number): MotionPreset {
+  const place = Math.min(index, STAGGER_MAX - 1);
+  let forms = staggeredForms.get(preset);
+  if (!forms) {
+    forms = [];
+    staggeredForms.set(preset, forms);
+  }
+  forms[place] ??= {
+    ...preset,
+    animate: { ...preset.animate, transition: { ...preset.animate.transition, delay: staggerDelay(place) } },
+  };
+  return forms[place];
+}
+
 // For code outside React (the Leaflet map), which cannot read MotionConfig. Call it at
 // the moment of moving, so a change of the setting made after startup is honoured.
 // Where matchMedia does not exist (jsdom) there is no setting to read, and the answer

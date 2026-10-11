@@ -521,8 +521,14 @@ export default function App() {
     if (navigating && view.status === "error") setNavigating(false);
   }, [navigating, view.status]);
 
+  // Which search the results on screen answer: the trip as the plan query keys it, so it
+  // changes exactly when a new set of results can arrive. The panel's rows arrive in
+  // sequence when it does. A choice of option or of language re-renders the same rows,
+  // and so does a filter chip for the rows it leaves in place; only a row the chip
+  // brings back arrives, on its own.
+  const search = trip ? JSON.stringify([trip.from, trip.to, trip.submit ?? 0]) : "";
   const panel: PanelState = filteredView
-    ? { status: "ready", view: filteredView, selectedMode: effectiveMode, onSelect: setSelectedMode }
+    ? { status: "ready", view: filteredView, search, selectedMode: effectiveMode, onSelect: setSelectedMode }
     : view.status === "error"
       ? { status: "error", message: view.message ?? "error" }
       : view.status === "loading"

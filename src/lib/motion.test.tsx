@@ -12,11 +12,13 @@ import {
   STAGGER_MAX,
   dropdown,
   fade,
+  listRow,
   overlay,
   prefersReducedMotion,
   reducedPreset,
   sheet,
   staggerDelay,
+  staggered,
   useLeaving,
   useMotionPreset,
 } from "./motion";
@@ -46,6 +48,49 @@ describe("staggerDelay", () => {
     expect(staggerDelay(STAGGER_MAX)).toBe(sixth);
     expect(staggerDelay(STAGGER_MAX + 1)).toBe(sixth);
     expect(staggerDelay(40)).toBe(sixth);
+  });
+});
+
+// A list that arrives as a whole (the travel options of a new plan) arrives one row
+// after another: each row's arrival waits staggerDelay(its index), and nothing else
+// about it changes.
+describe("staggered", () => {
+  test("delays the arrival by staggerDelay(index), and only the arrival", () => {
+    for (const i of [0, 1, 2, 5]) {
+      const form = staggered(listRow, i);
+      expect(form.initial).toBe(listRow.initial);
+      expect(form.animate).toEqual({ ...listRow.animate, transition: { ...listRow.animate.transition, delay: staggerDelay(i) } });
+      expect(form.exit).toBe(listRow.exit);
+    }
+  });
+
+  test("rows past the sixth arrive with the sixth", () => {
+    expect(staggered(listRow, STAGGER_MAX + 3)).toBe(staggered(listRow, STAGGER_MAX - 1));
+  });
+
+  // useMotionPreset memoises on the preset it is handed, and a row re-renders every
+  // time another option is chosen. A new object per render would be a new target for
+  // framer each time.
+  test("hands back the same object for the same preset and place", () => {
+    expect(staggered(listRow, 2)).toBe(staggered(listRow, 2));
+    expect(staggered(overlay, 2)).not.toBe(staggered(listRow, 2));
+  });
+
+  test("leaves the preset it is given alone", () => {
+    const before = JSON.stringify(overlay);
+    staggered(overlay, 3);
+    expect(JSON.stringify(overlay)).toBe(before);
+  });
+
+  // The order survives reduced motion: the delay stays, the rise goes and the fade
+  // shortens to `fast`. 150ms plus five 40ms steps is still well under half a second.
+  test("its reduced form keeps the delay and loses the rise", () => {
+    const reduced = reducedPreset(staggered(listRow, 3));
+    expect(reduced.initial).toEqual({ opacity: 0 });
+    expect(reduced.animate).toEqual({
+      opacity: 1,
+      transition: { duration: DURATION.fast, ease: EASE.enter, delay: staggerDelay(3) },
+    });
   });
 });
 
@@ -148,6 +193,14 @@ describe("presets", () => {
     });
   });
 
+  test("listRow: the overlay's fade and curve with a 6px rise", () => {
+    expect(listRow).toEqual({
+      initial: { opacity: 0, y: 6 },
+      animate: { opacity: 1, y: 0, transition: { duration: DURATION.base, ease: EASE.enter } },
+      exit: { opacity: 0, y: 6, transition: { duration: DURATION.fast, ease: EASE.exit } },
+    });
+  });
+
   // The presets are meant to be spread straight onto a motion element. This file is
   // type-checked with the rest of src, so the spread below is also the proof that
   // framer's props accept them as they are.
@@ -155,6 +208,7 @@ describe("presets", () => {
     ["overlay", overlay],
     ["dropdown", dropdown],
     ["sheet", sheet],
+    ["listRow", listRow],
   ])("%s spreads onto a motion element and comes to rest fully shown", async (_, preset) => {
     render(<motion.div data-testid="m" {...preset} />);
     const el = screen.getByTestId("m");
@@ -207,6 +261,7 @@ describe("reduced forms", () => {
     ["fade", fade],
     ["dropdown", dropdown],
     ["sheet", sheet],
+    ["listRow", listRow],
   ] as const;
 
   // Under reduced motion only an opacity fade of at most `fast` is allowed. framer's

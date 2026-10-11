@@ -195,6 +195,39 @@ test("mode filter chips hide options for real: Transit off removes the transit c
   expect(screen.getByText(/1 routes in area/i)).toBeInTheDocument();
 });
 
+// The results arrive in sequence once per search (ResultsPanel keys its rows on it).
+// What App owes the panel is a search identity that changes with a new plan and with
+// nothing else. Choosing an option re-renders the same rows, and so does a filter chip
+// for the rows it leaves alone; a row that re-mounted would arrive all over again.
+test("the option rows arrive once per search, not again when another is chosen", async () => {
+  renderApp();
+  startTrip();
+  await screen.findByText("Public transport");
+  const rows = () => [...document.querySelectorAll<HTMLElement>('[data-fov="option"]')];
+  const first = rows();
+  expect(first.length).toBeGreaterThan(1);
+
+  // The same elements, not equal ones: toEqual would compare DOM nodes by structure.
+  const same = (a: HTMLElement[], b: HTMLElement[]) => a.length === b.length && a.every((r, i) => r === b[i]);
+
+  // Bike is the recommendation for this trip, so it starts chosen; choose the other.
+  expect(rows()[0]).toHaveAttribute("data-selected", "true");
+  fireEvent.click(screen.getByRole("heading", { name: "Public transport" }));
+  expect(rows()[1]).toHaveAttribute("data-selected", "true");
+  expect(same(rows(), first)).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Transit" }));
+  fireEvent.click(screen.getByRole("button", { name: "Transit" }));
+  expect(rows().filter((r) => first.includes(r))).toHaveLength(first.length - 1);
+
+  // The same route searched again is a new plan, with new departures: new rows.
+  fireEvent.click(screen.getByRole("button", { name: /search/i }));
+  await waitFor(() => expect(rows().some((r) => first.includes(r))).toBe(false));
+  const skeleton = document.querySelector('[data-fov="results-skeleton"]');
+  await screen.findByText("Public transport");
+  expect(rows().length).toBe(first.length);
+  if (skeleton) await waitForExit(skeleton);
+});
+
 test("menu clears recent searches", async () => {
   renderApp();
   startTrip();

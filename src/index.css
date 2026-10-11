@@ -323,3 +323,39 @@ html { scroll-snap-type: y proximity; }
     scroll-behavior: auto !important;
   }
 }
+
+/* The results' two disclosures ("Step by step" on a phone, and the note on how the
+   figures are worked out) open and close by height over `base`, on the enter curve, in
+   CSS alone. A height only transitions to `auto` where interpolate-size exists, so the
+   whole block waits for it: any other browser opens the body at once, as it always did.
+   content-visibility is discrete, and allow-discrete keeps a closing body painted until
+   its height reaches zero instead of blanking it on the first frame.
+
+   The body is clipped so that while it grows it does not spill over the rows under it.
+   The clip reaches 4px past its edges, the width of a focus ring (a 2px outline at a 2px
+   offset): the Start button and the estimates row sit flush with those edges, and their
+   rings would otherwise lose a side once the body is open. */
+@supports (interpolate-size: allow-keywords) {
+  .disclosure {
+    interpolate-size: allow-keywords;
+  }
+  .disclosure::details-content {
+    block-size: 0;
+    overflow: clip;
+    overflow-clip-margin: 4px;
+    transition:
+      block-size theme("transitionDuration.base") theme("transitionTimingFunction.enter"),
+      content-visibility theme("transitionDuration.base") theme("transitionTimingFunction.enter") allow-discrete;
+  }
+  .disclosure[open]::details-content {
+    block-size: auto;
+  }
+}
+
+/* The global reduced-motion rule above does not reach ::details-content, so the
+   disclosures carry their own: under reduced motion they open and close at once. */
+@media (prefers-reduced-motion: reduce) {
+  .disclosure::details-content {
+    transition: none;
+  }
+}

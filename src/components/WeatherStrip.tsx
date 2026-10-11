@@ -1,6 +1,8 @@
+import { motion } from "framer-motion";
 import { useShortForecast } from "../hooks/useShortForecast";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useI18n } from "../lib/i18n";
+import { overlay, useMotionPreset } from "../lib/motion";
 import { weatherLook } from "../lib/weatherIcons";
 
 function Glyph({ icon, className, px }: { icon: string; className?: string; px?: number }) {
@@ -55,6 +57,10 @@ export function WeatherStrip({
   const { lang } = useI18n();
   const { forecast } = useShortForecast(lat, lon);
   const roomy = useMediaQuery("(min-width: 1024px)");
+  // The strip arrives when its forecast does, with the results it sits over: a fade and
+  // an 8px rise over `base`. Its height is there from the first frame; only the drawing
+  // moves.
+  const { initial, animate } = useMotionPreset(overlay);
   if (!forecast) return null;
   const now = weatherLook(forecast.current.code, forecast.current.isDay, lang);
   const hours = forecast.hours.slice(0, roomy ? HOURS_WIDE : HOURS_NARROW);
@@ -64,11 +70,13 @@ export function WeatherStrip({
   // lines it up with the option rows below, so the temperature starts where their
   // titles start and the hairline is as wide as theirs.
   return (
-    <div
+    <motion.div
       data-fov="weather-strip"
       className={`mx-2 flex items-center border-b border-slate-200 px-3 dark:border-night-rim/20 ${
         compact ? "mb-1 gap-3 pb-1.5 pt-1" : "mb-2 gap-4 pb-3 pt-2"
       }`}
+      initial={initial}
+      animate={animate}
     >
       <div className="flex shrink-0 items-center gap-2" title={now.label}>
         <Glyph icon={now.icon} px={compact ? 22 : undefined} className="text-ams-sky dark:text-ams-ns" />
@@ -144,6 +152,6 @@ export function WeatherStrip({
           );
         })}
       </ol>
-    </div>
+    </motion.div>
   );
 }

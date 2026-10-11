@@ -1,7 +1,18 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useReducedMotion } from "framer-motion";
 import { WeatherStrip } from "./WeatherStrip";
 import { glassClasses } from "../test/glass";
+
+// framer reads the system setting once per process, so the hook is mocked instead.
+vi.mock("framer-motion", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("framer-motion")>()),
+  useReducedMotion: vi.fn(() => false),
+}));
+
+beforeEach(() => {
+  vi.mocked(useReducedMotion).mockReturnValue(false);
+});
 
 function renderStrip(compact = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -82,4 +93,39 @@ test("the strip is a row with a hairline under it and no box", async () => {
     expect(glassClasses(container)).toEqual([]);
     unmount();
   }
+});
+
+// The strip mounts when its forecast lands, a moment after the render, and framer moves
+// it from its initial pose on its next frame after that. A mutation observer reads the
+// strip as it is inserted, which is that first pose. The wait goes through waitFor, the
+// act-safe wait: the forecast landing is a React update.
+function watchFirstPose(): () => { opacity: string; transform: string } | undefined {
+  let pose: { opacity: string; transform: string } | undefined;
+  const seen = new MutationObserver(() => {
+    const strip = document.querySelector<HTMLElement>('[data-fov="weather-strip"]');
+    if (!strip) return;
+    seen.disconnect();
+    pose = { opacity: strip.style.opacity, transform: strip.style.transform };
+  });
+  seen.observe(document.body, { childList: true, subtree: true });
+  return () => pose;
+}
+
+test("the strip arrives with a fade and an 8px rise, and comes to rest", async () => {
+  const firstPose = watchFirstPose();
+  const { container } = renderStrip();
+  await waitFor(() => expect(firstPose()).toEqual({ opacity: "0", transform: "translateY(8px)" }));
+  const strip = container.querySelector<HTMLElement>('[data-fov="weather-strip"]')!;
+  await waitFor(() => expect(strip.style.opacity).toBe("1"));
+  expect(strip.style.transform).toBe("none");
+});
+
+test("under reduced motion the strip fades in without moving", async () => {
+  vi.mocked(useReducedMotion).mockReturnValue(true);
+  const firstPose = watchFirstPose();
+  const { container } = renderStrip();
+  await waitFor(() => expect(firstPose()).toEqual({ opacity: "0", transform: "" }));
+  const strip = container.querySelector<HTMLElement>('[data-fov="weather-strip"]')!;
+  await waitFor(() => expect(strip.style.opacity).toBe("1"));
+  expect(strip.style.transform).toBe("");
 });

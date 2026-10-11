@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import type { Mode } from "../api/types";
 import { useI18n } from "../lib/i18n";
+import { fade, listRow, overlay, staggered, useLeaving, useMotionPreset } from "../lib/motion";
 import { departureLabel } from "../lib/planView";
 import type { OptionView, PlanView } from "../lib/planView";
 import { AdviceCard } from "./AdviceCard";
@@ -10,7 +12,16 @@ export type PanelState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; view: PlanView; selectedMode: Mode; onSelect: (mode: Mode) => void };
+  | {
+      status: "ready";
+      view: PlanView;
+      // The search these results answer. The rows arrive in sequence when it changes,
+      // and only then: choosing another option or language re-renders the same rows,
+      // and nothing arrives again.
+      search: string;
+      selectedMode: Mode;
+      onSelect: (mode: Mode) => void;
+    };
 
 // A clock the panel can render from. Reading Date.now() during render makes the render
 // impure and, worse, freezes it: the panel stays mounted for the whole session, so
@@ -27,8 +38,11 @@ function useNow(periodMs: number): number {
   return now;
 }
 
-function WeatherBanner({ view }: { view: PlanView }) {
+// `place` is the banner's place in the panel's arrival sequence: first over the
+// options, after the last of them on a phone, where it reads under them.
+function WeatherBanner({ view, place }: { view: PlanView; place: number }) {
   const { t } = useI18n();
+  const { initial, animate } = useMotionPreset(staggered(overlay, place));
   const wet = view.rainExpected === true;
   const unknown = view.rainExpected === null;
   // No box: a tag, the rain figure beside it, and the advice as a sentence under both.
@@ -48,7 +62,7 @@ function WeatherBanner({ view }: { view: PlanView }) {
       : "bg-emerald-100 text-emerald-800 dark:bg-night-raised dark:text-night-accent-soft";
   const tag = wet ? t("rainExpected") : unknown ? t("forecastUnavailable") : t("dry");
   return (
-    <div data-fov="weather-banner" className="px-3 py-2">
+    <motion.div data-fov="weather-banner" className="px-3 py-2" initial={initial} animate={animate}>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className={`rounded-md px-1.5 py-0.5 text-xs font-bold ${tagTone}`}>{tag}</span>
         {view.maxRain != null && view.maxRain > 0 && (
@@ -58,7 +72,58 @@ function WeatherBanner({ view }: { view: PlanView }) {
         )}
       </div>
       <p className="mt-1.5 text-sm font-medium text-slate-900 dark:text-night-text">{view.reason}</p>
-    </div>
+    </motion.div>
+  );
+}
+
+// The placeholder while a plan is on its way, and the one part of the panel that leaves
+// with motion: a `fast` fade, over whatever replaces it. For those 150ms it is taken out
+// of the flow (the panel is `relative`), so the results lay out in their final place
+// from their first frame and nothing jumps when the skeleton goes; the panel's height is
+// never animated. It is inert while it leaves, so a tap on a row that has just arrived
+// reaches the row and not the grey box fading over it.
+function Skeleton() {
+  const { exit } = useMotionPreset(fade);
+  const [leaving, leavingProps] = useLeaving();
+  return (
+    <motion.div
+      data-fov="results-skeleton"
+      className={`space-y-4 p-2 ${leaving ? "absolute inset-x-0 top-0" : ""}`}
+      exit={exit}
+      {...leavingProps}
+    >
+      <div className="h-20 animate-pulse rounded-card bg-gray-100 dark:bg-night-surface/70" />
+      <div className="h-40 animate-pulse rounded-card bg-gray-100 dark:bg-night-surface/70" />
+      <div className="h-56 animate-pulse rounded-card bg-gray-100 dark:bg-night-surface/70" />
+    </motion.div>
+  );
+}
+
+// One option row, arriving at its place in the sequence: 40ms after the row above it.
+// It arrives when it mounts, which is when a new set of results does, so choosing
+// another option (a re-render of the same row) replays nothing.
+function OptionRow({
+  place,
+  selected,
+  className,
+  children,
+}: {
+  place: number;
+  selected: boolean;
+  className: string;
+  children: ReactNode;
+}) {
+  const { initial, animate } = useMotionPreset(staggered(listRow, place));
+  return (
+    <motion.li
+      data-fov="option"
+      data-selected={selected ? "true" : "false"}
+      className={className}
+      initial={initial}
+      animate={animate}
+    >
+      {children}
+    </motion.li>
   );
 }
 
@@ -100,51 +165,85 @@ export function ResultsPanel({
   // used. App decides this on the same query that decides the rest of the phone layout.
   narrow?: boolean;
 }) {
+  return (
+    // `relative` holds the leaving skeleton in place over what replaces it.
+    <div className="relative">
+      <AnimatePresence>{state.status === "loading" && <Skeleton key="skeleton" />}</AnimatePresence>
+      <PanelBody state={state} onStartNav={onStartNav} narrow={narrow} />
+    </div>
+  );
+}
+
+// Everything but the skeleton. Each state arrives the way an overlay does, a fade and an
+// 8px rise over `base`, and leaves at once: the skeleton's fade is the only exit in the
+// panel, and a result that lingered would sit under the next one. Each is keyed, so a
+// change of state mounts a new element and plays its arrival.
+function PanelBody({
+  state,
+  onStartNav,
+  narrow,
+}: {
+  state: PanelState;
+  onStartNav?: () => void;
+  narrow: boolean;
+}) {
   const { t } = useI18n();
   const now = useNow(TICK_MS);
+  const { initial, animate } = useMotionPreset(overlay);
+  if (state.status === "loading") return null;
   if (state.status === "idle") {
     return (
-      <div className="p-6 text-gray-500 dark:text-night-subtle">{t("idlePrompt")}</div>
-    );
-  }
-  if (state.status === "loading") {
-    return (
-      <div className="space-y-4 p-2">
-        <div className="h-20 animate-pulse rounded-card bg-gray-100 dark:bg-night-surface/70" />
-        <div className="h-40 animate-pulse rounded-card bg-gray-100 dark:bg-night-surface/70" />
-        <div className="h-56 animate-pulse rounded-card bg-gray-100 dark:bg-night-surface/70" />
-      </div>
+      <motion.div
+        key="idle"
+        className="p-6 text-gray-500 dark:text-night-subtle"
+        initial={initial}
+        animate={animate}
+      >
+        {t("idlePrompt")}
+      </motion.div>
     );
   }
   if (state.status === "error") {
     return (
-      <div className="m-2 rounded-card border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
+      <motion.div
+        key="error"
+        className="m-2 rounded-card border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
+        initial={initial}
+        animate={animate}
+      >
         {state.message}
-      </div>
+      </motion.div>
     );
   }
 
-  const { view, selectedMode, onSelect } = state;
+  const { view, search, selectedMode, onSelect } = state;
   const selected = view.options.find((o) => o.mode === selectedMode) ?? view.options[0];
 
   // All options can be filtered away by the mode chips; say so instead of crashing.
   if (!selected) {
     return (
-      <div className="m-2 rounded-card border border-gray-100 bg-white p-4 text-sm text-gray-500 dark:border-night-rim/20 dark:bg-night-surface dark:text-night-subtle">
+      <motion.div
+        key="none"
+        className="m-2 rounded-card border border-gray-100 bg-white p-4 text-sm text-gray-500 dark:border-night-rim/20 dark:bg-night-surface dark:text-night-subtle"
+        initial={initial}
+        animate={animate}
+      >
         {t("noOptionsMatch")}
-      </div>
+      </motion.div>
     );
   }
 
   return (
-    <div className="space-y-3 p-2">
+    // Keyed on the search: a new set of results is a new block, and its rows arrive in
+    // sequence. Anything else that re-renders it keeps the rows that are there.
+    <div key={`ready:${search}`} className="space-y-3 p-2">
       {/* On anything wider than a phone the banner leads: there is room for the advice
           and the options at once. On a phone there is not — the strip and this banner
           were 219.5px of a 272px column, which left 52.9px of one option row visible
           when the plan landed and none of the other two. The banner is the sentence
           behind the "Best" badge the first row already carries, so on a phone it reads
           after the options rather than instead of them. Nothing is dropped. */}
-      {!narrow && <WeatherBanner view={view} />}
+      {!narrow && <WeatherBanner view={view} place={0} />}
       {/* The options, stacked. Each one is a full-width row, and the selected row and
           the itinerary it opens are one block rather than a card above a list
           somewhere below it: choosing an option and reading it are the same place.
@@ -166,10 +265,10 @@ export function ResultsPanel({
           // whichever one is chosen.
           const nextSelected = view.options[i + 1]?.mode === selected.mode;
           return (
-            <li
+            <OptionRow
               key={option.mode}
-              data-fov="option"
-              data-selected={isSelected ? "true" : "false"}
+              place={i}
+              selected={isSelected}
               // The chosen block's tint is light enough that every line of text on it
               // keeps AA (measured in browser-tests/specs/results.checks.mjs); the bar
               // is an inset shadow so it follows the corner radius without clipping
@@ -197,11 +296,11 @@ export function ResultsPanel({
                   onStartNav={onStartNav}
                 />
               )}
-            </li>
+            </OptionRow>
           );
         })}
       </ul>
-      {narrow && <WeatherBanner view={view} />}
+      {narrow && <WeatherBanner view={view} place={view.options.length} />}
     </div>
   );
 }
@@ -255,7 +354,7 @@ function SelectedDetails({
         // this one opened. The 44px row is the departure line doing double duty — it
         // has to be on screen anyway, and a chevron beside it is what says the steps
         // are under it.
-        <details className="group/steps" data-fov="option-steps">
+        <details className="disclosure group/steps" data-fov="option-steps">
           <summary
             data-fov="steps-toggle"
             className="flex min-h-[44px] cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden"
