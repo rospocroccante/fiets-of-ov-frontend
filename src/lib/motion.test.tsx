@@ -11,11 +11,13 @@ import {
   STAGGER,
   STAGGER_MAX,
   dropdown,
+  fade,
   overlay,
   prefersReducedMotion,
   reducedPreset,
   sheet,
   staggerDelay,
+  useLeaving,
   useMotionPreset,
 } from "./motion";
 
@@ -129,6 +131,14 @@ describe("presets", () => {
     });
   });
 
+  test("fade: the overlay's fade without its travel, for a scrim under a card", () => {
+    expect(fade).toEqual({
+      initial: { opacity: 0 },
+      animate: { opacity: 1, transition: overlay.animate.transition },
+      exit: { opacity: 0, transition: overlay.exit.transition },
+    });
+  });
+
   test("sheet: fades and rises 14px in over base, fades and drops 14px out over fast", () => {
     expect(sheet).toEqual({
       initial: { opacity: 0, y: 14 },
@@ -149,6 +159,14 @@ describe("presets", () => {
     const el = screen.getByTestId("m");
     await waitFor(() => expect(el.style.opacity).toBe("1"));
     expect(el.style.transform).toBe("none");
+  });
+
+  test("fade spreads onto a motion element, comes to rest fully shown and never moves", async () => {
+    render(<motion.div data-testid="m" {...fade} />);
+    const el = screen.getByTestId("m");
+    expect(el.style.transform).toBe("");
+    await waitFor(() => expect(el.style.opacity).toBe("1"));
+    expect(el.style.transform).toBe("");
   });
 
   test("the dropdown's transform origin is its top edge", async () => {
@@ -177,6 +195,7 @@ describe("presets", () => {
 describe("reduced forms", () => {
   const presets = [
     ["overlay", overlay],
+    ["fade", fade],
     ["dropdown", dropdown],
     ["sheet", sheet],
   ] as const;
@@ -284,5 +303,52 @@ describe("index.css", () => {
     expect(body).toMatch(/animation-iteration-count:\s*1 !important;/);
     expect(body).toMatch(/transition-duration:\s*0\.01ms !important;/);
     expect(body).toMatch(/scroll-behavior:\s*auto !important;/);
+  });
+});
+
+describe("useLeaving", () => {
+  function Probe() {
+    const [leaving, props] = useLeaving();
+    return <motion.div data-testid="probe" data-leaving={String(leaving)} {...overlay} {...props} />;
+  }
+
+  test("outside AnimatePresence an element is present and carries nothing extra", () => {
+    render(<Probe />);
+    const el = screen.getByTestId("probe");
+    expect(el).toHaveAttribute("data-leaving", "false");
+    expect(el).not.toHaveAttribute("inert");
+    expect(el).not.toHaveAttribute("aria-hidden");
+    expect(el.style.pointerEvents).toBe("");
+  });
+
+  // The exit keeps the element in the DOM; for that time it must be nobody's control.
+  test("while it plays its exit it is inert, hidden and untouchable, and then it is gone", async () => {
+    const { rerender } = render(<AnimatePresence>{<Probe key="p" />}</AnimatePresence>);
+    const el = screen.getByTestId("probe");
+    expect(el).toHaveAttribute("data-leaving", "false");
+
+    rerender(<AnimatePresence>{null}</AnimatePresence>);
+
+    expect(el).toBeInTheDocument();
+    expect(el).toHaveAttribute("data-leaving", "true");
+    expect(el).toHaveAttribute("inert", "");
+    expect(el).toHaveAttribute("aria-hidden", "true");
+    expect(el.style.pointerEvents).toBe("none");
+    await waitFor(() => expect(el).not.toBeInTheDocument());
+  });
+
+  test("brought back during its exit, it is live again", () => {
+    const { rerender } = render(<AnimatePresence>{<Probe key="p" />}</AnimatePresence>);
+    const el = screen.getByTestId("probe");
+    rerender(<AnimatePresence>{null}</AnimatePresence>);
+    expect(el).toHaveAttribute("inert", "");
+
+    rerender(<AnimatePresence>{<Probe key="p" />}</AnimatePresence>);
+
+    expect(screen.getByTestId("probe")).toBe(el);
+    expect(el).toHaveAttribute("data-leaving", "false");
+    expect(el).not.toHaveAttribute("inert");
+    expect(el).not.toHaveAttribute("aria-hidden");
+    expect(el.style.pointerEvents).toBe("");
   });
 });

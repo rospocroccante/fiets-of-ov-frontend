@@ -338,7 +338,7 @@ test("the notice names every third party that receives what the user typed or pi
   expect(dialog).toHaveTextContent(/PLACEHOLDER/);
 });
 
-test("the notice is in Dutch when the app is, and closes on Escape", () => {
+test("the notice is in Dutch when the app is, and closes on Escape", async () => {
   window.localStorage.setItem("fov.lang.v1", "nl");
   renderApp();
   openPrivacyFromHome();
@@ -368,6 +368,8 @@ test("the notice is in Dutch when the app is, and closes on Escape", () => {
 
   fireEvent.keyDown(window, { key: "Escape" });
   expect(screen.queryByRole("dialog")).toBeNull();
+  // Out of reach at once, and out of the document once its exit has played.
+  await waitFor(() => expect(dialog).not.toBeInTheDocument());
 });
 
 // --- Skip link --------------------------------------------------------------------

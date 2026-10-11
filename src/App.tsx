@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { motion, useTransform, useMotionValueEvent } from "framer-motion";
+import { AnimatePresence, motion, useTransform, useMotionValueEvent } from "framer-motion";
 import { EndpointField } from "./components/EndpointField";
 import { MobileSearchSheet, SearchEntryButton } from "./components/MobileSearch";
 import type { HistoryEntry } from "./components/PlaceInput";
@@ -268,13 +268,14 @@ export default function App() {
     setSelectedMode(null);
     submitted();
     // Searching from the phone sheet cannot start the morph here. toMap() is a *smooth*
-    // scroll, and the sheet's scroll-restore — the cleanup of the effect that locks the
-    // body, which fires as it unmounts — is an instant window.scrollTo(0, y) with the
-    // offset the sheet was opened at. The instant one lands second and cancels the
-    // smooth one: the plan ran, three options rendered, and the app sat on the home
-    // stage indefinitely. So the sheet closes first and the morph waits for it to be
-    // gone; the effect below is what runs after that. Every other caller (the desktop
-    // pill, the popular trips, a saved place) has no sheet mounted and goes straight.
+    // scroll, and the sheet's scroll-restore (the cleanup of the effect that locks the
+    // body, which runs as the sheet starts to leave) is an instant window.scrollTo(0, y)
+    // with the offset the sheet was opened at. The instant one lands second and cancels
+    // the smooth one: the plan ran, three options rendered, and the app sat on the home
+    // stage indefinitely. So the sheet closes first and the morph waits for it to let go
+    // of the page; the effect below is what runs after that. Every other caller (the
+    // desktop pill, the popular trips, a saved place) has no sheet open and goes
+    // straight.
     if (searchOpen) {
       mapAfterSheet.current = true;
       setSearchOpen(false);
@@ -608,13 +609,19 @@ export default function App() {
   // there when the screen closes, or a keyboard user is dropped at the top of the page.
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchFocusField, setSearchFocusField] = useState<"from" | "to">("from");
+  // One key per opening. A sheet closed and reopened within its exit is then a fresh
+  // one, with the focus, scroll lock and field state of an opening, while the old copy
+  // finishes leaving underneath it, inert. A fixed key would hand back the leaving copy
+  // instead, which never mounts again and so never moves focus in.
+  const [searchSession, setSearchSession] = useState(0);
   const searchTriggerRef = useRef<HTMLButtonElement>(null);
   const searchWasOpen = useRef(false);
   // Set by commitSearch when the search came from the sheet: the morph it asked for is
-  // owed once the sheet has unmounted. React runs an unmounting component's effect
-  // cleanups before it runs anyone's effects for that same commit, so by the time this
-  // fires the sheet's scroll-restore has already happened and the smooth scroll below
-  // is the last word on where the page goes.
+  // owed once the sheet has let go of the page. The sheet stays on screen for its exit,
+  // but it releases its scroll lock in the commit that closes it (MobileSearchSheet,
+  // `leaving`), and React runs every effect cleanup of a commit before it runs anyone's
+  // effects for it, so by the time this fires the sheet's scroll-restore has already
+  // happened and the smooth scroll below is the last word on where the page goes.
   const mapAfterSheet = useRef(false);
   useEffect(() => {
     if (searchWasOpen.current && !searchOpen) {
@@ -637,6 +644,7 @@ export default function App() {
     // The keyboard opens on the field that still needs something. With a whole trip
     // already entered the reason to come back is nearly always a new destination.
     setSearchFocusField(fromText.trim() ? "to" : "from");
+    setSearchSession((n) => n + 1);
     setSearchOpen(true);
   }
 
@@ -816,39 +824,48 @@ export default function App() {
                   />
                 </Suspense>
                 )}
-                {navigating && navProgress && (
-                  <NavigationOverlay
-                    next={navProgress.next}
-                    toNext={navProgress.toNext}
-                    remaining={navProgress.remaining}
-                    etaMinutes={etaMinutes}
-                    onExit={() => setNavigating(false)}
-                  />
-                )}
+                {/* The banner and the place card arrive and leave (overlay in
+                    lib/motion); each keeps one key, so new content in an open one is an
+                    update, not a second card. */}
+                <AnimatePresence>
+                  {navigating && navProgress && (
+                    <NavigationOverlay
+                      key="navigation"
+                      next={navProgress.next}
+                      toNext={navProgress.toNext}
+                      remaining={navProgress.remaining}
+                      etaMinutes={etaMinutes}
+                      onExit={() => setNavigating(false)}
+                    />
+                  )}
+                </AnimatePresence>
                 {farFromRoute && (
                   <div className="absolute left-3 top-24 z-[1000] rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-amber-700 shadow dark:bg-night-surface/95 dark:text-amber-300">
                     {t("farFromRoute")}
                   </div>
                 )}
-                {placeInfo && (
-                  <PlaceInfoCard
-                    place={placeInfo}
-                    saved={isSaved(placeInfo.lat, placeInfo.lon)}
-                    onToggleSave={() =>
-                      toggleSaved({
-                        name: placeInfo.name,
-                        label: placeInfo.address ?? placeInfo.name,
-                        lat: placeInfo.lat,
-                        lon: placeInfo.lon,
-                      })
-                    }
-                    onDirections={infoDirections}
-                    onClose={() => {
-                      placeSeq.current++;
-                      setPlaceInfo(null);
-                    }}
-                  />
-                )}
+                <AnimatePresence>
+                  {placeInfo && (
+                    <PlaceInfoCard
+                      key="place-info"
+                      place={placeInfo}
+                      saved={isSaved(placeInfo.lat, placeInfo.lon)}
+                      onToggleSave={() =>
+                        toggleSaved({
+                          name: placeInfo.name,
+                          label: placeInfo.address ?? placeInfo.name,
+                          lat: placeInfo.lat,
+                          lon: placeInfo.lon,
+                        })
+                      }
+                      onDirections={infoDirections}
+                      onClose={() => {
+                        placeSeq.current++;
+                        setPlaceInfo(null);
+                      }}
+                    />
+                  )}
+                </AnimatePresence>
               </section>
             )}
           </main>
@@ -1193,30 +1210,36 @@ export default function App() {
 
       {/* Outside both morph stages: one of the two is always inert, and a dialog
           opened from the inert one would be unreachable. The phone search screen is
-          here for the same reason — it opens from the pill, which belongs to neither. */}
-      {isPhone && searchOpen && (
-        <MobileSearchSheet
-          fromText={fromText}
-          toText={toText}
-          onFromText={typeFromText}
-          onToText={typeToText}
-          onSelectFrom={selectFrom}
-          onSelectTo={selectTo}
-          onLocateFrom={locateFrom}
-          onLocateTo={locateTo}
-          beginLocateFrom={beginLocateFrom}
-          beginLocateTo={beginLocateTo}
-          savedPlaces={savedPlaces}
-          history={endpointHistory}
-          onPickHistoryFrom={pickHistoryFrom}
-          onPickHistoryTo={pickHistoryTo}
-          onSwap={swap}
-          onSubmit={commitSearch}
-          onClose={() => setSearchOpen(false)}
-          focusField={searchFocusField}
-        />
-      )}
-      {privacyOpen && <PrivacyNotice onClose={() => setPrivacyOpen(false)} />}
+          here for the same reason — it opens from the pill, which belongs to neither.
+          Both arrive and leave through AnimatePresence (lib/motion: sheet, overlay). */}
+      <AnimatePresence>
+        {isPhone && searchOpen && (
+          <MobileSearchSheet
+            key={`search-${searchSession}`}
+            fromText={fromText}
+            toText={toText}
+            onFromText={typeFromText}
+            onToText={typeToText}
+            onSelectFrom={selectFrom}
+            onSelectTo={selectTo}
+            onLocateFrom={locateFrom}
+            onLocateTo={locateTo}
+            beginLocateFrom={beginLocateFrom}
+            beginLocateTo={beginLocateTo}
+            savedPlaces={savedPlaces}
+            history={endpointHistory}
+            onPickHistoryFrom={pickHistoryFrom}
+            onPickHistoryTo={pickHistoryTo}
+            onSwap={swap}
+            onSubmit={commitSearch}
+            onClose={() => setSearchOpen(false)}
+            focusField={searchFocusField}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {privacyOpen && <PrivacyNotice key="privacy" onClose={() => setPrivacyOpen(false)} />}
+      </AnimatePresence>
 
       {!isLive() && (
         <div className="pointer-events-none fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))] rounded-full bg-brand px-3 py-1 text-xs text-white">

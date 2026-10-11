@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useI18n } from "../lib/i18n";
+import { dropdown, useLeaving, useMotionPreset } from "../lib/motion";
 
 // The header's real menu: theme switch, language switch, local-data actions, the
 // privacy notice, and the about block that names every source by name. The map carries
@@ -90,18 +92,12 @@ export function HeaderMenu({
       >
         {t("menu")} &#9776;
       </button>
-      {open && (
-        <>
-          {/* max-h + overflow, or the menu runs off a phone on its side. Measured at
-              844x390: the panel is 423px tall in English and 453px in Dutch against a
-              390px screen, anchored under a 48px header — 82px in English and 113px in
-              Dutch below the fold, `overflow: visible`, inside a sticky box that clips
-              at the viewport. The privacy row was the last thing reachable and the whole
-              about block (the only place the map's sources are named) was gone. 6rem is
-              the tallest this panel is ever anchored at, so the clamp only bites where
-              the panel would otherwise overflow: at 390x844 it is 780px against a 453px
-              panel and nothing changes. */}
-          <div className="absolute right-0 top-full z-50 mt-1 max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-64 overflow-y-auto overscroll-contain rounded-card border border-gray-100 bg-white py-2 shadow-lg dark:border-night-rim/20 dark:bg-night-raised">
+      {/* The panel arrives and leaves; the scrim below does neither. It is invisible,
+          so there is nothing of it to see go, and a full-screen button that outlived
+          the menu by an exit's length would swallow the next tap on the page. */}
+      <AnimatePresence>
+        {open && (
+          <MenuPanel key="menu">
             <button type="button" aria-pressed={dark} className={item} onClick={onToggleTheme}>
               <span
                 aria-hidden="true"
@@ -154,18 +150,46 @@ export function HeaderMenu({
                 {t("aboutText")}
               </p>
             </div>
-          </div>
-          {/* Last in the DOM, and therefore the last Tab stop before the trap wraps: the
-              scrim is also the explicit "close" the cycle ends on. It used to come
-              first, which put a full-screen invisible button ahead of every row. */}
-          <button
-            type="button"
-            aria-label={t("closeMenu")}
-            className="fixed inset-0 z-40 cursor-default"
-            onClick={close}
-          />
-        </>
+          </MenuPanel>
+        )}
+      </AnimatePresence>
+      {/* Last in the DOM, and therefore the last Tab stop before the trap wraps: the
+          scrim is also the explicit "close" the cycle ends on. It used to come first,
+          which put a full-screen invisible button ahead of every row. */}
+      {open && (
+        <button
+          type="button"
+          aria-label={t("closeMenu")}
+          className="fixed inset-0 z-40 cursor-default"
+          onClick={close}
+        />
       )}
     </nav>
+  );
+}
+
+// The open panel, as a component of its own so that it can ask AnimatePresence whether
+// it is leaving. A closed menu stays on screen for its exit, and for that time it is
+// inert: a tap or a Tab must not land on a row of a menu that has already closed.
+//
+// max-h + overflow, or the menu runs off a phone on its side. Measured at 844x390: the
+// panel is 423px tall in English and 453px in Dutch against a 390px screen, anchored
+// under a 48px header — 82px in English and 113px in Dutch below the fold, `overflow:
+// visible`, inside a sticky box that clips at the viewport. The privacy row was the last
+// thing reachable and the whole about block (the only place the map's sources are
+// named) was gone. 6rem is the tallest this panel is ever anchored at, so the clamp only
+// bites where the panel would otherwise overflow: at 390x844 it is 780px against a 453px
+// panel and nothing changes.
+function MenuPanel({ children }: { children: ReactNode }) {
+  const motionProps = useMotionPreset(dropdown);
+  const [, leavingProps] = useLeaving();
+  return (
+    <motion.div
+      {...motionProps}
+      {...leavingProps}
+      className="absolute right-0 top-full z-50 mt-1 max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-64 overflow-y-auto overscroll-contain rounded-card border border-gray-100 bg-white py-2 shadow-lg dark:border-night-rim/20 dark:bg-night-raised"
+    >
+      {children}
+    </motion.div>
   );
 }

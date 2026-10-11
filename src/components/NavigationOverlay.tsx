@@ -1,8 +1,11 @@
+import { motion } from "framer-motion";
 import { useI18n } from "../lib/i18n";
+import { overlay, useLeaving, useMotionPreset } from "../lib/motion";
 import type { NavManeuver } from "../lib/routeProgress";
 
 // Maneuver banner shown over the map while navigating: next-turn glyph + distance,
-// street line, exit button, and a slim remaining-distance/ETA sub-row.
+// street line, exit button, and a slim remaining-distance/ETA sub-row. App mounts it
+// inside AnimatePresence: it rises into place and drops away, inert while it does.
 
 // OTP relative directions plus the synthetic BOARD/ALIGHT/ARRIVE from routeProgress;
 // anything unmapped reads as "keep going" rather than crashing the banner.
@@ -47,8 +50,13 @@ export function NavigationOverlay({
   // next === null only past the final ARRIVE maneuver: the trip is done.
   const arrived = next === null;
   const glyph = arrived ? "sports_score" : (GLYPH[next.direction] ?? "straight");
+  const motionProps = useMotionPreset(overlay);
+  const [, leavingProps] = useLeaving();
   return (
-    <div className="absolute left-3 right-3 top-3 z-[1000] rounded-card border border-slate-100 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-night-rim/20 dark:bg-night-raised/95">
+    <motion.div
+      {...motionProps}
+      {...leavingProps}
+      className="absolute left-3 right-3 top-3 z-[1000] rounded-card border border-slate-100 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-night-rim/20 dark:bg-night-raised/95">
       <div className="flex items-center gap-3">
         <span
           aria-hidden="true"
@@ -80,6 +88,6 @@ export function NavigationOverlay({
         <span aria-hidden="true">·</span>
         <span>~{etaMinutes} min</span>
       </div>
-    </div>
+    </motion.div>
   );
 }

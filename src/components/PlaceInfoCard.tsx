@@ -1,4 +1,6 @@
+import { motion } from "framer-motion";
 import { useI18n } from "../lib/i18n";
+import { overlay, useLeaving, useMotionPreset } from "../lib/motion";
 
 export interface PlaceInfo {
   name: string;
@@ -8,7 +10,8 @@ export interface PlaceInfo {
 }
 
 // Maps-style place card, shown over the map after "What's here?" (or a saved chip):
-// name, address, coordinates, save star, and directions shortcuts.
+// name, address, coordinates, save star, and directions shortcuts. App mounts it inside
+// AnimatePresence: it rises into place and drops away, inert while it does.
 export function PlaceInfoCard({
   place,
   saved,
@@ -23,8 +26,13 @@ export function PlaceInfoCard({
   onClose: () => void;
 }) {
   const { t } = useI18n();
+  const motionProps = useMotionPreset(overlay);
+  const [, leavingProps] = useLeaving();
   return (
-    <div className="absolute bottom-3 left-3 z-[1000] w-72 rounded-card border border-slate-100 bg-white/95 p-4 shadow-lg backdrop-blur dark:border-night-rim/20 dark:bg-night-raised/95">
+    <motion.div
+      {...motionProps}
+      {...leavingProps}
+      className="absolute bottom-3 left-3 z-[1000] w-72 rounded-card border border-slate-100 bg-white/95 p-4 shadow-lg backdrop-blur dark:border-night-rim/20 dark:bg-night-raised/95">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="truncate text-[15px] font-semibold text-slate-900 dark:text-night-text">{place.name}</h3>
@@ -83,6 +91,6 @@ export function PlaceInfoCard({
           {t("toHere")}
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }

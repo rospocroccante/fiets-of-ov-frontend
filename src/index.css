@@ -117,36 +117,6 @@ summary:focus-visible {
    closer, so releasing the wheel always lands on a fully working screen. */
 html { scroll-snap-type: y proximity; }
 
-/* The phone search screen arrives over the app rather than replacing it in place, so
-   it gets the one cue that says "this is a new surface, and it came from below": a
-   short rise and fade. 180ms is under the threshold where a transition starts to feel
-   like waiting. Reduced motion drops it entirely — the screen still appears, just
-   without the travel.
-
-   It keeps a reduced-motion rule of its own, because the global one at the end of
-   this file falls one frame short here. That rule shortens an animation to 0.01ms,
-   and Chrome still paints the first frame at the `from` keyframe. Measured with the
-   global rule alone, the sheet's first frame was opacity 0 and 14px low, and it
-   rested only from the second; with `animation: none` it rests from the first. */
-@keyframes fov-sheet-in {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-.fov-sheet {
-  animation: fov-sheet-in 180ms ease-out;
-}
-@media (prefers-reduced-motion: reduce) {
-  .fov-sheet {
-    animation: none;
-  }
-}
-
 /* Maps-style POI labels: a coloured category badge with the place name beside it,
    white halo so the text stays readable over any basemap. Rendered as Leaflet
    divIcons. */
@@ -321,16 +291,15 @@ html { scroll-snap-type: y proximity; }
    is the rule that holds reduced motion still; a `motion-safe:` prefix on a class is
    only a second guard. Each transition and animation still runs, for 0.01ms and once,
    so the transitionend and animationend events code waits on still fire (Leaflet ends
-   a zoom on transitionend, PlaceInput re-measures its list on animationend). Smooth
-   scrolling becomes a jump.
+   a zoom on transitionend). Smooth scrolling becomes a jump.
 
    One frame still shows: Chrome paints the first frame of a keyframe animation at its
-   `from` keyframe. Where that differs from the resting pose, the component keeps an
-   `animation: none` of its own (the phone sheet above does). The aurora needs none.
-   Its blobs carry negative delays and no fill mode, so their 0.01ms run is over before
-   it starts and each blob rests at its untransformed pose from the first frame, as
-   `animation: none` had it; the one blob with no delay starts from aurora-a's identity
-   keyframe, so its first frame is that same pose.
+   `from` keyframe. Where that differs from the resting pose, the component needs an
+   `animation: none` of its own. The aurora needs none. Its blobs carry negative delays
+   and no fill mode, so their 0.01ms run is over before it starts and each blob rests at
+   its untransformed pose from the first frame, as `animation: none` had it; the one blob
+   with no delay starts from aurora-a's identity keyframe, so its first frame is that
+   same pose.
 
    `.animate-spin` is the one exception. The spinner is the only sign that a location
    fix is still on its way, and a frozen one reads as a hung app.

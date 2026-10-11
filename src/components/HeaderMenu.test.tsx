@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { HeaderMenu } from "./HeaderMenu";
 import { I18nProvider } from "../lib/i18n";
 
@@ -63,14 +63,15 @@ test("the theme row names the theme it switches to and delegates to the parent",
   expect(onToggleTheme).toHaveBeenCalledTimes(1);
 });
 
-test("the clear rows call their handler and close the menu", () => {
+test("the clear rows call their handler and close the menu", async () => {
   const { onClearRecents } = renderMenu();
   fireEvent.click(screen.getByRole("button", { name: /clear recent searches/i }));
   expect(onClearRecents).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole("button", { name: /clear saved places/i })).toBeNull();
+  await waitFor(() => expect(screen.queryByText(/clear saved places/i)).toBeNull());
 });
 
-test("Escape closes the menu and hands focus back to the button that opened it", () => {
+test("Escape closes the menu and hands focus back to the button that opened it", async () => {
   renderMenu();
   expect(screen.getByRole("button", { name: /clear saved places/i })).toBeInTheDocument();
 
@@ -80,9 +81,10 @@ test("Escape closes the menu and hands focus back to the button that opened it",
   // Focus must not be left on a button that no longer exists, or the next Tab starts
   // from the top of the document.
   expect(screen.getByRole("button", { name: /^menu/i })).toHaveFocus();
+  await waitFor(() => expect(screen.queryByText(/clear saved places/i)).toBeNull());
 });
 
-test("the row that closes the menu on a tap outside comes last, and gives focus back", () => {
+test("the row that closes the menu on a tap outside comes last, and gives focus back", async () => {
   renderMenu();
   // The scrim is a real button with a name, so a screen reader has a way out too. It
   // used to be the FIRST child of the open menu, which put a full-screen invisible
@@ -95,6 +97,7 @@ test("the row that closes the menu on a tap outside comes last, and gives focus 
 
   expect(screen.queryByRole("button", { name: /clear saved places/i })).toBeNull();
   expect(screen.getByRole("button", { name: /^menu/i })).toHaveFocus();
+  await waitFor(() => expect(screen.queryByText(/clear saved places/i)).toBeNull());
 });
 
 test("every row that closes the menu hands focus back to the trigger", () => {
@@ -134,6 +137,30 @@ test("Tab is trapped inside the open menu", () => {
   expect(stops[stops.length - 1]).toHaveFocus();
 });
 
+test("a closing menu is out of reach while it leaves, and then removed", async () => {
+  renderMenu();
+  const trigger = screen.getByRole("button", { name: /^menu/i });
+  const panel = screen.getByRole("button", { name: /clear saved places/i }).parentElement as HTMLElement;
+  expect(panel).not.toHaveAttribute("inert");
+
+  fireEvent.keyDown(window, { key: "Escape" });
+
+  // The trigger reports the menu closed and has focus back in the same keypress.
+  expect(trigger).toHaveAttribute("aria-expanded", "false");
+  expect(trigger).toHaveFocus();
+  // The scrim goes at once: it is invisible, so it has no exit to play, and a
+  // full-screen button that outlived the menu would eat the next tap on the page.
+  expect(screen.queryByLabelText(/close menu/i)).toBeNull();
+  // The panel is on screen for its exit, and for that time nothing can reach a row.
+  expect(panel).toBeInTheDocument();
+  expect(panel).toHaveAttribute("aria-hidden", "true");
+  expect(panel).toHaveAttribute("inert", "");
+  expect(panel).toHaveStyle({ pointerEvents: "none" });
+
+  await waitFor(() => expect(panel).not.toBeInTheDocument());
+  expect(screen.queryByText(/clear saved places/i)).toBeNull();
+});
+
 test("a key other than Escape leaves the menu open", () => {
   renderMenu();
   fireEvent.keyDown(window, { key: "a" });
@@ -150,13 +177,14 @@ test("the trigger reports its expanded state, and every row is a 44px touch targ
   expect(trigger).toHaveClass("min-h-[44px]");
 });
 
-test("the privacy row opens the notice and closes the menu", () => {
+test("the privacy row opens the notice and closes the menu", async () => {
   const { onOpenPrivacy } = renderMenu();
   const row = screen.getByRole("button", { name: /^privacy$/i });
   expect(row).toHaveClass("min-h-[44px]");
   fireEvent.click(row);
   expect(onOpenPrivacy).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole("button", { name: /^privacy$/i })).toBeNull();
+  await waitFor(() => expect(row).not.toBeInTheDocument());
 });
 
 test("the about block names every source the app actually calls, Photon included", () => {

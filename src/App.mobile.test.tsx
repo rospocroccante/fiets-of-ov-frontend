@@ -285,7 +285,7 @@ test("the phone search screen is where a trip gets planned, end to end", async (
   }
 });
 
-test("the phone search screen takes focus, and every way out gives it back", () => {
+test("the phone search screen takes focus, and every way out gives it back", async () => {
   const restore = phoneViewport();
   try {
     renderApp();
@@ -307,6 +307,7 @@ test("the phone search screen takes focus, and every way out gives it back", () 
     fireEvent.click(within(dialog).getByRole("button", { name: /close search/i }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(pillEntry());
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
   } finally {
     restore();
   }
@@ -484,7 +485,7 @@ test("half way through the morph the invisible home takes no taps", async () => 
 // cannot say is how wide, how tall, in front of what, or reachable by a finger — those
 // live in browser-tests/, which measures them in a real Chrome at real device metrics.
 
-test("the page behind the phone search screen is locked, inert and hidden", () => {
+test("the page behind the phone search screen is locked, inert and hidden", async () => {
   const restore = phoneViewport();
   try {
     renderApp();
@@ -501,32 +502,106 @@ test("the page behind the phone search screen is locked, inert and hidden", () =
       expect(stage).toHaveAttribute("aria-hidden", "true");
     }
 
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /close search/i }));
+    const sheet = screen.getByRole("dialog");
+    fireEvent.click(within(sheet).getByRole("button", { name: /close search/i }));
+    // All of it in the same click, while the screen is still playing its exit.
+    expect(sheet).toBeInTheDocument();
     expect(document.body.style.overflow).toBe("");
     for (const stage of [home, map]) {
       expect(stage).not.toHaveAttribute("aria-hidden");
     }
     expect(home).not.toHaveAttribute("inert");
+    await waitFor(() => expect(sheet).not.toBeInTheDocument());
   } finally {
     restore();
   }
 });
 
-test("closing the phone search screen puts the scroll back where it was", () => {
+test("closing the phone search screen puts the scroll back where it was", async () => {
   const restore = phoneViewport();
   try {
     renderApp();
     Object.defineProperty(window, "scrollY", { configurable: true, value: 485 });
     fireEvent.click(pillEntry());
     (window.scrollTo as ReturnType<typeof vi.fn>).mockClear();
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /close search/i }));
+    const sheet = screen.getByRole("dialog");
+    fireEvent.click(within(sheet).getByRole("button", { name: /close search/i }));
     // Making the viewport unscrollable is allowed to clamp the offset, so the offset is
-    // recorded on the way in and written back on the way out.
+    // recorded on the way in and written back on the way out: in the click that closes
+    // the screen, not after its exit, which is too late for a search's morph to the map.
+    expect(sheet).toBeInTheDocument();
     expect(window.scrollTo).toHaveBeenCalledWith(0, 485);
+    await waitFor(() => expect(sheet).not.toBeInTheDocument());
   } finally {
     // scrollY is the morph's only input; a test that leaves it parked mid-morph decides
     // the next test's stage, and the suite runs in a random order.
     Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+    restore();
+  }
+});
+
+test("a closing phone search screen is out of reach for its exit, and then removed", async () => {
+  const restore = phoneViewport();
+  try {
+    renderApp();
+    fireEvent.click(pillEntry());
+    const sheet = document.querySelector('[data-fov="search-sheet"]') as HTMLElement;
+    expect(sheet).not.toHaveAttribute("inert");
+
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /close search/i }));
+
+    // On screen for its exit, and nothing in it answers: the page behind is live again
+    // (the test above) and focus is back on the bar, so the screen must not be the
+    // dialog a screen reader finds or the surface a tap lands on.
+    expect(sheet).toBeInTheDocument();
+    expect(sheet).toHaveAttribute("aria-hidden", "true");
+    expect(sheet).toHaveAttribute("inert", "");
+    expect(sheet).toHaveStyle({ pointerEvents: "none" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(pillEntry());
+
+    await waitFor(() => expect(sheet).not.toBeInTheDocument());
+  } finally {
+    restore();
+  }
+});
+
+test("a search screen reopened during the last one's exit is a new one, not the leaving copy", async () => {
+  const restore = phoneViewport();
+  try {
+    renderApp();
+    // Held on to: behind an open screen the bar is hidden, and a role query cannot see it.
+    const entry = pillEntry();
+    fireEvent.click(entry);
+    fireEvent.change(within(screen.getByRole("dialog")).getByPlaceholderText("From"), {
+      target: { value: "Centraal" },
+    });
+    const first = document.querySelector('[data-fov="search-sheet"]') as HTMLElement;
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.click(entry);
+
+    // Two copies in the document for the length of the exit, and only one is live.
+    const sheets = Array.from(document.querySelectorAll<HTMLElement>('[data-fov="search-sheet"]'));
+    expect(sheets).toHaveLength(2);
+    const second = sheets.find((s) => s !== first) as HTMLElement;
+    expect(first).toHaveAttribute("inert", "");
+    expect(second).not.toHaveAttribute("inert");
+    expect(second).not.toHaveAttribute("aria-hidden");
+    // The live one is the dialog, named by its own heading rather than the old one's.
+    const dialog = screen.getByRole("dialog", { name: /plan your trip/i });
+    expect(dialog).toBe(second);
+    expect(second.getAttribute("aria-labelledby")).not.toBe(first.getAttribute("aria-labelledby"));
+    // An opening moves focus in, and the page behind is locked again.
+    expect(document.activeElement).toBe(within(second).getByPlaceholderText("To"));
+    expect(document.body.style.overflow).toBe("hidden");
+    // Only the new screen's trap is listening: a Tab from outside lands in it.
+    entry.focus();
+    fireEvent.keyDown(window, { key: "Tab" });
+    expect(second.contains(document.activeElement)).toBe(true);
+
+    await waitFor(() => expect(first).not.toBeInTheDocument());
+    expect(second).toBeInTheDocument();
+  } finally {
     restore();
   }
 });

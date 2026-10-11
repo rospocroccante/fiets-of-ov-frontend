@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { transformProps, useReducedMotion, type TargetAndTransition } from "framer-motion";
+import { transformProps, useIsPresent, useReducedMotion, type TargetAndTransition } from "framer-motion";
 
 // The app's motion, defined once: durations, curves, the list stagger and the framer
 // presets for surfaces that arrive and leave. Anything that moves takes its timing
@@ -76,6 +76,15 @@ export const overlay = {
   exit: { opacity: 0, y: 8, transition: leave },
 } satisfies MotionPreset;
 
+// What arrives with an overlay but must not move with it. A dialog's scrim covers the
+// whole screen, and an 8px rise would open a strip of bare page along its top edge for
+// as long as the rise lasted. The overlay's fade, without the travel.
+export const fade = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1, transition: arrive },
+  exit: { opacity: 0, transition: leave },
+} satisfies MotionPreset;
+
 // Menus and suggestion lists hang from their trigger, so they grow from their top
 // edge (originY 0) and drop 4px into place, and leave by lifting back 4px.
 export const dropdown = {
@@ -85,8 +94,8 @@ export const dropdown = {
 } satisfies MotionPreset;
 
 // The phone search sheet comes over the app from below. It keeps the 14px rise of the
-// CSS keyframe the sheet uses today (fov-sheet-in, 180ms ease-out); `base` with the
-// enter curve is the closest the shared tokens get to that feel.
+// CSS keyframe it used to arrive with (180ms ease-out); `base` with the enter curve is
+// the closest the shared tokens get to that feel.
 export const sheet = {
   initial: { opacity: 0, y: 14 },
   animate: { opacity: 1, y: 0, transition: arrive },
@@ -155,4 +164,30 @@ export function reducedPreset(preset: MotionPreset): MotionPreset {
 export function useMotionPreset(preset: MotionPreset): MotionPreset {
   const reduce = useReducedMotion();
   return useMemo(() => (reduce ? reducedPreset(preset) : preset), [reduce, preset]);
+}
+
+// The props an element carries while it plays its exit. AnimatePresence keeps a closed
+// overlay in the DOM until its exit has finished, so for those 150ms it is on screen but
+// no longer the live control: its rows and buttons belong to a state that has ended, and
+// the next copy may already be on screen above it. inert takes the subtree out of the
+// focus order and the accessibility tree and makes the browser hit-test straight through
+// it; aria-hidden and pointer-events say the same to code that does not implement inert,
+// jsdom among it, so a test that asks for "the dialog" finds the live one or none.
+//
+// Call it in the component AnimatePresence renders, since it reads that component's
+// presence, and spread the props on its root. Anything the component does to the whole
+// window (a key handler, a scroll lock) should stop when `leaving` turns true, not when
+// the exit ends. Outside AnimatePresence an element is always present.
+export interface LeavingProps {
+  inert?: "";
+  "aria-hidden"?: true;
+  style?: { pointerEvents: "none" };
+}
+
+const LEAVING: LeavingProps = { inert: "", "aria-hidden": true, style: { pointerEvents: "none" } };
+const PRESENT: LeavingProps = {};
+
+export function useLeaving(): [leaving: boolean, props: LeavingProps] {
+  const leaving = !useIsPresent();
+  return [leaving, leaving ? LEAVING : PRESENT];
 }
