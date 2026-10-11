@@ -31,7 +31,7 @@
 
 import { sleep } from "../lib/chrome.mjs";
 import { PROBE, TRIP_SEED } from "../lib/measure.mjs";
-import { decodePng, patch, colourCount } from "../lib/pixels.mjs";
+import { decodePng, patch, colourCount, BAND_MAX_SHARE } from "../lib/pixels.mjs";
 
 const PILL = '[data-fov="search-pill"]';
 const MORE = '[data-fov="filter-more"]';
@@ -56,16 +56,21 @@ const NO_WEBGL = `
 `;
 
 // Measured on this branch, 390x844, over Amsterdam at the app's opening zoom:
-//   dark style    L 0.005 to 0.015 over ground, water and built-up blocks
-//   bright        L 0.59 to 0.80 (its water, #b1d1e2, is the floor of that range)
-//   night page    L 0.021 (night.bg #20282E), night surface L 0.033
+//   night style   ground L 0.021 (hsl(208,60%,16%), #102A41); water L 0.60 (#afd0e4,
+//                 hsl(202,49%,79%), pale on the owner's call). A 28 px square across a
+//                 canal averages L 0.12 to 0.19, so the dark ceiling is held against
+//                 `ground`: the square with its water and shore blend left out
+//                 (lib/pixels), which measures L 0.021 to 0.025
+//   bright        L 0.59 to 0.80 (its water, #b1d1e2, is the floor of that range); its
+//                 ground alone L 0.76 to 0.82
+//   night page    L 0.012 (night.bg #0C1E32)
 // The floors sit between the two styles: a map wearing the wrong one fails them.
 //
 // They do NOT catch a map that never painted, and it is worth being exact about why,
 // because the obvious reading is wrong. What shows through where no basemap drew is the
 // Leaflet container's own background, not the page: leaflet.css:261 ships
 // `.leaflet-container { background: #ddd }`, which measures L 0.7231 and sails past the
-// light floor, and in dark index.css paints it night.shade (#171D21, L 0.0138) which
+// light floor, and in dark index.css paints it night.shade (#050E1A, L 0.004) which
 // sails past the dark one. Both are flat. The guard against a dead map, in either theme,
 // is COLOUR_FLOOR below: a drawn map has streets, water and labels in it, a background
 // has one colour. Keep it on every scenario that samples pixels.
@@ -206,6 +211,22 @@ async function sample(page, geometry, { size = 28 } = {}) {
 
 const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
+// How dark the night map is, read past its water. Night water is pale on purpose, so a
+// square half on a canal averages bright over navy ground; `ground` leaves the water and
+// the shore's antialias band out (lib/pixels). That is only honest while the band is a
+// thin edge, so a square that is mostly band fails here instead of being read.
+function nightGround(checks, at, patches) {
+  for (const p of patches) {
+    checks.atMost(
+      `${at}: the square at (${p.x}, ${p.y}) reads as ground and water, not shore blend`,
+      p.bandShare,
+      BAND_MAX_SHARE,
+      `band ${round(p.bandShare)}, water ${round(p.waterShare)}, mean ${p.hex}`,
+    );
+  }
+  return mean(patches.map((p) => p.ground).filter((g) => g !== null));
+}
+
 // Is there a MAP in the map, or only a colour? The luminance floors cannot answer this
 // (see the note on them above): a container with no tiles on it is flat #ddd by day and
 // flat night.shade at night, and both pass. Streets, water, buildings and labels are
@@ -286,19 +307,27 @@ export const scenarios = [
             3,
             `${patches.length} of 5 candidate squares were free of route, markers and chips`,
           );
-          const lum = mean(patches.map((p) => p.luminance));
-          seen[theme] = lum;
-
           if (theme === "dark") {
+            seen.dark = nightGround(ctx.checks, at, patches);
             for (const p of patches) {
               ctx.checks.atMost(
                 `${at}: the map at (${p.x}, ${p.y}) is painted dark`,
-                p.luminance,
+                p.ground ?? 0,
                 DARK_MAX_LUMINANCE,
-                `${p.hex}, L=${round(p.luminance)} (night.bg is L=0.021, bright measures L 0.59 to 0.80)`,
+                `ground L=${round(p.ground)} beside ${round(p.waterShare)} water, square mean ${p.hex} ` +
+                  `L=${round(p.luminance)} (night.bg #0C1E32 is L 0.012, water #afd0e4 L 0.60, ` +
+                  `bright ground L 0.76 to 0.82)`,
               );
             }
+            // The owner kept night water pale. Darkening it would quietly "fix" the mean,
+            // so the water this view crosses has to be found, at hsl(202,49%,79%).
+            ctx.checks.ok(
+              `${at}: the canals are the owner's pale water, #afd0e4 within 12 per channel`,
+              patches.some((p) => p.waterShare >= 0.1),
+              `water share per square: ${patches.map((p) => round(p.waterShare)).join(", ")}`,
+            );
           } else {
+            seen.light = mean(patches.map((p) => p.luminance));
             for (const p of patches) {
               ctx.checks.atLeast(
                 `${at}: the map at (${p.x}, ${p.y}) is painted light`,
@@ -320,7 +349,7 @@ export const scenarios = [
         "390x844: the night basemap is far darker than the daylight one",
         seen.light / Math.max(seen.dark, 1e-6),
         10,
-        `light L=${round(seen.light)}, dark L=${round(seen.dark)}, ratio ${round(seen.light / Math.max(seen.dark, 1e-6))}x`,
+        `light L=${round(seen.light)}, dark ground L=${round(seen.dark)}, ratio ${round(seen.light / Math.max(seen.dark, 1e-6))}x`,
       );
     },
   },
@@ -362,6 +391,12 @@ export const scenarios = [
         `);
         if (!toggle) throw new Error("no dark-mode control in the header menu");
         await page.tap(toggle.x + toggle.w / 2, toggle.y + toggle.h / 2);
+        // The new theme opens as a circle from the switch (a view transition), and while
+        // it runs the browser hit-tests the root instead of the page, so a tap made then
+        // reaches nothing. Wait for the circle to finish before the next one.
+        await page.waitFor(`!document.documentElement.classList.contains("theme-switching")`, {
+          label: "the theme reveal to finish",
+        });
         // The menu stays open after the switch, by design (every label flips in place).
         // Close it the way it was opened, or it sits over the map the screenshot is of.
         await page.tap(menu.x + menu.w / 2, menu.y + menu.h / 2);
@@ -391,13 +426,14 @@ export const scenarios = [
         const darkPatches = await sample(page, await mapSpots(page));
         checkDrawn(checks, "after the toggle", darkPatches);
         const lightL = mean(lightPatches.map((p) => p.luminance));
-        const darkL = mean(darkPatches.map((p) => p.luminance));
+        const darkL = nightGround(checks, "after the toggle", darkPatches);
         checks.atMost(
           `the map went dark where it was light`,
           darkL,
           DARK_MAX_LUMINANCE,
           `before ${lightPatches.map((p) => p.hex).join(",")} L=${round(lightL)}, ` +
-            `after ${darkPatches.map((p) => p.hex).join(",")} L=${round(darkL)}`,
+            `after ${darkPatches.map((p) => p.hex).join(",")} ground L=${round(darkL)} ` +
+            `(night.bg #0C1E32 is L 0.012, water #afd0e4 L 0.60 is left out)`,
         );
         checks.atLeast(`the swap actually changed the pixels`, lightL / Math.max(darkL, 1e-6), 10, `${round(lightL / Math.max(darkL, 1e-6))}x`);
       } finally {

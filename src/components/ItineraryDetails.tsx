@@ -1,7 +1,7 @@
 import type { Itinerary, PlanLeg } from "../api/types";
 import { translate, useI18n } from "../lib/i18n";
 import type { Lang } from "../lib/i18n";
-import { modeColor } from "../lib/modeColors";
+import { chipInk, modeColor } from "../lib/modeColors";
 import { transitLabel } from "../lib/planView";
 import { DEFAULT_BODY_MASS_KG, legDistanceM, tripMetrics } from "../lib/tripMetrics";
 
@@ -19,34 +19,17 @@ function legTitle(leg: PlanLeg, lang: Lang): string {
   return `${transitLabel(leg.mode, lang)} ${leg.route ?? ""}`.trim();
 }
 
-// WCAG relative luminance of a "#rrggbb".
-function luminance(hex: string): number {
-  const [r, g, b] = [1, 3, 5].map((i) => {
-    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
-    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-// Ink for a chip filled with the leg's own line colour. The chip colour has to stay
-// exactly the colour of that leg on the map, so the readable half of the pair is the
-// text: white on the walking grey measured 2.56:1 and on the bike green 3.77:1, both
-// well under AA for 12px. Picking whichever of near-black and white contrasts better
-// against the fill keeps every mode at 4.7:1 or above without moving a single hue.
-const CHIP_DARK = "#111827";
-export function chipInk(background: string): string {
-  const bg = luminance(background);
-  const onWhite = 1.05 / (bg + 0.05);
-  const onDark = (bg + 0.05) / (luminance(CHIP_DARK) + 0.05);
-  return onDark > onWhite ? CHIP_DARK : "#ffffff";
-}
-
 /**
  * The selected option's itinerary, step by step.
  *
  * No card chrome of its own: it is rendered inside the option it belongs to, and a
  * card drawn inside a card reads as two separate things when it is meant to read as
  * one continuous one.
+ *
+ * That option is drawn on a brand-light tint, so the secondary text here
+ * is gray-600 by day: gray-500 measured 4.83:1 on the white card this used to sit in
+ * and 4.38:1 on the tint, under AA for its 12px lines. At night the tint is a step of
+ * the navy ramp and `night-subtle` keeps its floor on it.
  */
 export function ItineraryDetails({
   itinerary,
@@ -63,7 +46,7 @@ export function ItineraryDetails({
     <div data-fov="itinerary" className="mt-3">
       <div className="mb-3 flex items-baseline justify-between">
         {heading && <h4 className="font-semibold dark:text-night-text">{t("stepByStep")}</h4>}
-        <span className={`text-sm text-gray-500 dark:text-night-subtle ${heading ? "" : "ml-auto"}`}>
+        <span className={`text-sm text-gray-600 dark:text-night-subtle ${heading ? "" : "ml-auto"}`}>
           {hhmm(itinerary.start_time)} – {hhmm(itinerary.end_time)} · {itinerary.minutes} min
         </span>
       </div>
@@ -89,7 +72,7 @@ export function ItineraryDetails({
                 {leg.from.name || t("start")} <span className="text-gray-400 dark:text-night-faint">→</span>{" "}
                 {leg.to.name || t("destination")}
               </p>
-              <p className="text-xs text-gray-500 dark:text-night-subtle">
+              <p className="text-xs text-gray-600 dark:text-night-subtle">
                 {hhmm(leg.start_time)}–{hhmm(leg.end_time)} · {leg.minutes} min
                 {leg.distance_m != null && ` · ${Math.round(leg.distance_m)} m`}
                 {leg.headsign && ` · ${t("towardsX", { x: leg.headsign })}`}
@@ -118,13 +101,14 @@ function MetricNotes({ itinerary }: { itinerary: Itinerary }) {
   const straightLine = itinerary.legs.some((l) => l.distance_m == null && legDistanceM(l) != null);
   const greenTraction = itinerary.legs.some((l) => GREEN_TRACTION_MODES.has(l.mode));
   return (
-    <details className="group mt-3 border-t border-gray-100 dark:border-white/10">
+    <details className="disclosure group mt-3 border-t border-gray-100 dark:border-night-rim/20">
       {/* A 44px row, not a 16px line of text. `list-none` plus the webkit rule drops
-          the native triangle so the chevron can carry the state instead; the rotation
-          is motion-safe, like every other transition in the app. */}
+          the native triangle so the chevron can carry the state instead. The rotation
+          is `motion-safe:`, a second guard: the global reduced-motion rule in
+          index.css is what makes every transition in the app instant, prefixed or not. */}
       <summary
         data-fov="estimates-toggle"
-        className="flex min-h-[44px] cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-night-subtle [&::-webkit-details-marker]:hidden"
+        className="flex min-h-[44px] cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-night-subtle [&::-webkit-details-marker]:hidden"
       >
         {/* An inline chevron rather than a font glyph: the icon font is subset from the
             list in index.css and a new ligature there means regenerating the .woff2. */}
@@ -142,7 +126,7 @@ function MetricNotes({ itinerary }: { itinerary: Itinerary }) {
         </svg>
         {t("estimatesTitle")}
       </summary>
-      <ul className="mb-2 space-y-1.5 text-xs leading-snug text-gray-500 dark:text-night-subtle">
+      <ul className="mb-2 space-y-1.5 text-xs leading-snug text-gray-600 dark:text-night-subtle">
         <li>{fareEur == null ? t("estimatesNoFare") : t("estimatesFare")}</li>
         <li>{t("estimatesKcal", { kg: DEFAULT_BODY_MASS_KG })}</li>
         <li>{t("estimatesCo2")}</li>

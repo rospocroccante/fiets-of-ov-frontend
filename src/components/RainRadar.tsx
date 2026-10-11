@@ -105,7 +105,7 @@ export function RadarReadout({
               className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
                 layers[k]
                   ? "bg-brand text-white dark:bg-night-accent dark:text-night-bg"
-                  : "text-gray-500 hover:bg-gray-100 dark:text-night-muted dark:hover:bg-white/10"
+                  : "text-gray-500 hover:bg-gray-100 dark:text-night-muted dark:hover:bg-night-hover/75"
               }`}
             >
               {t(LAYER_KEY[k])}

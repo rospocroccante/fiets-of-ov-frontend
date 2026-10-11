@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { AnimatePresence } from "framer-motion";
 import { PrivacyNotice } from "./PrivacyNotice";
 import { I18nProvider } from "../lib/i18n";
+import { waitForExit } from "../test/exit";
 
 // aria-modal="true" tells assistive technology that the page behind the scrim does not
 // exist for now. The markup declared it while Tab walked straight out of the dialog and
@@ -85,4 +88,43 @@ test("Escape closes it, and Close closes it", () => {
 
   fireEvent.click(screen.getAllByRole("button", { name: /close the privacy notice/i })[0]);
   expect(onClose).toHaveBeenCalledTimes(2);
+});
+
+// App mounts the notice inside AnimatePresence, so a closed notice is still in the
+// document for its exit. This is that mount, with a control on the page behind.
+function LeavingHarness() {
+  const [open, setOpen] = useState(true);
+  return (
+    <I18nProvider>
+      <button type="button">a control on the page behind</button>
+      <AnimatePresence>{open && <PrivacyNotice key="privacy" onClose={() => setOpen(false)} />}</AnimatePresence>
+    </I18nProvider>
+  );
+}
+
+test("a closing notice is out of reach for its whole exit, and then removed", async () => {
+  render(<LeavingHarness />);
+  const dialog = screen.getByRole("dialog");
+  const root = dialog.parentElement as HTMLElement;
+  expect(root).not.toHaveAttribute("inert");
+
+  fireEvent.keyDown(window, { key: "Escape" });
+
+  // Still in the document while it fades and drops, and nothing in it can be reached:
+  // not the dialog, not its Close button, not the scrim behind it.
+  expect(dialog).toBeInTheDocument();
+  expect(root).toHaveAttribute("aria-hidden", "true");
+  expect(root).toHaveAttribute("inert", "");
+  expect(root).toHaveStyle({ pointerEvents: "none" });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.queryAllByRole("button", { name: /close the privacy notice/i })).toHaveLength(0);
+
+  // The trap is off as soon as the notice closes. A Tab from the page behind stays
+  // there instead of being pulled into a dialog that has gone.
+  const behind = screen.getByRole("button", { name: /page behind/i });
+  behind.focus();
+  fireEvent.keyDown(behind, { key: "Tab" });
+  expect(document.activeElement).toBe(behind);
+
+  await waitForExit(dialog);
 });

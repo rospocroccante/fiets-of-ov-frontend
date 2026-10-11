@@ -1,7 +1,16 @@
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, vi } from "vitest";
+import { MotionGlobalConfig } from "framer-motion";
 import { resetMapChunkState } from "../components/lazyMap";
 import { __resetMapMock } from "../__mocks__/react-leaflet";
+
+// Framer animations finish at once in the suite: every motion value jumps to its target
+// and an element leaving through AnimatePresence is removed within a frame instead of
+// after its exit (about 175ms measured here for a 150ms exit). Tests assert where things
+// end up, never how they get there, and a removal that waits out a real-time animation
+// passes or fails on how busy the machine is. Scroll-linked motion values (the morph)
+// are not animations and are unaffected.
+MotionGlobalConfig.skipAnimations = true;
 
 // Everything a test can leave behind for the next one, put back before each case.
 //

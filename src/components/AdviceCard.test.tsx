@@ -1,8 +1,12 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { AdviceCard } from "./AdviceCard";
 import { I18nProvider } from "../lib/i18n";
+import { buildPlanView } from "../lib/planView";
 import type { OptionView } from "../lib/planView";
+import { chipInk, modeColor } from "../lib/modeColors";
+import { mockPlanFor } from "../api/mock";
 import type { Itinerary } from "../api/types";
+import { glassClasses } from "../test/glass";
 
 // The Dutch test writes the language into localStorage, which outlives the test that
 // wrote it. Clearing it in the test body only clears it when that test passes; a
@@ -185,4 +189,98 @@ test("the metrics are Dutch in a Dutch session, money included", () => {
   expect(screen.getByText("45 kcal")).toBeInTheDocument();
   expect(screen.getByText("96 g CO2")).toBeInTheDocument();
   expect(screen.getByText("12 min in de regen")).toBeInTheDocument();
+});
+
+// The leg bar. One segment per leg, as wide as that leg's share of the minutes, in the
+// colour the leg has on the map and on its step-by-step chip, with the ink that fill
+// can carry. jsdom has no layout, so widths are measured in browser-tests/; what it can
+// read is that every segment is wired to the right numbers and the right colours. That
+// chipInk clears AA on every mode colour is pinned in ItineraryDetails.test.tsx.
+describe("the leg bar", () => {
+  const mixed = buildPlanView(mockPlanFor("A", "Zuid"));
+  const bikeAndRide = mixed.options.find((o) => o.mode === "bike_and_ride")!;
+  const transitMixed = mixed.options.find((o) => o.mode === "transit")!;
+
+  function segments(container: HTMLElement): HTMLElement[] {
+    return [...container.querySelectorAll<HTMLElement>('[data-fov="leg-segment"]')];
+  }
+  // Thin space, middle dot, thin space between a name and its minutes.
+  const dot = "\u2009\u00b7\u2009";
+
+  test("draws one segment per leg, grown by its minutes and filled with its mode colour", () => {
+    const { container } = render(<AdviceCard option={transitMixed} selected={false} onSelect={() => {}} />);
+    const legs = transitMixed.itinerary.legs;
+    const segs = segments(container);
+    expect(segs).toHaveLength(legs.length);
+    segs.forEach((seg, i) => {
+      const fill = modeColor(legs[i].mode);
+      expect(seg).toHaveStyle({ flexGrow: String(legs[i].minutes), backgroundColor: fill, color: chipInk(fill) });
+    });
+  });
+
+  test("labels each segment with its mode or line and its minutes, a walk with minutes alone", () => {
+    const { container } = render(<AdviceCard option={bikeAndRide} selected onSelect={() => {}} />);
+    expect(segments(container).map((s) => s.textContent)).toEqual([`Bike${dot}6`, `M52${dot}7`, "4"]);
+    const transit = render(<AdviceCard option={transitMixed} selected={false} onSelect={() => {}} />);
+    expect(segments(transit.container).map((s) => s.textContent)).toEqual(["4", `M52${dot}8`, "3", `Tram 1${dot}9`, "5"]);
+  });
+
+  test("the labels are Dutch in a Dutch session", () => {
+    window.localStorage.setItem("fov.lang.v1", "nl");
+    const nl = buildPlanView(mockPlanFor("A", "Zuid"), "nl").options.find((o) => o.mode === "bike_and_ride")!;
+    const { container } = render(
+      <I18nProvider>
+        <AdviceCard option={nl} selected onSelect={() => {}} />
+      </I18nProvider>,
+    );
+    expect(segments(container).map((s) => s.textContent)).toEqual([`Fiets${dot}6`, `M52${dot}7`, "4"]);
+  });
+
+  test("is hidden from assistive tech, which reads the route in words instead", () => {
+    const { container } = render(<AdviceCard option={transitMixed} selected={false} onSelect={() => {}} />);
+    const bar = container.querySelector('[data-fov="leg-bar"]')!;
+    expect(bar).toHaveAttribute("aria-hidden", "true");
+    // The written route stays in the row: off the screen, because the bar draws it,
+    // and in the button's accessible name.
+    const summary = screen.getByText("Metro 52 -> Tram 1");
+    expect(summary).toHaveClass("sr-only");
+    expect(screen.getByRole("button", { name: /Metro 52 -> Tram 1/ })).toBeInTheDocument();
+  });
+
+  test("an itinerary with no legs draws no bar and keeps its route on screen", () => {
+    const { container } = render(<AdviceCard option={transit} selected={false} onSelect={() => {}} />);
+    expect(container.querySelector('[data-fov="leg-bar"]')).toBeNull();
+    expect(screen.getByText("Metro 52 -> Tram 1")).not.toHaveClass("sr-only");
+  });
+
+  test("a label that cannot fit wraps out of its segment whole instead of being cut", () => {
+    const { container } = render(<AdviceCard option={transitMixed} selected={false} onSelect={() => {}} />);
+    for (const seg of segments(container)) {
+      // A one-line wrapping row as tall as the bar, clipped: a strut that holds the
+      // line open, and a label that never breaks inside itself.
+      expect(seg).toHaveClass("flex-wrap", "overflow-hidden", "h-[22px]", "min-w-[4px]", "basis-0");
+      const [strut, label] = [...seg.children];
+      expect(strut).toHaveClass("w-0", "h-[22px]");
+      expect(label).toHaveClass("whitespace-nowrap", "text-[11px]", "font-bold");
+    }
+  });
+});
+
+test("the header puts the total on the right, large, and the Best tag is a tag", () => {
+  render(<AdviceCard option={recommended} selected onSelect={() => {}} />);
+  expect(screen.getByText("24 min")).toHaveClass("text-xl", "font-bold", "tabular-nums", "whitespace-nowrap");
+  const best = screen.getByText("Best");
+  expect(best).toHaveClass("rounded-md", "font-bold");
+  expect(best).not.toHaveClass("rounded-full");
+  // At night the signage pairing, never the translucent accent-deep that read olive.
+  expect(best).toHaveClass("dark:bg-night-accent", "dark:text-night-bg");
+  expect(best.className).not.toMatch(/accent-deep/);
+});
+
+test("the row wears no glass, and a pointer only tints the row it is not on yet", () => {
+  const { container, rerender } = render(<AdviceCard option={recommended} selected={false} onSelect={() => {}} />);
+  expect(glassClasses(container)).toEqual([]);
+  expect(screen.getByRole("button")).toHaveClass("hover:bg-slate-900/5", "dark:hover:bg-night-hover/60");
+  rerender(<AdviceCard option={recommended} selected onSelect={() => {}} />);
+  expect(screen.getByRole("button").className).not.toMatch(/hover:bg-/);
 });

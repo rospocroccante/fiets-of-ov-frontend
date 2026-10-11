@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { AnimatePresence } from "framer-motion";
 import { NavigationOverlay } from "./NavigationOverlay";
 import type { NavManeuver } from "../lib/routeProgress";
+import { waitForExit } from "../test/exit";
 
 const right: NavManeuver = { at: 650, direction: "RIGHT", street: "Prinsengracht", legIndex: 0 };
 
@@ -43,4 +46,39 @@ test("Exit button fires onExit", () => {
   render(<NavigationOverlay next={right} toNext={100} remaining={100} etaMinutes={1} onExit={onExit} />);
   fireEvent.click(screen.getByRole("button", { name: /exit navigation/i }));
   expect(onExit).toHaveBeenCalledTimes(1);
+});
+
+test("inside AnimatePresence, an exited banner is out of reach until it has gone", async () => {
+  // How App mounts it: Exit ends navigation and the banner plays its exit.
+  function Harness() {
+    const [navigating, setNavigating] = useState(true);
+    return (
+      <AnimatePresence>
+        {navigating && (
+          <NavigationOverlay
+            key="navigation"
+            next={right}
+            toNext={100}
+            remaining={100}
+            etaMinutes={1}
+            onExit={() => setNavigating(false)}
+          />
+        )}
+      </AnimatePresence>
+    );
+  }
+  const { container } = render(<Harness />);
+  const banner = container.firstElementChild as HTMLElement;
+  expect(banner).toHaveTextContent("Prinsengracht");
+  expect(banner).not.toHaveAttribute("inert");
+
+  fireEvent.click(screen.getByRole("button", { name: /exit navigation/i }));
+
+  expect(banner).toBeInTheDocument();
+  expect(banner).toHaveAttribute("aria-hidden", "true");
+  expect(banner).toHaveAttribute("inert", "");
+  expect(banner).toHaveStyle({ pointerEvents: "none" });
+  expect(screen.queryByRole("button", { name: /exit navigation/i })).toBeNull();
+
+  await waitForExit(banner);
 });

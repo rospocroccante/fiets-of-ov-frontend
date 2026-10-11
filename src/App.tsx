@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { motion, useTransform, useMotionValueEvent } from "framer-motion";
+import { AnimatePresence, motion, useTransform, useMotionValueEvent } from "framer-motion";
 import { EndpointField } from "./components/EndpointField";
 import { MobileSearchSheet, SearchEntryButton } from "./components/MobileSearch";
 import type { HistoryEntry } from "./components/PlaceInput";
@@ -26,7 +26,7 @@ import { useRecentTrips } from "./hooks/useRecentTrips";
 import type { RecentTrip } from "./hooks/useRecentTrips";
 import { useSavedPlaces } from "./hooks/useSavedPlaces";
 import type { SavedPlace } from "./hooks/useSavedPlaces";
-import { useTheme } from "./hooks/useTheme";
+import { centreOf, useTheme } from "./hooks/useTheme";
 import { useTripPlan } from "./hooks/useTripPlan";
 import { useWakeLock } from "./hooks/useWakeLock";
 import { translate, useI18n } from "./lib/i18n";
@@ -268,13 +268,14 @@ export default function App() {
     setSelectedMode(null);
     submitted();
     // Searching from the phone sheet cannot start the morph here. toMap() is a *smooth*
-    // scroll, and the sheet's scroll-restore — the cleanup of the effect that locks the
-    // body, which fires as it unmounts — is an instant window.scrollTo(0, y) with the
-    // offset the sheet was opened at. The instant one lands second and cancels the
-    // smooth one: the plan ran, three options rendered, and the app sat on the home
-    // stage indefinitely. So the sheet closes first and the morph waits for it to be
-    // gone; the effect below is what runs after that. Every other caller (the desktop
-    // pill, the popular trips, a saved place) has no sheet mounted and goes straight.
+    // scroll, and the sheet's scroll-restore (the cleanup of the effect that locks the
+    // body, which runs as the sheet starts to leave) is an instant window.scrollTo(0, y)
+    // with the offset the sheet was opened at. The instant one lands second and cancels
+    // the smooth one: the plan ran, three options rendered, and the app sat on the home
+    // stage indefinitely. So the sheet closes first and the morph waits for it to let go
+    // of the page; the effect below is what runs after that. Every other caller (the
+    // desktop pill, the popular trips, a saved place) has no sheet open and goes
+    // straight.
     if (searchOpen) {
       mapAfterSheet.current = true;
       setSearchOpen(false);
@@ -520,8 +521,14 @@ export default function App() {
     if (navigating && view.status === "error") setNavigating(false);
   }, [navigating, view.status]);
 
+  // Which search the results on screen answer: the trip as the plan query keys it, so it
+  // changes exactly when a new set of results can arrive. The panel's rows arrive in
+  // sequence when it does. A choice of option or of language re-renders the same rows,
+  // and so does a filter chip for the rows it leaves in place; only a row the chip
+  // brings back arrives, on its own.
+  const search = trip ? JSON.stringify([trip.from, trip.to, trip.submit ?? 0]) : "";
   const panel: PanelState = filteredView
-    ? { status: "ready", view: filteredView, selectedMode: effectiveMode, onSelect: setSelectedMode }
+    ? { status: "ready", view: filteredView, search, selectedMode: effectiveMode, onSelect: setSelectedMode }
     : view.status === "error"
       ? { status: "error", message: view.message ?? "error" }
       : view.status === "loading"
@@ -608,13 +615,19 @@ export default function App() {
   // there when the screen closes, or a keyboard user is dropped at the top of the page.
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchFocusField, setSearchFocusField] = useState<"from" | "to">("from");
+  // One key per opening. A sheet closed and reopened within its exit is then a fresh
+  // one, with the focus, scroll lock and field state of an opening, while the old copy
+  // finishes leaving underneath it, inert. A fixed key would hand back the leaving copy
+  // instead, which never mounts again and so never moves focus in.
+  const [searchSession, setSearchSession] = useState(0);
   const searchTriggerRef = useRef<HTMLButtonElement>(null);
   const searchWasOpen = useRef(false);
   // Set by commitSearch when the search came from the sheet: the morph it asked for is
-  // owed once the sheet has unmounted. React runs an unmounting component's effect
-  // cleanups before it runs anyone's effects for that same commit, so by the time this
-  // fires the sheet's scroll-restore has already happened and the smooth scroll below
-  // is the last word on where the page goes.
+  // owed once the sheet has let go of the page. The sheet stays on screen for its exit,
+  // but it releases its scroll lock in the commit that closes it (MobileSearchSheet,
+  // `leaving`), and React runs every effect cleanup of a commit before it runs anyone's
+  // effects for it, so by the time this fires the sheet's scroll-restore has already
+  // happened and the smooth scroll below is the last word on where the page goes.
   const mapAfterSheet = useRef(false);
   useEffect(() => {
     if (searchWasOpen.current && !searchOpen) {
@@ -637,6 +650,7 @@ export default function App() {
     // The keyboard opens on the field that still needs something. With a whole trip
     // already entered the reason to come back is nearly always a new destination.
     setSearchFocusField(fromText.trim() ? "to" : "from");
+    setSearchSession((n) => n + 1);
     setSearchOpen(true);
   }
 
@@ -816,39 +830,48 @@ export default function App() {
                   />
                 </Suspense>
                 )}
-                {navigating && navProgress && (
-                  <NavigationOverlay
-                    next={navProgress.next}
-                    toNext={navProgress.toNext}
-                    remaining={navProgress.remaining}
-                    etaMinutes={etaMinutes}
-                    onExit={() => setNavigating(false)}
-                  />
-                )}
+                {/* The banner and the place card arrive and leave (overlay in
+                    lib/motion); each keeps one key, so new content in an open one is an
+                    update, not a second card. */}
+                <AnimatePresence>
+                  {navigating && navProgress && (
+                    <NavigationOverlay
+                      key="navigation"
+                      next={navProgress.next}
+                      toNext={navProgress.toNext}
+                      remaining={navProgress.remaining}
+                      etaMinutes={etaMinutes}
+                      onExit={() => setNavigating(false)}
+                    />
+                  )}
+                </AnimatePresence>
                 {farFromRoute && (
                   <div className="absolute left-3 top-24 z-[1000] rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-amber-700 shadow dark:bg-night-surface/95 dark:text-amber-300">
                     {t("farFromRoute")}
                   </div>
                 )}
-                {placeInfo && (
-                  <PlaceInfoCard
-                    place={placeInfo}
-                    saved={isSaved(placeInfo.lat, placeInfo.lon)}
-                    onToggleSave={() =>
-                      toggleSaved({
-                        name: placeInfo.name,
-                        label: placeInfo.address ?? placeInfo.name,
-                        lat: placeInfo.lat,
-                        lon: placeInfo.lon,
-                      })
-                    }
-                    onDirections={infoDirections}
-                    onClose={() => {
-                      placeSeq.current++;
-                      setPlaceInfo(null);
-                    }}
-                  />
-                )}
+                <AnimatePresence>
+                  {placeInfo && (
+                    <PlaceInfoCard
+                      key="place-info"
+                      place={placeInfo}
+                      saved={isSaved(placeInfo.lat, placeInfo.lon)}
+                      onToggleSave={() =>
+                        toggleSaved({
+                          name: placeInfo.name,
+                          label: placeInfo.address ?? placeInfo.name,
+                          lat: placeInfo.lat,
+                          lon: placeInfo.lon,
+                        })
+                      }
+                      onDirections={infoDirections}
+                      onClose={() => {
+                        placeSeq.current++;
+                        setPlaceInfo(null);
+                      }}
+                    />
+                  )}
+                </AnimatePresence>
               </section>
             )}
           </main>
@@ -912,7 +935,7 @@ export default function App() {
               type="button"
               aria-label={t("switchLanguage")}
               onClick={toggleLang}
-              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 px-3 text-xs font-semibold leading-[20px] text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-night-accent dark:hover:bg-white/20"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 px-3 text-xs font-semibold leading-[20px] text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-night-rim/20 dark:bg-night-surface/70 dark:text-night-accent dark:hover:bg-night-hover/95"
             >
               {lang === "en" ? "NL" : "EN"}
             </button>
@@ -920,8 +943,8 @@ export default function App() {
               type="button"
               aria-label={dark ? t("switchToLight") : t("switchToDark")}
               aria-pressed={dark}
-              onClick={toggleTheme}
-              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-night-accent dark:hover:bg-white/20"
+              onClick={(e) => toggleTheme(centreOf(e.currentTarget))}
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-night-rim/20 dark:bg-night-surface/70 dark:text-night-accent dark:hover:bg-night-hover/95"
             >
               <span aria-hidden="true" className="material-symbols-rounded block text-[20px] leading-none">
                 {dark ? "light_mode" : "dark_mode"}
@@ -953,12 +976,18 @@ export default function App() {
               byte-for-byte the single flow it has always been. */}
           <div className={isPhone ? "min-h-0 flex-1 overflow-y-auto overflow-x-hidden" : "contents"}>
           <section className="mx-auto mt-6 w-full max-w-4xl px-6 text-left sm:mt-[7.5rem]">
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-night-text">{t("popularTrips")}</h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <h2 className="mb-2 text-xl font-semibold text-slate-900 dark:text-night-text">{t("popularTrips")}</h2>
+            {/* Two columns from `sm` up, never four: each line carries both of its names
+                side by side, and a quarter of max-w-4xl cannot hold "Amsterdam Zuid" and
+                "Amsterdamse Poort" on one line. */}
+            <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
               {POPULAR.map((trip, i) => {
-                // Clean frosted card. Colour is confined to one small accent (the
-                // origin dot and the connector line) so the grid stays calm and the
-                // vivid background does the talking.
+                // Each trip is a metro line: a track in the trip's own line colour
+                // between two stations, its two ends named under it. The colour is the
+                // line's identity, the way 50 to 53 are Amsterdam's metro lines, and
+                // it is the only colour in the row. No card: these were four frosted
+                // cards with a ring, a shadow and a hover lift, decorated with a dot, a
+                // fading rule and a chequered flag that said nothing about the trip.
                 const accent = CARD_ACCENTS[i % CARD_ACCENTS.length];
                 return (
                   <button
@@ -966,29 +995,25 @@ export default function App() {
                     data-fov="popular-trip"
                     onClick={() => pickPopular(trip)}
                     aria-label={`${trip.from} → ${trip.to}`}
-                    className="group flex flex-col gap-3 rounded-card border border-white/60 bg-white/70 p-5 text-left shadow-sm ring-1 ring-slate-900/5 backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-white/90 hover:shadow-lg dark:border-white/10 dark:bg-white/10 dark:ring-white/5 dark:hover:bg-white/15"
+                    className="flex min-h-[44px] flex-col rounded-card px-1 py-3 text-left transition-colors hover:bg-slate-900/5 dark:hover:bg-night-hover/60"
                   >
-                    {/* Mini route: origin dot, connector, destination flag. */}
-                    <span className="flex items-center gap-2">
+                    {/* 4px track, 14px stations filled with the page colour and ringed
+                        in the text colour. The stations are centred on the track's
+                        ends, so the track is inset by half a station. */}
+                    <span aria-hidden="true" className="relative mx-[7px] block h-3.5 self-stretch">
                       <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        className="absolute inset-x-0 top-[5px] h-1 rounded-full"
                         style={{ backgroundColor: accent }}
                       />
-                      <span
-                        className="h-px flex-1"
-                        style={{ backgroundImage: `linear-gradient(to right, ${accent}, transparent)` }}
-                      />
-                      <span
-                        className="material-symbols-rounded text-[18px] leading-none text-slate-400"
-                        aria-hidden="true"
-                      >
-                        sports_score
-                      </span>
+                      <span className="absolute -left-[7px] top-0 h-3.5 w-3.5 rounded-full border-[3px] border-slate-900 bg-white dark:border-night-text dark:bg-night-bg" />
+                      <span className="absolute -right-[7px] top-0 h-3.5 w-3.5 rounded-full border-[3px] border-slate-900 bg-white dark:border-night-text dark:bg-night-bg" />
                     </span>
-                    <div>
-                      <p className="truncate text-[15px] font-semibold text-slate-900 dark:text-night-text">{trip.from}</p>
-                      <p className="truncate text-sm text-slate-500 dark:text-night-subtle">{t("toX", { x: trip.to })}</p>
-                    </div>
+                    {/* From under the first station, to under the second, each one
+                        truncating within its own half. */}
+                    <span className="mt-1.5 grid w-full grid-cols-2 gap-3 text-[15px] font-semibold leading-5 text-slate-900 dark:text-night-text">
+                      <span className="truncate">{trip.from}</span>
+                      <span className="truncate text-right">{trip.to}</span>
+                    </span>
                   </button>
                 );
               })}
@@ -1025,7 +1050,7 @@ export default function App() {
             the header, which is inert: the two never share a visible moment (homeOpacity
             hits 0 at progress 0.5, chromeOpacity only leaves 0 from there on). */}
         <motion.header
-          className={`absolute inset-x-0 top-0 flex items-center justify-between border-b border-gray-100 bg-white/95 pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] dark:border-white/10 dark:bg-night-bg/95 sm:pl-[calc(1.5rem+env(safe-area-inset-left))] sm:pr-[calc(1.5rem+env(safe-area-inset-right))] ${
+          className={`absolute inset-x-0 top-0 flex items-center justify-between border-b border-gray-100 bg-white/95 pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] dark:border-night-rim/20 dark:bg-night-bg/95 sm:pl-[calc(1.5rem+env(safe-area-inset-left))] sm:pr-[calc(1.5rem+env(safe-area-inset-right))] ${
             // Decided in JS rather than by a media variant: the short tier has to beat
             // `lg` on a wide short window, and which of two arbitrary variants wins is
             // a question about the generated stylesheet's order, not about the design.
@@ -1191,30 +1216,36 @@ export default function App() {
 
       {/* Outside both morph stages: one of the two is always inert, and a dialog
           opened from the inert one would be unreachable. The phone search screen is
-          here for the same reason — it opens from the pill, which belongs to neither. */}
-      {isPhone && searchOpen && (
-        <MobileSearchSheet
-          fromText={fromText}
-          toText={toText}
-          onFromText={typeFromText}
-          onToText={typeToText}
-          onSelectFrom={selectFrom}
-          onSelectTo={selectTo}
-          onLocateFrom={locateFrom}
-          onLocateTo={locateTo}
-          beginLocateFrom={beginLocateFrom}
-          beginLocateTo={beginLocateTo}
-          savedPlaces={savedPlaces}
-          history={endpointHistory}
-          onPickHistoryFrom={pickHistoryFrom}
-          onPickHistoryTo={pickHistoryTo}
-          onSwap={swap}
-          onSubmit={commitSearch}
-          onClose={() => setSearchOpen(false)}
-          focusField={searchFocusField}
-        />
-      )}
-      {privacyOpen && <PrivacyNotice onClose={() => setPrivacyOpen(false)} />}
+          here for the same reason — it opens from the pill, which belongs to neither.
+          Both arrive and leave through AnimatePresence (lib/motion: sheet, overlay). */}
+      <AnimatePresence>
+        {isPhone && searchOpen && (
+          <MobileSearchSheet
+            key={`search-${searchSession}`}
+            fromText={fromText}
+            toText={toText}
+            onFromText={typeFromText}
+            onToText={typeToText}
+            onSelectFrom={selectFrom}
+            onSelectTo={selectTo}
+            onLocateFrom={locateFrom}
+            onLocateTo={locateTo}
+            beginLocateFrom={beginLocateFrom}
+            beginLocateTo={beginLocateTo}
+            savedPlaces={savedPlaces}
+            history={endpointHistory}
+            onPickHistoryFrom={pickHistoryFrom}
+            onPickHistoryTo={pickHistoryTo}
+            onSwap={swap}
+            onSubmit={commitSearch}
+            onClose={() => setSearchOpen(false)}
+            focusField={searchFocusField}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {privacyOpen && <PrivacyNotice key="privacy" onClose={() => setPrivacyOpen(false)} />}
+      </AnimatePresence>
 
       {!isLive() && (
         <div className="pointer-events-none fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))] rounded-full bg-brand px-3 py-1 text-xs text-white">

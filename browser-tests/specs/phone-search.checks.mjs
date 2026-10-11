@@ -66,11 +66,21 @@ async function bootPhone(ctx, { width, height }) {
   return page;
 }
 
+// Computed opacity 1 and no transform: where an element that arrives through
+// src/lib/motion.ts comes to rest. Geometry is measured there, not part way through.
+const atRest = (sel) => `(() => {
+  const e = document.querySelector(${JSON.stringify(sel)});
+  if (!e) return false;
+  const cs = getComputedStyle(e);
+  return cs.opacity === "1" && cs.transform === "none";
+})()`;
+
 async function openSheet(page) {
   const entry = await page.eval(box(ENTRY));
   await page.tap(entry.x + entry.w / 2, entry.y + entry.h / 2);
   await page.waitFor(`document.querySelector('${SHEET}')`, { label: "the search sheet to open" });
-  await sleep(260); // the 180ms entry animation
+  // The sheet fades in and rises 14px over `base` (200ms).
+  await page.waitFor(atRest(SHEET), { label: "the search sheet to come to rest" });
   return entry;
 }
 
@@ -189,6 +199,8 @@ export const scenarios = [
         await page.waitFor(`document.querySelectorAll('${SHEET} [role="option"]').length > 0`, {
           label: "the recents list to appear under the focused field",
         });
+        // The list grows into place with the sheet, and is measured once it is there.
+        await page.waitFor(atRest(`${SHEET} [role="listbox"]`), { label: "the recents list to come to rest" });
         const list = await page.eval(`
           const ul = document.querySelector('${SHEET} [role="listbox"]');
           const r = ul.getBoundingClientRect();

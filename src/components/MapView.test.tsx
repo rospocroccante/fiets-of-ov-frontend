@@ -1,13 +1,16 @@
 import { fireEvent, render, screen, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { MapView } from "./MapView";
+import type L from "leaflet";
+import { MapView, revealRouteLine } from "./MapView";
+import { DURATION_MS } from "../lib/motion";
 import {
   __fireMapClick,
   __fireMapContextMenu,
   __fireMarkerDragEnd,
   __mapCalls,
   __mapContainerProps,
+  __polylines,
   __wheelZoom,
 } from "../__mocks__/react-leaflet";
 import type { Itinerary } from "../api/types";
@@ -359,4 +362,103 @@ test("an empty map is left where the user put it until they ask for the reset", 
   expect(__mapCalls.setView).toBe(before.view);
   expect(__mapCalls.flyTo).toBe(before.fly);
   expect(__mapCalls.flyToBounds).toBe(before.flyBounds);
+});
+
+// ---------------------------------------------------------------------------
+// Map motion: the route draw and the camera under reduced motion
+// ---------------------------------------------------------------------------
+
+function mapWith(r: Itinerary | null) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return (next: Itinerary | null = r) => (
+    <QueryClientProvider client={client}>
+      <MapView
+        origin={{ lat: 52.379, lon: 4.9 }}
+        destination={{ lat: 52.358, lon: 4.868 }}
+        stops={[]}
+        route={next}
+      />
+    </QueryClientProvider>
+  );
+}
+
+// The coloured line of the first leg (the casing under it is white).
+const legLine = () => __polylines.find((l) => l.options.color !== "#ffffff")!.getElement() as SVGElement;
+const drawing = (el: SVGElement) => el.style.getPropertyValue("stroke-dasharray") !== "";
+
+function reduceMotion(): () => void {
+  const real = window.matchMedia;
+  window.matchMedia = ((query: string) => ({
+    matches: query.includes("prefers-reduced-motion"),
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  })) as unknown as typeof window.matchMedia;
+  return () => {
+    window.matchMedia = real;
+  };
+}
+
+test("a new route draws itself in, and the same line picked again does not", () => {
+  vi.useFakeTimers();
+  try {
+    const view = mapWith(route);
+    const { rerender } = render(view());
+    expect(drawing(legLine())).toBe(true);
+
+    // At the end of the draw the line is exactly what Leaflet drew: no dashes, no
+    // pathLength, no inline style left behind.
+    act(() => {
+      vi.advanceTimersByTime(DURATION_MS.draw);
+    });
+    expect(legLine().style.cssText).toBe("");
+    expect(legLine().hasAttribute("pathLength")).toBe(false);
+
+    // The option already on the map, as a new route object: nothing to draw.
+    rerender(view({ ...route, legs: route.legs.map((leg) => ({ ...leg })) }));
+    expect(drawing(legLine())).toBe(false);
+
+    // Another line: it draws again.
+    const other: Itinerary = {
+      ...route,
+      legs: [{ ...route.legs[0], to: { name: "C", lat: 52.37, lon: 4.95 } }],
+    };
+    rerender(view(other));
+    expect(drawing(legLine())).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a leg with a dash pattern of its own fades in and keeps its pattern", () => {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  const layer = { options: { dashArray: "1 8" }, getElement: () => el, setStyle: () => {} };
+  const stop = revealRouteLine(layer as unknown as L.Path);
+  expect(el.style.getPropertyValue("stroke-dasharray")).toBe("");
+  expect(el.hasAttribute("pathLength")).toBe(false);
+  expect(el.style.getPropertyValue("transition")).toMatch(/^opacity /);
+  stop();
+  expect(el.style.cssText).toBe("");
+});
+
+test("under reduced motion the camera jumps instead of flying, and the route does not draw", () => {
+  const restore = reduceMotion();
+  try {
+    const before = { ...__mapCalls };
+    const view = mapWith(route);
+    const { unmount } = render(view());
+    expect(__mapCalls.flyToBounds).toBe(before.flyToBounds);
+    expect(__mapCalls.fitBounds).toBe(before.fitBounds + 1);
+    expect(drawing(legLine())).toBe(false);
+    expect(legLine().style.cssText).toBe("");
+    unmount();
+
+    // The reset with nothing planned goes back to the city in one step as well.
+    renderMap(<MapView origin={null} destination={null} stops={[]} route={null} />);
+    fireEvent.click(screen.getByRole("button", { name: /whole trip/i }));
+    expect(__mapCalls.flyTo).toBe(before.flyTo);
+    expect(__mapCalls.setView).toBe(before.setView + 1);
+  } finally {
+    restore();
+  }
 });

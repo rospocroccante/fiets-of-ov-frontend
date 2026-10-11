@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
-import { ItineraryDetails, chipInk } from "./ItineraryDetails";
+import { ItineraryDetails } from "./ItineraryDetails";
 import { mockPlanFor } from "../api/mock";
-import { MODE_COLORS, modeColor } from "../lib/modeColors";
+import { MODE_COLORS, chipInk, modeColor } from "../lib/modeColors";
 
 function luminance(hex: string): number {
   const [r, g, b] = [1, 3, 5].map((i) => {
@@ -118,4 +118,19 @@ test("the heading can be left to the disclosure above, and the times stay", () =
   expect(screen.getByText(/\d\d:\d\d – \d\d:\d\d · \d+ min/)).toBeInTheDocument();
   // The steps themselves are untouched.
   expect(screen.getByText("Metro 52")).toBeInTheDocument();
+});
+
+// The itinerary is drawn on the chosen option's brand-light tint, where gray-500 measured
+// 4.38:1: under AA for the 12px times, leg lines and estimate notes. The step that
+// clears it is gray-600, and this keeps the lighter greys from coming back by
+// copy-paste. The estimates toggle's ratio is measured for real in the browser layer.
+test("the secondary text keeps a step that clears AA on the chosen option's tint", () => {
+  const itinerary = mockPlanFor("A", "Bijlmer rain").options[0].itinerary;
+  const { container } = render(<ItineraryDetails itinerary={itinerary} />);
+  const light = [...container.querySelectorAll("*")].flatMap((el) =>
+    [...el.classList].filter((c) => /^text-(gray|slate)-(300|400|500)$/.test(c) && !el.closest('[aria-hidden="true"]')),
+  );
+  // The arrow between two stop names is the one exception: it is a separator glyph.
+  expect(light.filter((c) => c !== "text-gray-400")).toEqual([]);
+  expect(screen.getByText(/How these figures are worked out/).closest("summary")).toHaveClass("text-gray-600");
 });

@@ -321,9 +321,11 @@ function PhoneFilterBar({
         // raised surface and a darker label instead — the same step the night ramp uses
         // for a hovered opaque surface — plus the chevron, which turns over.
         //
-        // `motion-safe:` on the transition, like every other transition in the app:
-        // Tailwind's `transition` shorthand includes `transform`, and this control is
-        // the one a rider taps to reach the map's tools.
+        // `motion-safe:` on the transition because Tailwind's `transition` shorthand
+        // includes `transform`, and this control is the one a rider taps to reach the
+        // map's tools. The prefix is only a second guard: most transitions in the app
+        // carry none, and the global rule at the end of index.css is what makes all of
+        // them instant under reduced motion.
         className={`inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center gap-1 rounded-full border px-3 text-sm font-medium motion-safe:transition ${
           open
             ? "border-gray-300 bg-gray-100 text-gray-800 dark:border-night-border dark:bg-night-hover dark:text-night-text"
@@ -364,7 +366,7 @@ function PhoneFilterBar({
               the coverage assertion at 320 is what says so. */}
           <div
             data-fov="filter-panel"
-            className="absolute right-0 top-full z-[1200] mt-1 w-max max-w-[min(15rem,calc(100vw-5rem))] rounded-card border border-gray-100 bg-white p-3 shadow-lg dark:border-white/10 dark:bg-night-raised"
+            className="absolute right-0 top-full z-[1200] mt-1 w-max max-w-[min(15rem,calc(100vw-5rem))] rounded-card border border-gray-100 bg-white p-3 shadow-lg dark:border-night-rim/20 dark:bg-night-raised"
           >
             {!hideMap && (
               <>

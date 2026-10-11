@@ -111,35 +111,46 @@ summary:focus-visible {
 .dark { color-scheme: dark; }
 .dark body { @apply bg-night-bg text-night-text; }
 
+/* The theme switch (hooks/useTheme): the new theme opens as a circle from the switch
+   over a still snapshot of the old one. The browser's cross-fade is off and the blend
+   is plain, so inside the circle there is only the new page. useTheme writes the
+   origin, the radius that reaches the farthest corner and the timing (`reveal` on the
+   enter curve, from lib/motion) on <html> before it starts the transition. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-new(root) {
+  animation: theme-reveal var(--reveal-duration) var(--reveal-ease);
+}
+@keyframes theme-reveal {
+  from { clip-path: circle(0 at var(--reveal-x) var(--reveal-y)); }
+  to { clip-path: circle(var(--reveal-r) at var(--reveal-x) var(--reveal-y)); }
+}
+/* useTheme skips the transition under reduced motion; this is the second guard, and
+   it has to be its own rule (see the global reduced-motion rule below). */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+/* While the circle opens, colours that carry a transition would fade to the new theme
+   a second time inside it. useTheme keeps this class on <html> until the transition
+   has finished. 0.01ms rather than none, as in the reduced-motion rule, so code that
+   waits on transitionend still hears it. */
+.theme-switching *,
+.theme-switching ::before,
+.theme-switching ::after {
+  transition-duration: 0.01ms !important;
+}
+
 /* Home<->map morph: the page scroll drives the transition, and resting between the
    two ends leaves a half-faded, half-interactive UI. Proximity snap (with the two
    sentinels App renders at 0 and 100vh) settles the scroll on whichever stage is
    closer, so releasing the wheel always lands on a fully working screen. */
 html { scroll-snap-type: y proximity; }
-
-/* The phone search screen arrives over the app rather than replacing it in place, so
-   it gets the one cue that says "this is a new surface, and it came from below": a
-   short rise and fade. 180ms is under the threshold where a transition starts to feel
-   like waiting. Reduced motion drops it entirely — the screen still appears, just
-   without the travel. */
-@keyframes fov-sheet-in {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-.fov-sheet {
-  animation: fov-sheet-in 180ms ease-out;
-}
-@media (prefers-reduced-motion: reduce) {
-  .fov-sheet {
-    animation: none;
-  }
-}
 
 /* Maps-style POI labels: a coloured category badge with the place name beside it,
    white halo so the text stays readable over any basemap. Rendered as Leaflet
@@ -308,6 +319,78 @@ html { scroll-snap-type: y proximity; }
   50%  { transform: translate(5%, -9%) scale(1.32, 0.8); }
   100% { transform: translate(10%, -14%) scale(0.88, 1.12); }
 }
+
+/* Reduced motion, one rule for the whole app. When the system asks for less motion,
+   every CSS transition and animation finishes at once: hover and press colours, the
+   disclosure chevrons, the aurora, the skeleton's pulse, Leaflet's zoom and fades. This
+   is the rule that holds reduced motion still; a `motion-safe:` prefix on a class is
+   only a second guard. Each transition and animation still runs, for 0.01ms and once,
+   so the transitionend and animationend events code waits on still fire (Leaflet ends
+   a zoom on transitionend). Smooth scrolling becomes a jump.
+
+   One frame still shows: Chrome paints the first frame of a keyframe animation at its
+   `from` keyframe. Where that differs from the resting pose, the component needs an
+   `animation: none` of its own. The aurora needs none. Its blobs carry negative delays
+   and no fill mode, so their 0.01ms run is over before it starts and each blob rests at
+   its untransformed pose from the first frame, as `animation: none` had it; the one blob
+   with no delay starts from aurora-a's identity keyframe, so its first frame is that
+   same pose.
+
+   `.animate-spin` is the one exception. The spinner is the only sign that a location
+   fix is still on its way, and a frozen one reads as a hung app.
+
+   Framer animations are not CSS and do not see this rule; MotionConfig in main.tsx
+   and useMotionPreset (src/lib/motion.ts) handle them.
+
+   Not covered here: `*` matches no pseudo-element other than ::before and ::after.
+   Motion put on ::details-content (a <details> body opening) or on
+   ::view-transition-old(root) and ::view-transition-new(root) (a view transition)
+   needs a reduced-motion rule of its own, written as a separate rule next to that
+   motion. It cannot join this selector list: a pseudo-element a browser does not know
+   invalidates the whole list, and this rule with it. */
 @media (prefers-reduced-motion: reduce) {
-  .aurora-blob { animation: none !important; }
+  *:not(.animate-spin),
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* The results' two disclosures ("Step by step" on a phone, and the note on how the
+   figures are worked out) open and close by height over `base`, on the enter curve, in
+   CSS alone. A height only transitions to `auto` where interpolate-size exists, so the
+   whole block waits for it: any other browser opens the body at once, as it always did.
+   content-visibility is discrete, and allow-discrete keeps a closing body painted until
+   its height reaches zero instead of blanking it on the first frame.
+
+   The body is clipped so that while it grows it does not spill over the rows under it.
+   The clip reaches 4px past its edges, the width of a focus ring (a 2px outline at a 2px
+   offset): the Start button and the estimates row sit flush with those edges, and their
+   rings would otherwise lose a side once the body is open. */
+@supports (interpolate-size: allow-keywords) {
+  .disclosure {
+    interpolate-size: allow-keywords;
+  }
+  .disclosure::details-content {
+    block-size: 0;
+    overflow: clip;
+    overflow-clip-margin: 4px;
+    transition:
+      block-size theme("transitionDuration.base") theme("transitionTimingFunction.enter"),
+      content-visibility theme("transitionDuration.base") theme("transitionTimingFunction.enter") allow-discrete;
+  }
+  .disclosure[open]::details-content {
+    block-size: auto;
+  }
+}
+
+/* The global reduced-motion rule above does not reach ::details-content, so the
+   disclosures carry their own: under reduced motion they open and close at once. */
+@media (prefers-reduced-motion: reduce) {
+  .disclosure::details-content {
+    transition: none;
+  }
 }

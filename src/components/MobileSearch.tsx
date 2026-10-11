@@ -1,9 +1,11 @@
-import { forwardRef, useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useId, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { EndpointField } from "./EndpointField";
 import { UseMyLocationButton } from "./UseMyLocationButton";
 import type { HistoryEntry } from "./PlaceInput";
 import { CARD_ACCENTS, PRIMARY_GRADIENT } from "../lib/gradients";
 import { useI18n } from "../lib/i18n";
+import { sheet, useLeaving, useMotionPreset } from "../lib/motion";
 import type { Place } from "../api/types";
 import type { Endpoint } from "../trip";
 
@@ -140,12 +142,23 @@ export function MobileSearchSheet({
   // field's own row, which is most of why a field was 228px of a 390px screen. One
   // button below the card does the same job for whichever field the caret is in.
   const [activeField, setActiveField] = useState<"from" | "to">(focusField);
+  // App mounts the screen inside AnimatePresence, with a key of its own for every
+  // opening. It rises 14px into place and drops away again, and while it drops it is
+  // inert and has let go of the page: the scroll lock and the key handler below end
+  // when `leaving` turns true, not when the exit does.
+  const motionProps = useMotionPreset(sheet);
+  const [leaving, leavingProps] = useLeaving();
+  // Per instance, not fixed strings: a screen reopened during the previous one's exit
+  // is a second copy in the DOM for that long, and two headings with one id would leave
+  // the new dialog named by whichever comes first.
+  const heading = useId();
+  const hint = useId();
 
   // A full-screen search view is a mode change, so it obeys the same contract as the
   // privacy dialog: focus moves in on open, Escape and the close button leave, and Tab
   // is wrapped at both ends because aria-modal promises the page behind is not there.
   // Focus goes back to the button that opened this — App owns that half, since this
-  // component is unmounted by the time the focus has to land.
+  // component is leaving, and inert, by the time the focus has to land.
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
@@ -165,7 +178,15 @@ export function MobileSearchSheet({
   // and closing the screen dropped the user on the map instead of on the home they left.
   // The scroll offset is recorded and put back on the way out, because making the
   // viewport unscrollable is itself allowed to clamp it.
+  //
+  // "The way out" is the moment the screen starts to leave. A search sent from here
+  // closes the screen and asks App for a smooth scroll to the map in that same commit
+  // (commitSearch), and this restore is an instant scrollTo: run when the exit ended,
+  // 150ms later, it would land second and cancel the morph. Released as `leaving` turns
+  // true, it is the cleanup of that commit, and React runs every cleanup of a commit
+  // before any of its effects, App's morph among them.
   useEffect(() => {
+    if (leaving) return;
     const y = window.scrollY;
     const body = document.body;
     const previous = body.style.overflow;
@@ -174,9 +195,12 @@ export function MobileSearchSheet({
       body.style.overflow = previous;
       window.scrollTo(0, y);
     };
-  }, []);
+  }, [leaving]);
 
   useEffect(() => {
+    // A leaving screen has handed focus back to the page, and a Tab caught now would
+    // pull it into a dialog that has closed.
+    if (leaving) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         // One Escape, one thing closed. A suggestion list open over the fields calls
@@ -212,21 +236,21 @@ export function MobileSearchSheet({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, leaving]);
 
-  const heading = "fov-mobile-search-title";
-  const hint = "fov-mobile-search-hint";
   // Every field is 16px or more (the iOS zoom floor) and every control clears 44px.
   const field = "min-w-0";
 
   return (
-    <div
+    <motion.div
       ref={rootRef}
+      {...motionProps}
+      {...leavingProps}
       data-fov="search-sheet"
       role="dialog"
       aria-modal="true"
       aria-labelledby={heading}
-      className="fov-sheet fixed inset-0 z-[2000] flex flex-col bg-white pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)] dark:bg-night-bg"
+      className="fixed inset-0 z-[2000] flex flex-col bg-white pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)] dark:bg-night-bg"
     >
       <div className="flex items-center gap-1 px-2 py-2">
         <button
@@ -369,6 +393,6 @@ export function MobileSearchSheet({
           </p>
         )}
       </form>
-    </div>
+    </motion.div>
   );
 }

@@ -1,6 +1,17 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type Ref,
+} from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { searchPlaces } from "../api/client";
 import type { Place } from "../api/types";
+import { dropdown, useLeaving, useMotionPreset } from "../lib/motion";
 
 export interface HistoryEntry {
   label: string;
@@ -196,6 +207,9 @@ export function PlaceInput({
   // the keyboard — exactly the rows a user is reaching for while typing.
   const listRef = useRef<HTMLUListElement>(null);
   const [listMaxHeight, setListMaxHeight] = useState<number | undefined>(undefined);
+  // The open list's measure, for the one caller outside the effect: the list's own
+  // arrival (see onEntered on the Listbox below).
+  const remeasure = useRef<(() => void) | null>(null);
   // Layout effect, not a plain one: measured after paint, a long list would show at its
   // full height for a frame and then snap to the room it has.
   useLayoutEffect(() => {
@@ -210,19 +224,17 @@ export function PlaceInput({
       setListMaxHeight(Math.max(LIST_MIN_HEIGHT, Math.round(room)));
     };
     measure();
+    remeasure.current = measure;
     window.addEventListener("resize", measure);
     window.visualViewport?.addEventListener("resize", measure);
-    // Two events that move the list without resizing anything. The sheet arrives with a
-    // 14px rise (.fov-sheet in index.css), and a list opened during it — which is every
-    // list, since the recents appear the moment the field takes focus — would otherwise
-    // keep the height it had 14px lower for as long as it stayed open. Scrolling the
-    // form under it is the same problem, slower.
-    window.addEventListener("animationend", measure, true);
+    // Scrolling the form under the list moves it without resizing anything, and a list
+    // that kept the height it was measured at would end short of the screen, or run
+    // past it.
     window.addEventListener("scroll", measure, true);
     return () => {
+      remeasure.current = null;
       window.removeEventListener("resize", measure);
       window.visualViewport?.removeEventListener("resize", measure);
-      window.removeEventListener("animationend", measure, true);
       window.removeEventListener("scroll", measure, true);
     };
   }, [listAnchor, listOpen]);
@@ -269,7 +281,7 @@ export function PlaceInput({
   // the cap stopped the list at y=452 of 844 with 390px of white below it — a suggestion
   // list that scrolls internally while half the screen sits empty. There the height is
   // measured instead (listMaxHeight below), so the list ends where the sheet does.
-  const listClass = `absolute left-0 right-0 top-full z-20 mt-1 overflow-auto rounded-2xl border border-gray-100 bg-white shadow-lg dark:border-white/10 dark:bg-night-raised${
+  const listClass = `absolute left-0 right-0 top-full z-20 mt-1 overflow-auto rounded-2xl border border-gray-100 bg-white shadow-lg dark:border-night-rim/20 dark:bg-night-raised${
     listAnchor === "container" ? "" : " max-h-72"
   }`;
   const listStyle = listAnchor === "container" ? { maxHeight: listMaxHeight } : undefined;
@@ -310,83 +322,127 @@ export function PlaceInput({
           setActiveIndex(-1);
         }}
       />
-      {showHistory && (
-        <ul
-          ref={listRef}
-          id={listId}
-          role="listbox"
-          className={listClass}
-          style={listStyle}
-        >
-          {(history ?? []).map((h, i) => (
-            <li
-              key={`${h.label}-${h.query}`}
-              id={optionId(i)}
-              role="option"
-              aria-selected={i === activeIndex}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => pickHistory(h)}
-              // py-3 rather than py-2: 20px of line plus 24px of padding is exactly the
-              // 44px a fingertip needs, and a suggestion list is the one place on the
-              // phone where mis-taps cost the user their typed query.
-              className={`cursor-pointer px-4 py-3 text-sm hover:bg-brand-light dark:hover:bg-night-hover ${
-                i === activeIndex ? "bg-brand-light dark:bg-night-hover" : ""
-              }`}
-            >
-              <span
-                aria-hidden="true"
-                className="material-symbols-rounded mr-1.5 align-[-3px] text-[15px] leading-none text-slate-400"
-              >
-                history
-              </span>
-              <span className="font-medium">{h.label}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {showSuggestions && (
-        <ul
-          ref={listRef}
-          id={listId}
-          role="listbox"
-          className={listClass}
-          style={listStyle}
-        >
-          {suggestions.map((p, i) => (
-            <li
-              key={p.id}
-              id={optionId(i)}
-              role="option"
-              aria-selected={i === activeIndex}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => pick(p)}
-              // py-3 rather than py-2: 20px of line plus 24px of padding is exactly the
-              // 44px a fingertip needs, and a suggestion list is the one place on the
-              // phone where mis-taps cost the user their typed query.
-              className={`cursor-pointer px-4 py-3 text-sm hover:bg-brand-light dark:hover:bg-night-hover ${
-                i === activeIndex ? "bg-brand-light dark:bg-night-hover" : ""
-              }`}
-            >
-              {savedPlaces?.some((s) => s.id === p.id) && (
-                <span
-                  aria-hidden="true"
-                  className="material-symbols-rounded mr-1 align-[-3px] text-[15px] leading-none text-amber-500"
-                  style={{ fontVariationSettings: "'FILL' 1" }}
-                >
-                  star
-                </span>
-              )}
-              <span className="font-medium">{p.name}</span>
-              {p.label !== p.name && (
-                <span className="text-gray-500 dark:text-night-subtle">
-                  {" — "}
-                  {p.label.startsWith(p.name) ? p.label.slice(p.name.length).replace(/^,\s*/, "") : p.label}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* One list element whichever of the two it holds, so there is never a second
+          listbox with the same id: a list that closes and reopens before its exit has
+          finished is the same element coming back, not a new one beside it. */}
+      <AnimatePresence>
+        {listOpen && (
+          <Listbox
+            key="list"
+            id={listId}
+            listRef={listRef}
+            className={listClass}
+            style={listStyle}
+            onEntered={() => remeasure.current?.()}
+          >
+            {showSuggestions
+              ? suggestions.map((p, i) => (
+                  <li
+                    key={p.id}
+                    id={optionId(i)}
+                    role="option"
+                    aria-selected={i === activeIndex}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pick(p)}
+                    // py-3 rather than py-2: 20px of line plus 24px of padding is exactly
+                    // the 44px a fingertip needs, and a suggestion list is the one place
+                    // on the phone where mis-taps cost the user their typed query.
+                    className={`cursor-pointer px-4 py-3 text-sm hover:bg-brand-light dark:hover:bg-night-hover ${
+                      i === activeIndex ? "bg-brand-light dark:bg-night-hover" : ""
+                    }`}
+                  >
+                    {savedPlaces?.some((s) => s.id === p.id) && (
+                      <span
+                        aria-hidden="true"
+                        className="material-symbols-rounded mr-1 align-[-3px] text-[15px] leading-none text-amber-500"
+                        style={{ fontVariationSettings: "'FILL' 1" }}
+                      >
+                        star
+                      </span>
+                    )}
+                    <span className="font-medium">{p.name}</span>
+                    {p.label !== p.name && (
+                      <span className="text-gray-500 dark:text-night-subtle">
+                        {" — "}
+                        {p.label.startsWith(p.name)
+                          ? p.label.slice(p.name.length).replace(/^,\s*/, "")
+                          : p.label}
+                      </span>
+                    )}
+                  </li>
+                ))
+              : (history ?? []).map((h, i) => (
+                  <li
+                    key={`${h.label}-${h.query}`}
+                    id={optionId(i)}
+                    role="option"
+                    aria-selected={i === activeIndex}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pickHistory(h)}
+                    // The same 44px rows as the suggestions, for the same reason.
+                    className={`cursor-pointer px-4 py-3 text-sm hover:bg-brand-light dark:hover:bg-night-hover ${
+                      i === activeIndex ? "bg-brand-light dark:bg-night-hover" : ""
+                    }`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="material-symbols-rounded mr-1.5 align-[-3px] text-[15px] leading-none text-slate-400"
+                    >
+                      history
+                    </span>
+                    <span className="font-medium">{h.label}</span>
+                  </li>
+                ))}
+          </Listbox>
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+// The open dropdown. A component of its own so it can ask AnimatePresence whether it is
+// leaving: a closed list stays on screen for its exit, and for that time it is inert and
+// hidden, so a tap goes through it to whatever is underneath and a screen reader is not
+// offered the options of a list the combobox already reports as collapsed.
+//
+// onEntered fires when the list has settled. The list grows 4px down into place, and on
+// the phone the sheet around it rises 14px over the same `base` duration and opens at
+// the same time, since the recents appear the moment the sheet focuses a field. A list
+// measured as it mounted would keep the height that fitted where it started; measured
+// again here, it fits where it came to rest. The list never starts before the sheet
+// does, so its arrival ends no earlier than the sheet's.
+function Listbox({
+  id,
+  listRef,
+  className,
+  style,
+  onEntered,
+  children,
+}: {
+  id: string;
+  listRef: Ref<HTMLUListElement>;
+  className: string;
+  style?: CSSProperties;
+  onEntered: () => void;
+  children: ReactNode;
+}) {
+  const motionProps = useMotionPreset(dropdown);
+  const [leaving, leavingProps] = useLeaving();
+  return (
+    <motion.ul
+      ref={listRef}
+      id={id}
+      role="listbox"
+      className={className}
+      {...motionProps}
+      {...leavingProps}
+      style={{ ...style, ...leavingProps.style }}
+      // Coupled to lib/motion: dropdown and sheet must arrive over one duration (motion.test).
+      onAnimationComplete={() => {
+        if (!leaving) onEntered();
+      }}
+    >
+      {children}
+    </motion.ul>
   );
 }
