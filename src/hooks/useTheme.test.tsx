@@ -104,11 +104,93 @@ test("the browser chrome colour follows a manual toggle, not the system scheme",
   );
   const metas = () => [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => m.getAttribute("content"));
   const { result } = renderHook(() => useTheme());
-  expect(metas()).toEqual(["#ffffff", "#ffffff"]);
+  // A first visit is System mode: each meta keeps its own scheme's colour, so the
+  // browser chrome follows the system until a theme is chosen.
+  expect(metas()).toEqual(["#ffffff", "#0C1E32"]);
 
   act(() => result.current.toggle());
   expect(metas()).toEqual(["#0C1E32", "#0C1E32"]);
 
   act(() => result.current.toggle());
   expect(metas()).toEqual(["#ffffff", "#ffffff"]);
+});
+
+function systemScheme(dark: boolean) {
+  const listeners: ((e: { matches: boolean }) => void)[] = [];
+  const mql = {
+    matches: dark,
+    media: "(prefers-color-scheme: dark)",
+    addEventListener: (_: string, fn: (e: { matches: boolean }) => void) => listeners.push(fn),
+    // A real MediaQueryList forgets a removed listener; the hook relies on that when it
+    // leaves System mode.
+    removeEventListener: (_: string, fn: (e: { matches: boolean }) => void) => {
+      const at = listeners.indexOf(fn);
+      if (at !== -1) listeners.splice(at, 1);
+    },
+    addListener: () => {},
+    removeListener: () => {},
+  };
+  const real = window.matchMedia;
+  window.matchMedia = ((q: string) =>
+    q.includes("prefers-color-scheme") ? mql : { ...mql, matches: false, media: q }) as unknown as typeof window.matchMedia;
+  return {
+    flip(next: boolean) {
+      mql.matches = next;
+      listeners.forEach((fn) => fn({ matches: next }));
+    },
+    restore() {
+      window.matchMedia = real;
+    },
+  };
+}
+
+test("a first visit follows the system and stores nothing", () => {
+  const sys = systemScheme(true);
+  const { result } = renderHook(() => useTheme());
+  expect(result.current.mode).toBe("system");
+  expect(result.current.dark).toBe(true);
+  expect(window.localStorage.getItem("fov.theme.v1")).toBeNull();
+  sys.restore();
+});
+
+test("in System mode the app follows the OS switching while it is open", () => {
+  const sys = systemScheme(false);
+  const { result } = renderHook(() => useTheme());
+  act(() => sys.flip(true));
+  expect(result.current.dark).toBe(true);
+  expect(document.documentElement).toHaveClass("dark");
+  sys.restore();
+});
+
+test("an explicit choice ignores the OS and persists; System clears it", () => {
+  const sys = systemScheme(false);
+  const { result } = renderHook(() => useTheme());
+  act(() => result.current.setMode("light"));
+  act(() => sys.flip(true));
+  expect(result.current.dark).toBe(false);
+  expect(window.localStorage.getItem("fov.theme.v1")).toBe("light");
+  act(() => result.current.setMode("system"));
+  expect(result.current.mode).toBe("system");
+  expect(result.current.dark).toBe(true);
+  expect(window.localStorage.getItem("fov.theme.v1")).toBeNull();
+  sys.restore();
+});
+
+test("two taps before the circle's callback runs leave the theme and the stored choice in step", () => {
+  // Unlike stubViewTransition, this keeps every callback: the browser runs a skipped
+  // transition's update too, so both taps land.
+  const updates: (() => void)[] = [];
+  Object.assign(document, {
+    startViewTransition: (cb: () => void) => {
+      updates.push(cb);
+      return { finished: new Promise(() => {}), ready: Promise.resolve(), updateCallbackDone: Promise.resolve(), skipTransition() {} };
+    },
+  });
+  const { result } = renderHook(() => useTheme());
+  act(() => result.current.toggle());
+  act(() => result.current.toggle());
+  act(() => updates.forEach((run) => run()));
+  expect(result.current.dark).toBe(false);
+  expect(result.current.mode).toBe("light");
+  expect(window.localStorage.getItem("fov.theme.v1")).toBe("light");
 });
