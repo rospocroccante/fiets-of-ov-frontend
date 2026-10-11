@@ -86,3 +86,11 @@ test("a stored Dutch preference sets the document language on the very first ren
   );
   expect(document.documentElement).toHaveAttribute("lang", "nl");
 });
+
+test("the navigation shell's strings exist and fill their placeholders", () => {
+  expect(translate("en", "tabSaved")).toBe("Saved");
+  expect(translate("en", "deleteX", { x: "Artis" })).toBe("Delete Artis");
+  expect(translate("en", "versionX", { x: "0.1.0" })).toBe("Version 0.1.0");
+  // Unvetted Dutch stays English, never improvised.
+  expect(translate("nl", "tabProfile")).toBe("Profile");
+});

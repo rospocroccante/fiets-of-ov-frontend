@@ -288,7 +288,7 @@ const STRINGS = {
     nl: "Je recente ritten, je opgeslagen plekken en je keuze voor taal en thema staan in de local storage van je browser. Recente ritten kunnen je thuis- en werkadres bevatten; houd daar rekening mee op een gedeelde computer.",
   },
   privacyStaysClear: {
-    en: "None of it is sent anywhere. The menu has “Clear recent searches” and “Clear saved places”, and clearing the browser's site data removes the rest.",
+    en: "None of it is sent anywhere. On a phone, Profile has “Clear recent searches” and “Clear saved places”; on a computer they are in the menu. Clearing the browser's site data removes the rest.",
     nl: "Daarvan wordt niets verstuurd. In het menu staan “Wis recente zoekopdrachten” en “Wis opgeslagen plekken”, en de rest verdwijnt als je de sitegegevens van je browser wist.",
   },
   privacyContactTitle: { en: "Who is responsible", nl: "Wie verantwoordelijk is" },
@@ -300,6 +300,38 @@ const STRINGS = {
     en: "Last changed: [PLACEHOLDER: date].",
     nl: "Laatst gewijzigd: [IN TE VULLEN: datum].",
   },
+  // Phone navigation shell (tab bar, Saved, Profile, results sheet). English in both
+  // languages until the Dutch lines are vetted; see the comment at the top of STRINGS.
+  tabsLabel: { en: "Sections", nl: "Sections" },
+  tabPlan: { en: "Plan", nl: "Plan" },
+  tabSaved: { en: "Saved", nl: "Saved" },
+  tabProfile: { en: "Profile", nl: "Profile" },
+  savedPlacesHeading: { en: "Places", nl: "Places" },
+  savedEmpty: {
+    en: "Nothing saved yet. Star a place on the map or plan a trip, and it shows up here.",
+    nl: "Nothing saved yet. Star a place on the map or plan a trip, and it shows up here.",
+  },
+  searchForPlace: { en: "Search for a place", nl: "Search for a place" },
+  edit: { en: "Edit", nl: "Edit" },
+  done: { en: "Done", nl: "Done" },
+  deleteX: { en: "Delete {x}", nl: "Delete {x}" },
+  deleteLabel: { en: "Delete", nl: "Delete" },
+  deletedX: { en: "Removed {x}", nl: "Removed {x}" },
+  undo: { en: "Undo", nl: "Undo" },
+  clearAll: { en: "Clear all", nl: "Clear all" },
+  tapAgainToClear: { en: "Tap again to clear", nl: "Tap again to clear" },
+  seeAll: { en: "See all", nl: "See all" },
+  themeHeading: { en: "Theme", nl: "Theme" },
+  themeLight: { en: "Light", nl: "Light" },
+  themeDark: { en: "Dark", nl: "Dark" },
+  themeSystem: { en: "System", nl: "System" },
+  languageHeading: { en: "Language", nl: "Language" },
+  dataOnDevice: { en: "Data on this device", nl: "Data on this device" },
+  aboutHeading: { en: "About and sources", nl: "About and sources" },
+  versionX: { en: "Version {x}", nl: "Version {x}" },
+  expandResults: { en: "Expand results", nl: "Expand results" },
+  collapseResults: { en: "Collapse results", nl: "Collapse results" },
+  resultsSheetLabel: { en: "Trip results", nl: "Trip results" },
 } as const;
 
 export type StringKey = keyof typeof STRINGS;
