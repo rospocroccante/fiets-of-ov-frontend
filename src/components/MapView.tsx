@@ -61,6 +61,7 @@ import { useRainRadar } from "../hooks/useRainRadar";
 import { useWindField } from "../hooks/useWindField";
 import { useI18n } from "../lib/i18n";
 import { modeColor } from "../lib/modeColors";
+import { DURATION_MS, EASE_CSS, prefersReducedMotion } from "../lib/motion";
 import { decodePolyline } from "../lib/polyline";
 import { Basemap } from "./Basemap";
 import { RadarOverlay, RadarReadout } from "./RainRadar";
@@ -339,14 +340,20 @@ function boundsCenter(coords: [number, number][]): [number, number] {
   return [(minLat + maxLat) / 2, (minLon + maxLon) / 2];
 }
 
+//
+// Under reduced motion the camera does not glide at all: it is put where it is going
+// in one step. Asked at the moment of moving, so a change of the setting counts.
 function applyDefaultView(
   map: L.Map,
   coords: [number, number][],
   fallback: LatLon | null,
   empty: "keep" | "city",
 ) {
+  const instant = prefersReducedMotion();
   if (coords.length >= 2) {
-    if (typeof map.flyToBounds === "function") {
+    if (instant && typeof map.fitBounds === "function") {
+      map.fitBounds(coords as LatLngBoundsExpression, { padding: [50, 50], animate: false });
+    } else if (typeof map.flyToBounds === "function") {
       map.flyToBounds(coords as LatLngBoundsExpression, {
         padding: [50, 50],
         ...flyOpts(map, boundsCenter(coords)),
@@ -363,7 +370,8 @@ function applyDefaultView(
       : null;
   if (!target) return;
   const zoom = fallback ? 14 : 13;
-  if (typeof map.flyTo === "function") map.flyTo(target, zoom, flyOpts(map, target));
+  if (instant && typeof map.setView === "function") map.setView(target, zoom, { animate: false });
+  else if (typeof map.flyTo === "function") map.flyTo(target, zoom, flyOpts(map, target));
   else if (typeof map.setView === "function") map.setView(target, zoom);
 }
 
@@ -386,7 +394,8 @@ function FitRoute({
 }
 
 // Keeps the camera on the live fix: one hard setView to street zoom on activation,
-// then panTo per fix so the user's own zoom tweaks survive while riding.
+// then panTo per fix so the user's own zoom tweaks survive while riding. Both glide by
+// default and jump under reduced motion.
 function FollowCamera({ target, active }: { target: LatLon | null; active: boolean }) {
   const map = useMap();
   const started = useRef(false);
@@ -397,15 +406,97 @@ function FollowCamera({ target, active }: { target: LatLon | null; active: boole
       started.current = false;
       return;
     }
+    const move = prefersReducedMotion() ? { animate: false } : undefined;
     if (!started.current) {
       started.current = true;
-      map.setView([lat, lon], 17);
+      map.setView([lat, lon], 17, move);
       return;
     }
     // Guarded: the test mock's map may not implement panTo.
-    if (typeof map.panTo === "function") map.panTo([lat, lon]);
+    if (typeof map.panTo === "function") map.panTo([lat, lon], move);
   }, [map, active, lat, lon]);
   return null;
+}
+
+// A new route arrives as if drawn with a pen: each solid line grows from its start to
+// its end over `draw`. The dash pattern that does it is put on the SVG path Leaflet
+// rendered and taken off again when the line is complete, so the line at rest is
+// exactly the one Leaflet drew. pathLength="1" measures the dashes in fractions of the
+// line rather than in pixels, which keeps the draw right when the camera's own glide
+// changes the zoom (and so the path) halfway through. The gap is twice the line, so no
+// second dash can start at its far end and put a round cap there.
+//
+// A line with a dash pattern of its own (a walk) cannot be drawn this way without
+// losing that pattern, so it fades in over `base`; so does every line when the map
+// renders to a canvas, where there is no path element to style. Returns the cleanup,
+// which puts the line back at rest at once.
+export function revealRouteLine(layer: L.Path): () => void {
+  const el = layer.getElement();
+  if (!(el instanceof SVGElement)) return fadeOnCanvas(layer);
+  const draw = !layer.options.dashArray;
+  const prop = draw ? "stroke-dashoffset" : "opacity";
+  const ms = draw ? DURATION_MS.draw : DURATION_MS.base;
+  if (draw) {
+    el.setAttribute("pathLength", "1");
+    el.style.setProperty("stroke-dasharray", "1 2");
+  }
+  el.style.setProperty(prop, draw ? "1" : "0");
+  // Commit the hidden start before the transition goes on, or the browser has no
+  // starting value to transition from and the line simply appears.
+  el.getBoundingClientRect();
+  el.style.setProperty("transition", `${prop} ${ms}ms ${EASE_CSS.enter}`);
+  el.style.setProperty(prop, draw ? "0" : "1");
+  const rest = () => {
+    el.removeAttribute("pathLength");
+    for (const p of ["stroke-dasharray", prop, "transition"]) el.style.removeProperty(p);
+  };
+  const timer = window.setTimeout(rest, ms);
+  return () => {
+    window.clearTimeout(timer);
+    rest();
+  };
+}
+
+// The canvas renderer paints every layer into one bitmap, so the fade goes through
+// Leaflet's own style, one frame at a time.
+function fadeOnCanvas(layer: L.Path): () => void {
+  const opacity = layer.options.opacity ?? 1;
+  const start = performance.now();
+  let frame = 0;
+  const step = (now: number) => {
+    const t = Math.min(1, (now - start) / DURATION_MS.base);
+    layer.setStyle({ opacity: opacity * t });
+    if (t < 1) frame = requestAnimationFrame(step);
+  };
+  step(start);
+  return () => {
+    cancelAnimationFrame(frame);
+    layer.setStyle({ opacity });
+  };
+}
+
+// One line of the route (a leg, or the casing under it) that draws itself in whenever
+// `drawKey` changes. The key is the whole route's geometry, so a new trip or another
+// option draws every line again, and a re-render or a reselection of the option on
+// screen draws nothing. Reduced motion: no draw and no fade. The effect runs after
+// react-leaflet's own, which have added the layer to the map by then, so the path
+// element exists.
+function RouteLine({
+  positions,
+  pathOptions,
+  drawKey,
+}: {
+  positions: LatLngExpression[];
+  pathOptions: L.PathOptions;
+  drawKey: string;
+}) {
+  const ref = useRef<L.Polyline | null>(null);
+  useEffect(() => {
+    const layer = ref.current;
+    if (!layer || prefersReducedMotion()) return;
+    return revealRouteLine(layer);
+  }, [drawKey]);
+  return <Polyline ref={ref} positions={positions} pathOptions={pathOptions} />;
 }
 
 // Put a control in Leaflet's own corner when Leaflet built one, and leave it in the
@@ -544,6 +635,9 @@ export function MapView({
   // both this and allCoords are tied to route identity.
   const legPaths = useMemo(() => (route?.legs ?? []).map(legCoords), [route]);
   const allCoords = useMemo(() => legPaths.flat(), [legPaths]);
+  // The drawn geometry as one value, for RouteLine: it changes when the line on the map
+  // would, and not when only the route object does.
+  const drawKey = useMemo(() => JSON.stringify(legPaths), [legPaths]);
   const [menu, setMenu] = useState<MenuState | null>(null);
   // Weather layers pause entirely while the map is not interactive (scrolled back to
   // the home view, mid-morph): the map stays mounted at opacity 0 there, and the
@@ -664,8 +758,9 @@ export function MapView({
         const coords = legPaths[i];
         if (coords.length < 2) return null;
         return (
-          <Polyline
+          <RouteLine
             key={`case-${i}`}
+            drawKey={drawKey}
             positions={coords as LatLngExpression[]}
             pathOptions={{ color: "#ffffff", weight: 9, opacity: 0.9, lineCap: "round" }}
           />
@@ -678,8 +773,9 @@ export function MapView({
         const coords = legPaths[i];
         if (coords.length < 2) return null;
         return (
-          <Polyline
+          <RouteLine
             key={`leg-${i}`}
+            drawKey={drawKey}
             positions={coords as LatLngExpression[]}
             pathOptions={{
               color: modeColor(leg.mode),
