@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useI18n } from "../lib/i18n";
+import { centreOf, type RevealOrigin } from "../hooks/useTheme";
 import { dropdown, useLeaving, useMotionPreset } from "../lib/motion";
 
 // The header's real menu: theme switch, language switch, local-data actions, the
@@ -19,7 +20,7 @@ export function HeaderMenu({
   onClearSaved: () => void;
   onOpenPrivacy: () => void;
   dark: boolean;
-  onToggleTheme: () => void;
+  onToggleTheme: (origin?: RevealOrigin) => void;
 }) {
   const { t, toggle: toggleLang } = useI18n();
   const [open, setOpen] = useState(false);
@@ -98,7 +99,13 @@ export function HeaderMenu({
       <AnimatePresence>
         {open && (
           <MenuPanel key="menu">
-            <button type="button" aria-pressed={dark} className={item} onClick={onToggleTheme}>
+            {/* The new theme opens from the sun or moon, not from the middle of the row. */}
+            <button
+              type="button"
+              aria-pressed={dark}
+              className={item}
+              onClick={(e) => onToggleTheme(centreOf(e.currentTarget.firstElementChild ?? e.currentTarget))}
+            >
               <span
                 aria-hidden="true"
                 className="material-symbols-rounded mr-2 text-[18px] leading-none text-slate-400 dark:text-ams-ns"

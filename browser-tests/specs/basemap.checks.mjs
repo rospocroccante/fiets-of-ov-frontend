@@ -362,6 +362,12 @@ export const scenarios = [
         `);
         if (!toggle) throw new Error("no dark-mode control in the header menu");
         await page.tap(toggle.x + toggle.w / 2, toggle.y + toggle.h / 2);
+        // The new theme opens as a circle from the switch (a view transition), and while
+        // it runs the browser hit-tests the root instead of the page, so a tap made then
+        // reaches nothing. Wait for the circle to finish before the next one.
+        await page.waitFor(`!document.documentElement.classList.contains("theme-switching")`, {
+          label: "the theme reveal to finish",
+        });
         // The menu stays open after the switch, by design (every label flips in place).
         // Close it the way it was opened, or it sits over the map the screenshot is of.
         await page.tap(menu.x + menu.w / 2, menu.y + menu.h / 2);

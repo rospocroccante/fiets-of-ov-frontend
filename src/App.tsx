@@ -26,7 +26,7 @@ import { useRecentTrips } from "./hooks/useRecentTrips";
 import type { RecentTrip } from "./hooks/useRecentTrips";
 import { useSavedPlaces } from "./hooks/useSavedPlaces";
 import type { SavedPlace } from "./hooks/useSavedPlaces";
-import { useTheme } from "./hooks/useTheme";
+import { centreOf, useTheme } from "./hooks/useTheme";
 import { useTripPlan } from "./hooks/useTripPlan";
 import { useWakeLock } from "./hooks/useWakeLock";
 import { translate, useI18n } from "./lib/i18n";
@@ -943,7 +943,7 @@ export default function App() {
               type="button"
               aria-label={dark ? t("switchToLight") : t("switchToDark")}
               aria-pressed={dark}
-              onClick={toggleTheme}
+              onClick={(e) => toggleTheme(centreOf(e.currentTarget))}
               className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-night-rim/20 dark:bg-night-surface/70 dark:text-night-accent dark:hover:bg-night-hover/95"
             >
               <span aria-hidden="true" className="material-symbols-rounded block text-[20px] leading-none">

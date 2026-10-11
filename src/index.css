@@ -111,6 +111,41 @@ summary:focus-visible {
 .dark { color-scheme: dark; }
 .dark body { @apply bg-night-bg text-night-text; }
 
+/* The theme switch (hooks/useTheme): the new theme opens as a circle from the switch
+   over a still snapshot of the old one. The browser's cross-fade is off and the blend
+   is plain, so inside the circle there is only the new page. useTheme writes the
+   origin, the radius that reaches the farthest corner and the timing (`reveal` on the
+   enter curve, from lib/motion) on <html> before it starts the transition. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-new(root) {
+  animation: theme-reveal var(--reveal-duration) var(--reveal-ease);
+}
+@keyframes theme-reveal {
+  from { clip-path: circle(0 at var(--reveal-x) var(--reveal-y)); }
+  to { clip-path: circle(var(--reveal-r) at var(--reveal-x) var(--reveal-y)); }
+}
+/* useTheme skips the transition under reduced motion; this is the second guard, and
+   it has to be its own rule (see the global reduced-motion rule below). */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+/* While the circle opens, colours that carry a transition would fade to the new theme
+   a second time inside it. useTheme keeps this class on <html> until the transition
+   has finished. 0.01ms rather than none, as in the reduced-motion rule, so code that
+   waits on transitionend still hears it. */
+.theme-switching *,
+.theme-switching ::before,
+.theme-switching ::after {
+  transition-duration: 0.01ms !important;
+}
+
 /* Home<->map morph: the page scroll drives the transition, and resting between the
    two ends leaves a half-faded, half-interactive UI. Proximity snap (with the two
    sentinels App renders at 0 and 100vh) settles the scroll on whichever stage is
