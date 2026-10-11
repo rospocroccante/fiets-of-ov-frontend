@@ -85,6 +85,16 @@ export default {
       // inside cards included, and at 20px a stack of panels reads as a pile of
       // pills. Status tags take rounded-md and on/off controls stay pills.
       borderRadius: { card: "0.75rem" },
+      // The motion tokens, for CSS transitions: `duration-fast/base/slow` and
+      // `ease-enter/exit`. The values are defined in src/lib/motion.ts; this is a copy
+      // because the config cannot import TypeScript, and motion.test.tsx fails if the
+      // two drift apart. Existing `transition` classes keep Tailwind's defaults until
+      // they are touched for a reason of their own.
+      transitionDuration: { fast: "150ms", base: "200ms", slow: "300ms" },
+      transitionTimingFunction: {
+        enter: "cubic-bezier(0.2, 0, 0, 1)",
+        exit: "cubic-bezier(0.3, 0, 1, 1)",
+      },
     },
   },
   plugins: [

@@ -103,8 +103,9 @@ function MetricNotes({ itinerary }: { itinerary: Itinerary }) {
   return (
     <details className="group mt-3 border-t border-gray-100 dark:border-night-rim/20">
       {/* A 44px row, not a 16px line of text. `list-none` plus the webkit rule drops
-          the native triangle so the chevron can carry the state instead; the rotation
-          is motion-safe, like every other transition in the app. */}
+          the native triangle so the chevron can carry the state instead. The rotation
+          is `motion-safe:`, a second guard: the global reduced-motion rule in
+          index.css is what makes every transition in the app instant, prefixed or not. */}
       <summary
         data-fov="estimates-toggle"
         className="flex min-h-[44px] cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-night-subtle [&::-webkit-details-marker]:hidden"

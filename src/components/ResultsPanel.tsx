@@ -64,7 +64,9 @@ function WeatherBanner({ view }: { view: PlanView }) {
 
 // The chevron that carries a disclosure's state. Inline rather than a font glyph: the
 // icon font is subset from the list in index.css and a new ligature there means
-// regenerating the .woff2. Motion-safe, like every other transition in the app.
+// regenerating the .woff2. The rotation is `motion-safe:`, but that prefix is a second
+// guard: the global reduced-motion rule in index.css is what makes every transition
+// in the app instant, prefixed or not.
 function Chevron() {
   return (
     <svg
