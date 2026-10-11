@@ -86,7 +86,7 @@ export function PlaceInfoCard({
         <button
           type="button"
           onClick={() => onDirections("end")}
-          className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full border border-brand px-3 text-xs font-semibold text-brand transition hover:bg-brand-light dark:border-night-accent dark:text-night-accent dark:hover:bg-night-accent-deep/30"
+          className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full border border-brand px-3 text-xs font-semibold text-brand transition hover:bg-brand-light dark:border-night-accent dark:text-night-accent dark:hover:bg-night-hover"
         >
           {t("toHere")}
         </button>

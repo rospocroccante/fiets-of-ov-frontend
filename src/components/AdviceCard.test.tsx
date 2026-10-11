@@ -204,6 +204,8 @@ describe("the leg bar", () => {
   function segments(container: HTMLElement): HTMLElement[] {
     return [...container.querySelectorAll<HTMLElement>('[data-fov="leg-segment"]')];
   }
+  // Thin space, middle dot, thin space between a name and its minutes.
+  const dot = "\u2009\u00b7\u2009";
 
   test("draws one segment per leg, grown by its minutes and filled with its mode colour", () => {
     const { container } = render(<AdviceCard option={transitMixed} selected={false} onSelect={() => {}} />);
@@ -218,9 +220,9 @@ describe("the leg bar", () => {
 
   test("labels each segment with its mode or line and its minutes, a walk with minutes alone", () => {
     const { container } = render(<AdviceCard option={bikeAndRide} selected onSelect={() => {}} />);
-    expect(segments(container).map((s) => s.textContent)).toEqual(["Bike 6", "M52 7", "4"]);
+    expect(segments(container).map((s) => s.textContent)).toEqual([`Bike${dot}6`, `M52${dot}7`, "4"]);
     const transit = render(<AdviceCard option={transitMixed} selected={false} onSelect={() => {}} />);
-    expect(segments(transit.container).map((s) => s.textContent)).toEqual(["4", "M52 8", "3", "Tram 1 9", "5"]);
+    expect(segments(transit.container).map((s) => s.textContent)).toEqual(["4", `M52${dot}8`, "3", `Tram 1${dot}9`, "5"]);
   });
 
   test("the labels are Dutch in a Dutch session", () => {
@@ -231,7 +233,7 @@ describe("the leg bar", () => {
         <AdviceCard option={nl} selected onSelect={() => {}} />
       </I18nProvider>,
     );
-    expect(segments(container).map((s) => s.textContent)).toEqual(["Fiets 6", "M52 7", "4"]);
+    expect(segments(container).map((s) => s.textContent)).toEqual([`Fiets${dot}6`, `M52${dot}7`, "4"]);
   });
 
   test("is hidden from assistive tech, which reads the route in words instead", () => {

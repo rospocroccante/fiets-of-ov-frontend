@@ -52,17 +52,19 @@ function rainMetric(rainMinutes: number | null, t: Translator): Metric {
 // The short name a duration-bar segment carries: the mode or the line, then its
 // minutes. Metro lines go by their GVB letter ("M52"), other lines by mode and number
 // ("Tram 1"), and a walk is minutes alone, because a grey stretch between two coloured
-// ones already says what it is.
+// ones already says what it is. A middle dot between name and minutes keeps "Tram 1 · 9"
+// from reading as "Tram 19".
+const LEG_SEP = "\u2009\u00b7\u2009";
 function legBarLabel(leg: PlanLeg, lang: Lang): string {
   if (leg.mode === "WALK") return `${leg.minutes}`;
-  if (leg.mode === "BICYCLE") return `${translate(lang, "bike")} ${leg.minutes}`;
+  if (leg.mode === "BICYCLE") return `${translate(lang, "bike")}${LEG_SEP}${leg.minutes}`;
   const metro = leg.mode === "SUBWAY" || leg.mode === "METRO";
   const line = leg.route
     ? metro
       ? `M${leg.route}`
       : `${transitLabel(leg.mode, lang)} ${leg.route}`
     : transitLabel(leg.mode, lang);
-  return `${line} ${leg.minutes}`;
+  return `${line}${LEG_SEP}${leg.minutes}`;
 }
 
 /**

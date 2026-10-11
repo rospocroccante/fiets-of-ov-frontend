@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { render, renderHook, screen, waitFor } from "@testing-library/react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, MotionGlobalConfig, motion, useReducedMotion } from "framer-motion";
 import {
   DURATION,
   DURATION_MS,
@@ -240,7 +240,9 @@ describe("presets", () => {
   // setup.ts turns framer's animations off for the whole suite. Without that, every
   // test that closes an overlay would wait out its exit (150ms here, about 175ms
   // measured in jsdom) in real time, and a test asserting removal would pass or fail
-  // on how fast the machine is. With it the element is gone in a few ms.
+  // on how fast the machine is. The proof stops framer's clock instead of timing it:
+  // every frame after the freeze sees the same timestamp, so an exit that waited on its
+  // duration would never finish, and this one still leaves.
   test("an exiting element leaves at once under the test setup", async () => {
     const { rerender } = render(
       <AnimatePresence>{<motion.div key="m" data-testid="m" {...overlay} />}</AnimatePresence>,
@@ -248,10 +250,13 @@ describe("presets", () => {
     // Let it arrive first: an element removed while still at its initial pose exits
     // from opacity 0 to opacity 0, which framer skips whatever the setup says.
     await waitFor(() => expect(screen.getByTestId("m").style.opacity).toBe("1"));
-    const started = performance.now();
-    rerender(<AnimatePresence>{null}</AnimatePresence>);
-    await waitFor(() => expect(screen.queryByTestId("m")).toBeNull(), { timeout: 1000 });
-    expect(performance.now() - started).toBeLessThan(DURATION_MS.fast);
+    MotionGlobalConfig.useManualTiming = true;
+    try {
+      rerender(<AnimatePresence>{null}</AnimatePresence>);
+      await waitFor(() => expect(screen.queryByTestId("m")).toBeNull(), { timeout: 1000 });
+    } finally {
+      MotionGlobalConfig.useManualTiming = false;
+    }
   });
 });
 
