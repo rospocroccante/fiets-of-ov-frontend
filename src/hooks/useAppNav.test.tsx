@@ -3,10 +3,11 @@ import { vi } from "vitest";
 import { useAppNav, type Layer } from "./useAppNav";
 
 // A history with the browser's shape: one list of entries and a pointer, popstate
-// delivered on a later task carrying the state of the entry it lands on.
-function fakeHistory(initial: unknown[] = [null]) {
+// delivered on a later task carrying the state of the entry it lands on. The pointer
+// starts on the last entry unless `at` puts it further back, with entries ahead of it.
+function fakeHistory(initial: unknown[] = [null], at = initial.length - 1) {
   const entries = [...initial];
-  let i = entries.length - 1;
+  let i = at;
   const fire = () => {
     const state = entries[i];
     setTimeout(() => window.dispatchEvent(new PopStateEvent("popstate", { state })), 0);
@@ -170,6 +171,22 @@ test("entries left by an earlier page load are skipped", async () => {
   await flush();
   expect(onBack).not.toHaveBeenCalled();
   expect(h.index).toBe(0);
+});
+
+// Saved opened, Back to Plan, then a reload: the old Saved entry is still ahead of the
+// one the new page load stamps. Forward onto it is skipped with a back(), and that back()
+// lands on this load's own entry, where nothing changed. Treated as a dead entry to skip,
+// it took a second back() and left the app: measured in Chrome, location became the page
+// before the app.
+test("a forward step onto an earlier page load's entry is undone without leaving the app", async () => {
+  const old = (idx: number, tab: string) => ({ fov: { session: "old", idx, tab, layers: [] } });
+  const h = fakeHistory([null, old(0, "plan"), old(1, "saved")], 1);
+  const { onBack, nav } = setup(h);
+  act(() => h.forward());
+  await flush();
+  expect(h.index).toBe(1);
+  expect(onBack).not.toHaveBeenCalled();
+  expect(nav().tab).toBe("plan");
 });
 
 test("a push asked for while a step back is in flight lands after it", async () => {

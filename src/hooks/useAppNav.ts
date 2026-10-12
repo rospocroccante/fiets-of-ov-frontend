@@ -52,6 +52,7 @@ export function useAppNav(onBack: (layer: Layer) => void, history: HistoryLike =
   const [tab, setTab] = useState<Tab>("plan");
   const cur = useRef<NavEntry>({ session, idx: 0, tab: "plan", layers: [] });
   const ignore = useRef(0);
+  const skippedStale = useRef(false);
   const queue = useRef<Write[]>([]);
   const h = useRef(history);
   h.current = history;
@@ -113,9 +114,13 @@ export function useAppNav(onBack: (layer: Layer) => void, history: HistoryLike =
         }
         return;
       }
+      // Whether this popstate answers a back() that skipped an earlier load's entry.
+      const afterSkip = skippedStale.current;
+      skippedStale.current = false;
       const e = readEntry(ev.state);
       if (!e) return;
       if (e.session !== session) {
+        skippedStale.current = true;
         h.current.back();
         return;
       }
@@ -127,7 +132,12 @@ export function useAppNav(onBack: (layer: Layer) => void, history: HistoryLike =
       const closed = c.layers.filter((l) => !e.layers.includes(l)).reverse();
       cur.current = { ...e, layers: c.layers.filter((l) => e.layers.includes(l)) };
       if (closed.length === 0 && e.tab === c.tab) {
-        h.current.back();
+        // A dead entry (a layer closed under another left it) is skipped too, but not
+        // the entry a stale skip lands on. This load's entries start at the one it
+        // stamped on mount, so a skip that lands on one of them came from a forward step
+        // onto an earlier load's entry, and landing here has already undone that step.
+        // One more back() from here left the app.
+        if (!afterSkip) h.current.back();
         return;
       }
       if (e.tab !== c.tab) setTab(e.tab);
