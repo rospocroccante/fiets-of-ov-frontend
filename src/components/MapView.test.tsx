@@ -12,6 +12,7 @@ import {
   __mapContainerProps,
   __polylines,
   __wheelZoom,
+  __zoomControl,
 } from "../__mocks__/react-leaflet";
 import type { Itinerary } from "../api/types";
 
@@ -476,4 +477,115 @@ test("the route fit leaves room for the sheet at the bottom", async () => {
   await waitFor(() =>
     expect(__mapCalls.lastBoundsOptions).toMatchObject({ paddingTopLeft: [50, 50], paddingBottomRight: [50, 350] }),
   );
+});
+
+// ---------------------------------------------------------------------------
+// The portrait phone: a full-bleed map under floating chrome
+// ---------------------------------------------------------------------------
+
+test("the route fit leaves room for the floating chrome at the top", async () => {
+  // topInset is bottomInset's twin: the back button, the search pill and the chip row
+  // float over the top of the map, and a route fitted under them is a route nobody sees.
+  renderMap(
+    <MapView
+      origin={{ lat: 52.379, lon: 4.9 }}
+      destination={{ lat: 52.358, lon: 4.868 }}
+      stops={[]}
+      route={route}
+      topInset={116}
+      bottomInset={300}
+    />
+  );
+  await waitFor(() =>
+    expect(__mapCalls.lastBoundsOptions).toMatchObject({ paddingTopLeft: [50, 166], paddingBottomRight: [50, 350] }),
+  );
+  // The reset goes back to the same view, so it keeps clear of the chrome as well.
+  __mapCalls.lastBoundsOptions = undefined;
+  fireEvent.click(screen.getByRole("button", { name: /whole trip/i }));
+  expect(__mapCalls.lastBoundsOptions).toMatchObject({ paddingTopLeft: [50, 166], paddingBottomRight: [50, 350] });
+});
+
+test("what the map pins to its top moves down by topInset", () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ host: "https://tc.test", radar: { past: [], nowcast: [] } }),
+    })),
+  );
+  const { container } = renderMap(
+    <MapView origin={null} destination={null} stops={[]} route={null} radar topInset={116} />,
+  );
+  // The radar readout's top-right column starts 12px under the chrome instead of 12px
+  // under the map's edge, which is under the search pill on this layout.
+  const readout = screen.getByText("light").closest(".z-\\[1000\\]") as HTMLElement;
+  expect(readout.style.top).toBe("128px");
+  // Leaflet's own corners are built by Leaflet, so the offset reaches them through a
+  // custom property on the wrapper that index.css hands to .leaflet-top.
+  const wrap = container.querySelector(".leaflet-container")!.parentElement as HTMLElement;
+  expect(wrap.style.getPropertyValue("--fov-map-top")).toBe("116px");
+});
+
+test("with no topInset the top of the map is exactly as before", () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ host: "https://tc.test", radar: { past: [], nowcast: [] } }),
+    })),
+  );
+  const { container } = renderMap(<MapView origin={null} destination={null} stops={[]} route={null} radar />);
+  const readout = screen.getByText("light").closest(".z-\\[1000\\]") as HTMLElement;
+  expect(readout).toHaveClass("top-3");
+  expect(readout.style.top).toBe("");
+  const wrap = container.querySelector(".leaflet-container")!.parentElement as HTMLElement;
+  expect(wrap.getAttribute("style")).toBeNull();
+});
+
+test("without the zoom buttons the reset floats in the bottom-right column, above the sheet", () => {
+  // Pinch zoom on a portrait phone, as in Google Maps: no + and -, and the way back to
+  // the trip is a round button with the map's other bottom-right chips.
+  renderMap(
+    <MapView
+      origin={{ lat: 52.379, lon: 4.9 }}
+      destination={{ lat: 52.358, lon: 4.868 }}
+      stops={[]}
+      route={route}
+      zoomControl={false}
+      topInset={116}
+      bottomInset={300}
+    />
+  );
+  expect(__mapContainerProps.last?.zoomControl).toBe(false);
+  expect(__zoomControl.shown).toBe(false);
+  const reset = screen.getByRole("button", { name: /whole trip/i });
+  expect(reset).toHaveAttribute("data-fov", "map-reset-view");
+  expect(reset).toHaveClass("rounded-full", "h-12", "w-12");
+  const column = reset.parentElement as HTMLElement;
+  expect(column).toHaveClass("right-3");
+  expect(column.style.bottom).toBe(`${12 + 300}px`);
+  // The column lives in the part of the map between the chrome and the sheet: when the
+  // sheet is at full and lifts it that far, it is clipped rather than drawn over the pill.
+  const clip = column.parentElement as HTMLElement;
+  expect(clip).toHaveClass("overflow-hidden", "pointer-events-none");
+  expect(clip.style.top).toBe("116px");
+  expect(column).toHaveClass("pointer-events-auto");
+});
+
+test("the zoom buttons and the reset under them stay where they are by default", () => {
+  renderMap(
+    <MapView
+      origin={{ lat: 52.379, lon: 4.9 }}
+      destination={{ lat: 52.358, lon: 4.868 }}
+      stops={[]}
+      route={route}
+    />
+  );
+  expect(__mapContainerProps.last?.zoomControl).not.toBe(false);
+  expect(__zoomControl.shown).not.toBe(false);
+  const reset = screen.getByRole("button", { name: /whole trip/i });
+  // No Leaflet corner in the mock, so the third button of the zoom column falls back to
+  // the wrapper, bottom-left, as it always has.
+  expect(reset).toHaveClass("rounded-[3px]");
+  expect(reset.parentElement).toHaveClass("absolute", "left-3");
 });

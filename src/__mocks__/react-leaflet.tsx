@@ -4,6 +4,7 @@ type MapContainerProps = {
   children?: React.ReactNode;
   className?: string;
   attributionControl?: boolean;
+  zoomControl?: boolean;
   maxZoom?: number;
 };
 
@@ -126,6 +127,11 @@ export const __mapCalls = {
   lastBoundsOptions: undefined as unknown,
 };
 
+// Test spy: whether MapView last showed or removed Leaflet's +/- control. The option on
+// MapContainer only applies when the map is built, so MapView also adds and removes the
+// control on the map itself, and this is where that lands. null: never touched.
+export const __zoomControl = { shown: null as boolean | null };
+
 // A single stable map object, like the real useMap: effects keyed on map identity
 // must not re-fire every render.
 const _map = {
@@ -148,6 +154,15 @@ const _map = {
   flyToBounds: (_bounds?: unknown, options?: unknown) => {
     __mapCalls.flyToBounds += 1;
     __mapCalls.lastBoundsOptions = options;
+  },
+  zoomControl: {
+    remove: () => {
+      __zoomControl.shown = false;
+    },
+    addTo: () => {
+      __zoomControl.shown = true;
+    },
+    getContainer: (): HTMLElement | undefined => undefined,
   },
   scrollWheelZoom: {
     enable: () => {
@@ -211,6 +226,7 @@ export function __resetMapMock(): void {
   _handlers = {};
   _markerHandlers.clear();
   __wheelZoom.enabled = null;
+  __zoomControl.shown = null;
   __mapCalls.fitBounds = 0;
   __mapCalls.setView = 0;
   __mapCalls.panTo = 0;

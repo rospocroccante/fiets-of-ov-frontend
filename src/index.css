@@ -394,3 +394,11 @@ html { scroll-snap-type: y proximity; }
     transition: none;
   }
 }
+
+/* Leaflet's top corners on a map that runs under floating chrome (a portrait phone):
+   MapView sets --fov-map-top on its wrapper to the height that chrome covers, and the
+   corners start under it. Unset everywhere else, which is Leaflet's own top: 0. One class
+   deeper than leaflet.css's `.leaflet-top`, which arrives after this file. */
+.leaflet-container .leaflet-top {
+  top: var(--fov-map-top, 0px);
+}
