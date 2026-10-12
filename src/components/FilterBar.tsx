@@ -23,6 +23,7 @@ export function FilterBar({
   onToggleRadar,
   kinds,
   onToggleKind,
+  kindsDisabled = false,
   hideMapDisabled = false,
   phone = false,
   compact = false,
@@ -33,7 +34,8 @@ export function FilterBar({
   onToggleMap: () => void;
   // While navigating, the map pane is the nav UI (banner, Exit): hiding it would
   // strand a live session with the GPS watch and wake lock still running, so the
-  // toggle locks rather than misfires. Everything else on the bar stays live.
+  // toggle locks rather than misfires. The mode chips lock too (kindsDisabled); the
+  // rest of the bar stays live.
   hideMapDisabled?: boolean;
   armed: Armed;
   onArm: (which: "start" | "end") => void;
@@ -41,6 +43,10 @@ export function FilterBar({
   onToggleRadar: () => void;
   kinds: KindFilter;
   onToggleKind: (m: Mode) => void;
+  // While navigating, the mode chips are locked: the ride follows the chosen option, and
+  // turning off its mode fell back to the next option and swapped the route being
+  // ridden. They stay on the bar with their state and size, and take no click or focus.
+  kindsDisabled?: boolean;
   // The phone bar: the three mode chips stay on the bar and the map's own tools fold
   // behind one control, because all seven never fitted. See the comment on the phone
   // branch below for the measurements.
@@ -64,11 +70,22 @@ export function FilterBar({
   // 900px window; this and the padding below take it to 58px and hand the 16px to the
   // map. The finger's 44px is untouched, and the browser suite measures both pointer
   // types so that stays true.
-  const chip = (pressed: boolean) =>
+  //
+  // A locked chip (kindsDisabled) keeps its box and says whether it is on, with no hover.
+  // On, it trades the brand or geel fill for an opaque neutral step (gray by day,
+  // `night.hover` at night) rather than fading it: geel at 40% over navy reads as olive,
+  // which the night palette rules out. Off, its border turns dashed.
+  const chip = (pressed: boolean, locked = false) =>
     `inline-flex min-h-[44px] shrink-0 items-center rounded-full border px-3 text-sm font-medium transition mouse:min-h-[36px] sm:px-4 ${
-      pressed
-        ? "border-transparent bg-brand text-white dark:bg-night-accent dark:text-night-bg"
-        : "border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-night-border dark:text-night-muted dark:hover:bg-night-hover"
+      locked
+        ? `disabled:cursor-not-allowed ${
+            pressed
+              ? "border-transparent bg-gray-200 text-gray-600 dark:bg-night-hover dark:text-night-muted"
+              : "border-dashed border-gray-300 text-gray-500 dark:border-night-border dark:text-night-subtle"
+          }`
+        : pressed
+          ? "border-transparent bg-brand text-white dark:bg-night-accent dark:text-night-bg"
+          : "border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-night-border dark:text-night-muted dark:hover:bg-night-hover"
     }`;
   const segment = (pressed: boolean) =>
     `inline-flex min-h-[44px] items-center rounded-full px-3 text-sm transition mouse:min-h-[36px] ${
@@ -104,6 +121,7 @@ export function FilterBar({
         onArm={onArm}
         kinds={kinds}
         onToggleKind={onToggleKind}
+        kindsDisabled={kindsDisabled}
         floating={floating}
       />
     );
@@ -123,7 +141,8 @@ export function FilterBar({
             type="button"
             aria-pressed={kinds[m]}
             onClick={() => onToggleKind(m)}
-            className={chip(kinds[m])}
+            disabled={kindsDisabled}
+            className={chip(kinds[m], kindsDisabled)}
           >
             {t(KIND_KEY[m])}
           </button>
@@ -207,10 +226,11 @@ function PhoneFilterBar({
   onArm,
   kinds,
   onToggleKind,
+  kindsDisabled,
   floating,
 }: {
   pad: string;
-  chip: (pressed: boolean) => string;
+  chip: (pressed: boolean, locked?: boolean) => string;
   hideMap: boolean;
   onToggleMap: () => void;
   hideMapDisabled: boolean;
@@ -218,6 +238,7 @@ function PhoneFilterBar({
   onArm: (which: "start" | "end") => void;
   kinds: KindFilter;
   onToggleKind: (m: Mode) => void;
+  kindsDisabled: boolean;
   floating: boolean;
 }) {
   const { t } = useI18n();
@@ -308,7 +329,8 @@ function PhoneFilterBar({
                 type="button"
                 aria-pressed={kinds[m]}
                 onClick={() => onToggleKind(m)}
-                className={chip(kinds[m]) + onMap(kinds[m])}
+                disabled={kindsDisabled}
+                className={chip(kinds[m], kindsDisabled) + onMap(kinds[m])}
               >
                 {t(KIND_KEY[m])}
               </button>

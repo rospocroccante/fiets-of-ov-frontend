@@ -972,6 +972,11 @@ export default function App() {
       onToggleRadar={toggleRadar}
       kinds={kinds}
       onToggleKind={(m) => setKinds((s) => ({ ...s, [m]: !s[m] }))}
+      // Locked for the ride: turning off the ridden mode would swap the route being ridden
+      // for the next option's. The map's pin drag, its "Directions from/to here" and the
+      // bar's Start and End pickers stay live: they are deliberate edits of an endpoint,
+      // and the replan they cause is intended.
+      kindsDisabled={navigating}
       phone={isPhone}
       compact={landscapePhone}
       floating={sheetLayout}

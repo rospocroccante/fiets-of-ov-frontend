@@ -167,11 +167,9 @@ test("while a ride is on, the option rows in the opened sheet choose nothing, an
   await waitFor(() => expect(within(steps).getAllByRole("listitem").length).toBeGreaterThan(0));
 });
 
-// The desktop results column and a phone on its side list the same rows beside the map.
-test.each([
-  ["on desktop", false],
-  ["on a phone on its side", true],
-] as const)("%s, while a ride is on, the results column's option rows choose nothing", async (_where, landscape) => {
+// A desktop, or a phone on its side: the Vondelpark trip planned into the results column
+// beside the map, and a ride started from the column's Start.
+async function rideFromColumn(landscape: boolean) {
   for (const r of restore.reverse()) r();
   restore = landscape ? [phoneViewport({ landscape: true })] : [];
   renderApp();
@@ -184,14 +182,47 @@ test.each([
   });
   fireEvent.click(within(column).getByRole("button", { name: "Start navigation" }));
   expect(screen.getByText(/~24 min/)).toBeInTheDocument();
+  return column;
+}
 
+const chosenIn = (column: HTMLElement) =>
+  column.querySelector('[data-fov="option"][data-selected="true"]') as HTMLElement;
+
+// The desktop results column and a phone on its side list the same rows beside the map.
+test.each([
+  ["on desktop", false],
+  ["on a phone on its side", true],
+] as const)("%s, while a ride is on, the results column's option rows choose nothing", async (_where, landscape) => {
+  const column = await rideFromColumn(landscape);
   const rows = [...column.querySelectorAll('[data-fov="option-button"]')];
   expect(rows).toHaveLength(2);
   for (const row of rows) fireEvent.click(row);
-  const chosen = column.querySelector('[data-fov="option"][data-selected="true"]') as HTMLElement;
-  expect(within(chosen).getByText("By bike")).toBeInTheDocument();
+  expect(within(chosenIn(column)).getByText("By bike")).toBeInTheDocument();
   expect(screen.getByText(/~24 min/)).toBeInTheDocument();
   expect(screen.queryByText(/~29 min/)).toBeNull();
+});
+
+// The mode chips beside the map filter the options, and the ride follows the chosen one:
+// turning off the ridden mode's chip used to fall back to the next option and swap the
+// ride for its route. The portrait phone hides the chips during a ride.
+test.each([
+  ["on desktop", false],
+  ["on a phone on its side", true],
+] as const)("%s, while a ride is on, the mode chips leave it alone, and after Exit they filter again", async (_where, landscape) => {
+  const column = await rideFromColumn(landscape);
+  const bar = document.querySelector('[data-fov="filter-bar"]') as HTMLElement;
+  const bike = within(bar).getByRole("button", { name: "Bike" });
+  fireEvent.click(bike);
+  expect(bike).toHaveAttribute("aria-pressed", "true");
+  expect(within(chosenIn(column)).getByText("By bike")).toBeInTheDocument();
+  expect(screen.getByText(/~24 min/)).toBeInTheDocument();
+  expect(screen.queryByText(/~29 min/)).toBeNull();
+
+  fireEvent.click(screen.getByRole("button", { name: /exit navigation/i }));
+  expect(screen.queryByRole("button", { name: /exit navigation/i })).toBeNull();
+  fireEvent.click(bike);
+  expect(bike).toHaveAttribute("aria-pressed", "false");
+  await waitFor(() => expect(within(chosenIn(column)).getByText("Public transport")).toBeInTheDocument());
 });
 
 test("the other option's minutes choose it, as a tap on its row would", async () => {

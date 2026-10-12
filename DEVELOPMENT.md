@@ -342,9 +342,18 @@ and full, and so did the rows of the results column beside the map on a desktop 
 phone on its side. While a ride is on, `App` passes the ready panel no `onSelect`, and
 every `AdviceCard` row is a disabled button: it reads as before, takes no tap and no
 focus, and has no hover tint. The chosen option's steps still open and scroll, and
-nothing in the results ends the ride: that is the banner's Exit. While a plan is on its
-way the header reads "Planning your trip…" over a placeholder row that pulses only where
-motion is allowed.
+nothing in the results ends the ride: that is the banner's Exit. The filter bar's mode
+chips beside the map, on a desktop and on a phone on its side, swapped the ride as well:
+turning off the ridden mode fell back to the next option. `FilterBar` takes
+`kindsDisabled`, which `App` sets for the ride, and the chips stay on the bar with their
+size and state but are disabled. A chip that is on trades the brand or geel fill for an
+opaque neutral step (`gray-200` by day, `night.hover` with `night.muted` text at night)
+instead of fading, since geel at 40% over navy reads as olive; a chip that is off gets a
+dashed border. They take clicks again after Exit. The portrait phone hides the chips for
+the ride. The map's pin drag, its "Directions from/to here" and the bar's Start and End
+pickers stay live: they are deliberate edits of an endpoint, and the replan they cause is
+intended. While a plan is on its way the header reads "Planning your trip…" over a
+placeholder row that pulses only where motion is allowed.
 When a plan fails it reads "Routes are unavailable right now. Try again in a moment."
 with a Try again that bumps the submit nonce, so the same trip is fetched again. The
 backend's message stays out of the sheet; the desktop results column still prints it.

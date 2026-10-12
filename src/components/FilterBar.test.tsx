@@ -224,6 +224,48 @@ test("the phone panel's Hide map is locked while navigating too", () => {
   expect(screen.getByRole("button", { name: /hide map/i })).toBeDisabled();
 });
 
+// While a ride is on the mode chips must not change it: turning off the ridden mode
+// swapped the ride for the next option's route. They stay on the bar, the same size, and
+// take no click and no focus. A filled chip loses its fill rather than fading it: geel at
+// 40% over navy reads as olive, which the night palette rules out.
+test.each([
+  ["the desktop bar", {}],
+  ["the phone bar on its side", { phone: true, compact: true }],
+] as const)("%s locks its mode chips while a ride is on", (_where, layout) => {
+  const toggled: string[] = [];
+  renderBar({
+    ...layout,
+    kinds: { bike: true, transit: false, bike_and_ride: true },
+    onToggleKind: (m) => toggled.push(m),
+    kindsDisabled: true,
+  });
+  for (const name of ["Bike", "Transit", "Bike + OV"]) {
+    const chip = screen.getByRole("button", { name });
+    expect(chip).toBeDisabled();
+    expect(chip).toHaveClass("min-h-[44px]", "rounded-full", "border", "disabled:cursor-not-allowed");
+    expect(chip.className).not.toMatch(/hover:/);
+    expect(chip.className).not.toMatch(/opacity/);
+    fireEvent.click(chip);
+  }
+  expect(toggled).toEqual([]);
+  // Pressed still reads as pressed, in an opaque neutral fill from the night ramp.
+  const bike = screen.getByRole("button", { name: "Bike" });
+  expect(bike).toHaveAttribute("aria-pressed", "true");
+  expect(bike.className).not.toMatch(/(^|\s)(dark:)?bg-(brand|night-accent)(\s|$)/);
+  expect(bike).toHaveClass("dark:bg-night-hover", "dark:text-night-muted");
+  expect(screen.getByRole("button", { name: "Transit" })).toHaveAttribute("aria-pressed", "false");
+});
+
+test("unlocked, the mode chips take clicks again", () => {
+  const toggled: string[] = [];
+  renderBar({ onToggleKind: (m) => toggled.push(m), kindsDisabled: false });
+  const bike = screen.getByRole("button", { name: "Bike" });
+  expect(bike).toBeEnabled();
+  expect(bike).toHaveClass("bg-brand", "dark:bg-night-accent");
+  fireEvent.click(bike);
+  expect(toggled).toEqual(["bike"]);
+});
+
 test("mode chips are real filters: pressed state reflects kinds, click toggles", () => {
   const toggled: string[] = [];
   renderBar({
