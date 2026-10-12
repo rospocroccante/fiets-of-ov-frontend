@@ -100,6 +100,23 @@ test("a drag on the handle moves the sheet even when its touchmoves cannot be ca
   restore();
 });
 
+// A drag that grabs the sheet mid-settle stops that animation before it reports, so the
+// release has to report even when it snaps back to the detent it left. Without it the
+// parent kept the previous detent's height and padded the map for a sheet no longer there.
+test("a drag released back onto the detent it left still reports the settled height", async () => {
+  const restore = stubHostHeight(700);
+  const { onSettle } = renderSheet("full");
+  expect(onSettle).toHaveBeenLastCalledWith(700);
+  onSettle.mockClear();
+  const handle = screen.getByRole("button", { name: "Collapse results" });
+  // Up past full: the sheet stretches, and on release falls back to full.
+  touch(handle, "touchstart", 300, false);
+  for (const y of [280, 240, 200]) touch(handle, "touchmove", y, false);
+  touch(handle, "touchend", null, false);
+  await waitFor(() => expect(onSettle).toHaveBeenCalledWith(700));
+  restore();
+});
+
 // Chrome sends no click after a touch that moved past its tap slop. A drag that left the
 // sheet waiting for its click had the next real tap on the handle swallowed instead.
 test("after a touch drag on the handle, the next tap on it still moves the sheet", () => {

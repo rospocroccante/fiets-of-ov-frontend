@@ -132,10 +132,16 @@ export function ResultsSheet({
         if (typeof navigator.vibrate === "function") navigator.vibrate(8);
         live.current.onDetent(next);
       } else {
+        // Back to the detent it left, which is a settle like any other and reports when it
+        // ends. The drag may have stopped a settle animation before that one reported, and
+        // then nothing else would: the parent kept the previous detent's height. With
+        // reduced motion the duration is 0, and framer still calls onComplete.
+        const target = h[next];
         anim.current?.stop();
-        anim.current = animate(visible, h[next], {
+        anim.current = animate(visible, target, {
           duration: live.current.reduce ? 0 : DURATION.slow,
           ease: EASE.enter,
+          onComplete: () => live.current.onSettle?.(target),
         });
       }
     };
