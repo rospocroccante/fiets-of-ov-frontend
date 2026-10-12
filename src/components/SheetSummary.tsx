@@ -19,8 +19,9 @@ import { WeatherVerdict, type PanelState } from "./ResultsPanel";
 // chosen option's, so a tap that chose another one mid-ride swapped the route under the
 // rider, rebuilt from the itinerary's start rather than from where they were.
 //
-// Idle has no sheet at all, so it renders nothing. Loading and error are this header
-// alone, and the sheet hugs it.
+// Idle has no sheet at all, so it renders nothing. Loading, error and every option
+// filtered away are this header alone, and the sheet hugs it. A plan with options, even
+// one, has content under the header and does not.
 
 // The leg colour each option's badge is filled with: the colour its main leg has on the
 // map and on the step chips.

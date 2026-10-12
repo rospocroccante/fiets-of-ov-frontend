@@ -27,9 +27,11 @@ import {
 // and full show the content as well. The parent decides the detent; this component moves
 // to it, and turns a drag or a tap into a request for a new one.
 //
-// The sheet hugs. When the header and the content fit under half there is one resting
+// The sheet can hug. When the header and the content fit under half there is one resting
 // height, exactly that tall (sheetDetents.ts), no handle, and a drag only stretches it.
-// A plan loading or a plan that failed has no content, so its sheet is the header alone.
+// In the app that is a sheet with no content, the header alone: a plan loading, a plan
+// that failed, every option filtered away. A real plan's content, one option or three,
+// runs past half on every phone measured, so it keeps peek, half and full.
 //
 // Touch goes through native listeners, not framer's drag, because of the hand-off: at full
 // height the content scrolls, and the sheet only takes the gesture back when the content

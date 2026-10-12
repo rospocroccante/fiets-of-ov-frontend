@@ -30,10 +30,12 @@ export interface SheetSizes {
 // Peek is the header, measured, above the bottom inset: the collapsed sheet shows the
 // header whole and never a slice of what is under it.
 //
-// The sheet hugs its content. When the header and the content fit under half, the sheet
-// is exactly that tall and that is its only resting height: there are no detents to
-// fake. Half and full exist only when there is more to show, and full stops where the
-// content ends if that comes before the frame does.
+// The sheet hugs its content when the header and the content fit under half: the sheet
+// is exactly that tall and that is its only resting height, with no detents to fake. In
+// the app only a sheet with no content does (loading, an error, every option filtered
+// away); a real plan's content runs past half. Half and full exist only when there is
+// more to show, and full stops where the content ends if that comes before the frame
+// does.
 export function detentHeights({ container, viewport, safeBottom, header, content }: SheetSizes): DetentHeights {
   const frame = Math.max(0, Math.round(container));
   const peek = Math.min(frame, Math.round(header) + Math.round(safeBottom));

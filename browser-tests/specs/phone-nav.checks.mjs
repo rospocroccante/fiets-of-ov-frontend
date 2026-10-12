@@ -1184,6 +1184,75 @@ export const scenarios = [
     },
   })),
 
+  // The sheet hugs (one resting height, no handle) only when it has no content: a plan on
+  // its way, a plan that failed, and every option filtered away. A real plan does not hug,
+  // even with one option: the option row, the forecast strip and the credits take it past
+  // half. The mock answers a "polder" destination with the bike alone.
+  ...[
+    { width: 320, height: 568 },
+    { width: 360, height: 800 },
+    { width: 390, height: 844 },
+  ].map(({ width, height }) => ({
+    name: `${width}x${height} a one-option plan keeps peek, half and full; with every option filtered away the sheet hugs`,
+    async run(ctx) {
+      const { checks } = ctx;
+      const seed = {
+        "fov.recentTrips.v1": [
+          { fromLabel: "Amsterdam Centraal", fromQuery: "Amsterdam Centraal", toLabel: "Polder", toQuery: "Polder", at: 1_700_000_000_000 },
+        ],
+      };
+      const page = await bootPhone(ctx, { width, height, seed });
+      try {
+        const safe = await page.eval(SAFE_BOTTOM);
+        await tapHomeRow(page, "Polder");
+        await page.waitFor(`document.querySelectorAll('${OPTION}').length === 1`, { label: "the one travel option" });
+        await page.waitFor(`Math.round(window.scrollY) === innerHeight`, { label: "the morph to reach the map stage" });
+        await sheetAt(page, "peek");
+        await sleep(300);
+        const READ_HUG = `
+          const s = document.querySelector('${SHEET}');
+          const content = document.querySelector('${CONTENT}');
+          const cs = getComputedStyle(content);
+          const head = document.querySelector('[data-fov="sheet-head"]').getBoundingClientRect().height;
+          const body = document.querySelector('[data-fov="sheet-body"]').getBoundingClientRect().height;
+          return { hugs: s.hasAttribute("data-hugs"), handle: !!document.querySelector('${HANDLE}'),
+                   head, body, natural: Math.round(1 + head + (body > 0 ? body + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) : 0)),
+                   half: Math.round(innerHeight / 2), options: document.querySelectorAll('${OPTION}').length,
+                   summary: document.querySelector('[data-fov="sheet-summary"]').innerText.replace(/\\s+/g, " ").trim() };
+        `;
+        const one = await page.eval(READ_HUG);
+        checks.equal("the plan has one option", one.options, 1, one.summary);
+        checks.atLeast("its sheet's natural height runs past half", one.natural, one.half + 1, `header and content ${one.natural}px, half ${one.half}px`);
+        checks.ok("so it does not hug, and has its handle", !one.hugs && one.handle, `data-hugs ${one.hugs}, handle ${one.handle}`);
+        await tapOn(page, HANDLE, "sheet handle");
+        const half = await sheetAt(page, "half");
+        checks.near("a tap on the handle opens it to half", half.visible, one.half, 2, `${half.visible}px showing`);
+        await tapOn(page, HANDLE, "sheet handle");
+        const full = await sheetAt(page, "full");
+        checks.atLeast("and another to full, above half", full.visible, one.half + 1, `${full.visible}px showing`);
+        await tapOn(page, HANDLE, "sheet handle");
+        await sheetAt(page, "peek");
+
+        // The Bike chip off: no option left, and the summary says so.
+        const chip = await page.eval(`
+          const b = [...document.querySelector('[data-fov="filter-bar"]').querySelectorAll("button")].find((x) => x.textContent.trim() === "Bike");
+          const r = b.getBoundingClientRect();
+          return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+        `);
+        await page.tap(chip.x, chip.y);
+        await page.waitFor(`document.querySelector('${SHEET}[data-hugs]')`, { label: "the sheet to hug", timeout: 4000 }).catch(() => {});
+        await sleep(600);
+        const none = await page.eval(READ_HUG);
+        const s = await page.eval(READ_SHEET.replace(`handle: F.rect(document.querySelector('${HANDLE}')),`, ""));
+        checks.ok("with every option filtered away the summary says so", /no options match/i.test(none.summary), none.summary);
+        checks.ok("and the sheet hugs it, with no handle", none.hugs && !none.handle, `data-hugs ${none.hugs}, handle ${none.handle}`);
+        checks.near("as tall as its header, above the inset", s.visible, none.head + 1 + safe, 1, `${s.visible}px showing, header ${none.head}px`);
+      } finally {
+        await page.close();
+      }
+    },
+  })),
+
   ...[
     { width: 390, height: 844 },
     { width: 360, height: 800 },

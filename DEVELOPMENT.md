@@ -367,11 +367,16 @@ this layout: a full sheet lifts the card by its own height, and the frame cuts i
 the chrome where it would otherwise cover the pill. `MapView` clips its bottom-right
 column at `topInset` the same way.
 
-The sheet hugs its content. When the header and the content fit under half, that height
-is its only resting place (`hugs()` is true): there is no handle, a tap on the header
-does nothing, and a drag stretches the sheet against the rubber band and lets it come
-back. A plan on its way or a failed one has no content, so its sheet is the header
-alone. `data-hugs` marks this state on the sheet.
+The sheet can hug its content. When the header and the content fit under half, that
+height is its only resting place (`hugs()` is true): there is no handle, a tap on the
+header does nothing, and a drag stretches the sheet against the rubber band and lets it
+come back. `data-hugs` marks this state on the sheet. In the app it happens only when
+there is no content: a plan on its way, a plan that failed, and a filter that hides every
+option, where the sheet is the summary alone (45px for "No options match the current
+filters."). A real plan never hugs, even with one option: the option row, the forecast
+strip and the credits make header and content 636px for the mock's bike-only plan
+against a half of 284 to 422px at 320x568, 360x800 and 390x844, so it keeps peek, half
+and full.
 
 A new search lands at peek, with the map and the route as the screen, and navigation
 drops the sheet to peek as well. A tap on the summary away from its buttons, or on the

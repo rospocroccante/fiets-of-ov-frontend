@@ -30,7 +30,7 @@ test("content that fits under half: one resting height, exactly as tall as it", 
   expect(hugs(detentHeights({ ...PHONE, header: 160, content: 263 }))).toBe(false);
 });
 
-test("no content (loading, an error): the header alone, hugged", () => {
+test("no content (loading, an error, every option filtered away): the header alone, hugged", () => {
   const h = detentHeights({ ...PHONE, header: 120, content: 0 });
   expect(h).toEqual({ peek: 154, half: 154, full: 154 });
   expect(hugs(h)).toBe(true);
