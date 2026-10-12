@@ -8,6 +8,7 @@ import {
   DURATION_MS,
   EASE,
   EASE_CSS,
+  SPRING,
   STAGGER,
   STAGGER_MAX,
   dropdown,
@@ -133,6 +134,20 @@ describe("tokens", () => {
   test("stagger: 40ms per item, six items", () => {
     expect(STAGGER).toBe(0.04);
     expect(STAGGER_MAX).toBe(6);
+  });
+
+  // The results sheet settles on a spring so a release keeps the finger's speed. Near
+  // critical damping: it lands without a bounce from rest, and the overshoot a fast flick
+  // can still cause is a few pixels. Six time constants (1 + wt)e^-wt is under 1% of the
+  // distance, which has to be well inside half a second.
+  test("the sheet's spring: about critically damped, and quick", () => {
+    const { type, stiffness, damping, mass } = SPRING.sheet;
+    expect(type).toBe("spring");
+    const zeta = damping / (2 * Math.sqrt(stiffness * mass));
+    expect(zeta).toBeGreaterThanOrEqual(0.95);
+    expect(zeta).toBeLessThanOrEqual(1.05);
+    const omega = Math.sqrt(stiffness / mass);
+    expect(6.6 / omega).toBeLessThan(0.4);
   });
 
   // Tailwind cannot import a TypeScript module, so the CSS side of the tokens is a copy.

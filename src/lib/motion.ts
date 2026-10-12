@@ -46,6 +46,19 @@ export const EASE_CSS = {
   exit: cubicBezier(EASE.exit),
 } as const;
 
+// The results sheet settles on a spring. It used to settle on a tween, which has a fixed
+// duration and starts from rest: a sheet flicked fast stopped dead at the release and then
+// eased off again, and one dropped a few pixels from its detent took as long as a whole move.
+// A spring starts at the speed it is given (the finger's, on a release) and takes as long
+// as the distance needs. These numbers are near critical damping: from rest it lands
+// without a bounce, and a fast flick overshoots by a few pixels at most, which the sheet
+// covers with a strip of its own surface below its tallest detent. restDelta and
+// restSpeed end it at half a pixel, so the settle the map waits for is not spent on
+// movement nobody can see. Reduced motion does not use it: the sheet jumps (duration 0).
+export const SPRING = {
+  sheet: { type: "spring", stiffness: 380, damping: 38, mass: 1, restDelta: 0.5, restSpeed: 10 },
+} as const;
+
 // A list arrives one row after another, 40ms apart. Only the first six rows stagger;
 // the rest arrive with the sixth, so a long list never makes anyone wait for its tail.
 export const STAGGER = 0.04;
