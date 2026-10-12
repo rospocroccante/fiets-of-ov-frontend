@@ -77,3 +77,40 @@ test("reports the visible height once it settles", async () => {
   await waitFor(() => expect(onSettle).toHaveBeenLastCalledWith(384));
   restore();
 });
+
+// A touch as the sheet's native listeners see it. jsdom has no TouchEvent; the sheet reads
+// only `touches`, `cancelable` and the target, so a plain event carrying those is enough.
+function touch(el: Element, type: "touchstart" | "touchmove" | "touchend", y: number | null, cancelable: boolean) {
+  const e = new Event(type, { bubbles: true, cancelable });
+  Object.defineProperty(e, "touches", { value: y == null ? [] : [{ clientY: y }] });
+  el.dispatchEvent(e);
+}
+
+// Measured in Chrome with touch emulation: a drag that starts on the handle, which is
+// `touch-action: none`, delivers every touchmove with cancelable false. Nothing can scroll
+// under that finger, so there is nothing to prevent, and the sheet has to move anyway.
+test("a drag on the handle moves the sheet even when its touchmoves cannot be cancelled", () => {
+  const restore = stubHostHeight(700);
+  const { onDetent } = renderSheet("half");
+  const handle = screen.getByRole("button", { name: "Expand results" });
+  touch(handle, "touchstart", 500, false);
+  for (const y of [480, 420, 340, 260, 200]) touch(handle, "touchmove", y, false);
+  touch(handle, "touchend", null, false);
+  expect(onDetent).toHaveBeenCalledWith("full");
+  restore();
+});
+
+// Where the content scrolls by itself (full height, already scrolled), an uncancellable
+// move means the browser is scrolling it, and the sheet keeps out of the way.
+test("at full, an uncancellable drag in scrolled content is left to the content", () => {
+  const restore = stubHostHeight(700);
+  const { onDetent } = renderSheet("full");
+  const content = document.querySelector('[data-fov="sheet-content"]') as HTMLElement;
+  const row = screen.getByText("advice");
+  content.scrollTop = 0;
+  touch(row, "touchstart", 300, false);
+  for (const y of [320, 380, 450]) touch(row, "touchmove", y, false);
+  touch(row, "touchend", null, false);
+  expect(onDetent).not.toHaveBeenCalled();
+  restore();
+});

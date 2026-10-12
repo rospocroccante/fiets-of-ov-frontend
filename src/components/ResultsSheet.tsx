@@ -136,6 +136,13 @@ export function ResultsSheet({
       if (live.current.detent !== "full") return false;
       return content.scrollTop > 0 || dy < 0;
     };
+    // Whether the browser can be scrolling under this touch: only in the content at full
+    // height. Everywhere else in the sheet is `touch-action: none`, and Chrome sends the
+    // moves of such a touch with cancelable false, because there is no scroll for them to
+    // stop. Measured on the handle: every move uncancellable, so a rule of "take only what
+    // can be cancelled" left the handle unable to drag the sheet at all.
+    const mayScroll = (target: EventTarget | null) =>
+      target instanceof Node && content.contains(target) && live.current.detent === "full";
 
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 1) begin(e.touches[0].clientY);
@@ -147,11 +154,11 @@ export function ResultsSheet({
       if (taking === null) {
         const dy = clientY - startY;
         if (Math.abs(dy) < 4) return;
-        taking = e.cancelable && !contentKeeps(e.target, dy);
+        taking = (e.cancelable || !mayScroll(e.target)) && !contentKeeps(e.target, dy);
         if (taking) anim.current?.stop();
       }
       if (!taking) return;
-      e.preventDefault();
+      if (e.cancelable) e.preventDefault();
       drag(clientY);
     };
     const onTouchEnd = () => finish();
