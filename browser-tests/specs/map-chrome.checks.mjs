@@ -548,13 +548,18 @@ export const scenarios = [
           return true;
         `;
         await page.eval(specified);
+        // This is a portrait phone, whose map runs to the top of the screen under the
+        // status bar: the stage has no headroom to ask for, and the inset is asked for by
+        // what floats over the map instead, the round back button that is all that is
+        // left of the header and the row of filter chips.
         const boxes = [
-          ["the map stage's headroom", STAGE, "padding-top", "safe-area-inset-top", "132px"],
           ["the map stage's left edge", STAGE, "padding-left", "safe-area-inset-left", "0px"],
           ["the map stage's right edge", STAGE, "padding-right", "safe-area-inset-right", "0px"],
-          ["the header's height", "header", "height", "safe-area-inset-top", "56px"],
-          ["the header's left edge", "header", "padding-left", "safe-area-inset-left", "16px"],
-          ["the header's right edge", "header", "padding-right", "safe-area-inset-right", "16px"],
+          ["the back button's top", "header", "top", "safe-area-inset-top", "8px"],
+          ["the back button's left edge", "header", "left", "safe-area-inset-left", "12px"],
+          ["the chip row's top", '[data-fov="map-chrome"]', "top", "safe-area-inset-top", "64px"],
+          ["the chip row's left edge", '[data-fov="map-chrome"]', "padding-left", "safe-area-inset-left", "12px"],
+          ["the chip row's right edge", '[data-fov="map-chrome"]', "padding-right", "safe-area-inset-right", "12px"],
           ["the search pill's resting top", PILL, "top", "safe-area-inset-top", "0px"],
           ["the search pill's left edge", PILL, "left", "safe-area-inset-left", "12px"],
           ["the search pill's right edge", PILL, "right", "safe-area-inset-right", "12px"],
@@ -588,18 +593,28 @@ export const scenarios = [
             `specified ${JSON.stringify(m.spec)}`,
           );
         }
+        // The stage asks for no top inset at all: its map is meant to be under the bar.
+        const stagePad = await page.eval(`return getComputedStyle(document.querySelector('${STAGE}')).paddingTop;`);
+        checks.equal("the map stage has no headroom: its map runs under the status bar", stagePad, "0px");
         // And the inset-0 layout is the one the rest of this suite measures: the pill
-        // still rests clear of the header, and the bar still starts clear of the pill.
+        // rests on the back button's row, clear of it, and the bar starts clear of the pill.
         const stack = await page.eval(`
           const F = window.__fov;
-          return { header: F.rect(document.querySelector('header')), pill: F.rect(document.querySelector('${PILL}')),
+          return { back: F.rect(document.querySelector('[data-fov="map-back"]')), pill: F.rect(document.querySelector('${PILL}')),
                    chip: F.rect(document.querySelector('${SCROLLER} button')) };
         `);
-        checks.atLeast(
-          "the pill rests below the header",
+        checks.near(
+          "the pill rests on the back button's row",
           stack.pill.top,
-          stack.header.bottom,
-          `pill top ${round(stack.pill.top)}, header bottom ${round(stack.header.bottom)}`,
+          stack.back.top,
+          0.5,
+          `pill top ${round(stack.pill.top)}, back button top ${round(stack.back.top)}`,
+        );
+        checks.atLeast(
+          "and clear of it",
+          stack.pill.left,
+          stack.back.right,
+          `pill from x ${round(stack.pill.left)}, back button ends ${round(stack.back.right)}`,
         );
         checks.atLeast(
           "the filter bar's first chip starts below the pill",
@@ -946,10 +961,14 @@ scenarios.push(
     // them, and not a box drawn over the map somewhere near them. The gap between it
     // and the zoom bar comes from Leaflet's own stylesheet, so it is read rather than
     // stated.
-    name: "phones the reset-view button is a third control under the zoom column",
+    //
+    // On a phone on its side, the one phone layout that still has a zoom column. A
+    // portrait phone zooms by pinch and floats the button bottom-right instead (the
+    // scenario after this one).
+    name: "844x390 the reset-view button is a third control under the zoom column",
     async run(ctx) {
       const { checks } = ctx;
-      for (const { width, height } of PHONES) {
+      for (const { width, height } of [{ width: 844, height: 390 }]) {
         const at = `${width}x${height}`;
         const page = await bootMap(ctx, { width, height });
         try {
@@ -1022,6 +1041,73 @@ scenarios.push(
             checks.equal(`${at}: and still does not overlap the minus`, round(overlapH * overlapW), 0,
               `minus ${round(after.zoomOut.top)}..${round(after.zoomOut.bottom)}, button ${round(after.reset.top)}..${round(after.reset.bottom)}`);
           }
+        } finally {
+          await page.close();
+        }
+      }
+    },
+  },
+
+  {
+    // A portrait phone has no + and -, so the way back to the trip is a round button of
+    // its own at the foot of the map's bottom-right column, lifted with that column above
+    // the results sheet. It has to be reachable there, clear of the chips it shares the
+    // column with, and gone under the chrome rather than drawn over the pill when a full
+    // sheet lifts the column that far.
+    name: "portrait phones the reset-view button floats bottom-right, above the sheet",
+    async run(ctx) {
+      const { checks } = ctx;
+      for (const { width, height } of PHONES) {
+        const at = `${width}x${height}`;
+        const page = await bootMap(ctx, { width, height });
+        try {
+          const read = `
+            const F = window.__fov;
+            const b = document.querySelector('${RESET}');
+            if (!b) return null;
+            const sheet = document.querySelector('[data-fov="results-sheet"]');
+            const others = [...b.parentElement.children].filter((c) => c !== b).map((c) => F.rect(c));
+            return {
+              ...F.shown(b), ...F.rect(b), visible: F.visible(b),
+              pointerEvents: getComputedStyle(b).pointerEvents,
+              inCorner: !!b.closest('.leaflet-control-container'),
+              zoom: !!document.querySelector('.leaflet-control-zoom'),
+              sheetTop: sheet.getBoundingClientRect().top, detent: sheet.getAttribute("data-detent"),
+              chrome: F.rect(document.querySelector('[data-fov="map-chrome"]')),
+              others, iw: innerWidth, ih: innerHeight,
+            };
+          `;
+          const m = await page.eval(read);
+          checks.ok(`${at}: the map offers a way back to the default view`, m != null, m ? "found" : `no ${RESET}`);
+          if (!m) continue;
+          checks.ok(`${at}: there are no zoom buttons for it to sit under`, !m.zoom, m.zoom ? "a zoom control is drawn" : "none");
+          checks.ok(`${at}: it is not in a Leaflet corner`, !m.inCorner, m.inCorner ? "inside one" : "outside");
+          checks.ok(`${at}: it is painted and a finger at its centre reaches it`, m.painted,
+            `${round(m.w)}x${round(m.h)}, opacity ${m.opacity}, elementFromPoint(${m.x}, ${m.y}) = ${m.hit}`);
+          checks.equal(`${at}: and it takes the touch`, m.pointerEvents, "auto");
+          checks.atLeast(`${at}: it is 44px tall`, m.h, 44, `${round(m.h)}px`);
+          checks.atLeast(`${at}: it is 44px wide`, m.w, 44, `${round(m.w)}px`);
+          checks.near(`${at}: it sits at the right edge`, m.right, m.iw - 12, 0.5, `button ends at x ${round(m.right)}`);
+          checks.atMost(`${at}: above the half sheet`, m.bottom, m.sheetTop,
+            `button ends ${round(m.bottom)}, the ${m.detent} sheet starts ${round(m.sheetTop)}`);
+          for (const o of m.others) {
+            const overlapH = Math.max(0, Math.min(o.bottom, m.bottom) - Math.max(o.top, m.top));
+            const overlapW = Math.max(0, Math.min(o.right, m.right) - Math.max(o.left, m.left));
+            checks.equal(`${at}: clear of the chip above it in the column`, round(overlapH * overlapW), 0,
+              `chip ${round(o.top)}..${round(o.bottom)}, button ${round(m.top)}..${round(m.bottom)}`);
+          }
+
+          // A full sheet lifts the column by its own height, which is past the chips.
+          const handle = await page.eval(`return window.__fov.rect(document.querySelector('[data-fov="sheet-handle"]'));`);
+          await page.tap(handle.x + handle.w / 2, handle.y + handle.h / 2);
+          await page.waitFor(`document.querySelector('[data-fov="results-sheet"][data-detent="full"]')`, { label: "the sheet at full" });
+          await sleep(900);
+          const full = await page.eval(read);
+          checks.ok(
+            `${at}: with the sheet at full it is clipped under the chips, not drawn over the pill`,
+            full.visible.h === 0 && !full.painted,
+            `visible ${full.visible.h}px of it, chips end ${round(full.chrome.bottom)}, elementFromPoint(${full.x}, ${full.y}) = ${full.hit}`,
+          );
         } finally {
           await page.close();
         }

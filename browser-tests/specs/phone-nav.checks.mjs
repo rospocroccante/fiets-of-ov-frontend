@@ -73,6 +73,46 @@ async function tapOn(page, sel, label) {
   return b;
 }
 
+// The top inset, read the same way. The portrait map stage paints under the status bar,
+// so every number about its floating chrome is measured from here.
+const SAFE_TOP = `
+  const d = document.createElement("div");
+  d.style.cssText = "position:fixed;height:env(safe-area-inset-top);width:0";
+  document.body.append(d);
+  const v = d.getBoundingClientRect().height;
+  d.remove();
+  return v;
+`;
+
+// The portrait map stage's chrome as it is on the screen: the map, the round back button,
+// the pill beside it, every control in the chip row, the sheet, the reset button, and
+// Leaflet's two top corners. Each control comes with what a finger at its centre reaches.
+const READ_CHROME = `
+  const F = window.__fov;
+  const q = (s) => document.querySelector(s);
+  const at = (el) => {
+    const r = el.getBoundingClientRect();
+    const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
+    const hit = document.elementFromPoint(x, y);
+    return { ...F.rect(el), cx: x, cy: y, reaches: !!hit && (hit === el || el.contains(hit)),
+             hit: hit ? hit.tagName + (hit.getAttribute("data-fov") ? "[" + hit.getAttribute("data-fov") + "]" : "") : "nothing",
+             opacity: Number(getComputedStyle(el).opacity) };
+  };
+  const chips = [...q('[data-fov="filter-bar"]').querySelectorAll("button")].map((b) => ({
+    ...at(b), text: (b.textContent || "").trim() || b.getAttribute("aria-label") }));
+  const corners = [...document.querySelectorAll('.leaflet-top')].map((c) => ({
+    top: parseFloat(getComputedStyle(c).top), rect: F.rect(c),
+    controls: [...c.querySelectorAll('.leaflet-control')].map(at) }));
+  const sheet = q('${SHEET}');
+  return {
+    map: F.rect(q('${MAP}')), back: at(q('[data-fov="map-back"]')), pill: at(q('[data-fov="search-pill"]')),
+    chips, chipTop: Math.min(...chips.map((c) => c.top)), chipBottom: Math.max(...chips.map((c) => c.bottom)),
+    sheetTop: sheet.getBoundingClientRect().top, detent: sheet.getAttribute("data-detent"),
+    reset: at(q('[data-fov="map-reset-view"]')), zoom: !!q('.leaflet-control-zoom'), corners,
+    iw: innerWidth, ih: innerHeight,
+  };
+`;
+
 // A tab screen has arrived when it is visible and its fade has finished.
 const screenShown = (sel) =>
   `(() => { const e = document.querySelector('${sel}'); const cs = getComputedStyle(e);
@@ -342,10 +382,13 @@ export const scenarios = [
         await page.swipe(x, grip, Math.round(bar.bottom + 10));
         const full = await sheetAt(page, "full");
         checks.equal("dragging the handle up takes the sheet to full", full.detent, "full", `from y ${grip} to ${Math.round(bar.bottom + 10)}`);
+        // The map runs to the top of the screen under the floating chrome, so the space
+        // under the filter bar is no longer where main starts: it starts 8px under the
+        // chip row, where the sheet's frame does.
         checks.near(
           "at full the sheet fills the space under the filter bar",
           full.top,
-          full.main.top,
+          bar.bottom + 8,
           2,
           `sheet top ${full.top}, filter bar ends ${bar.bottom}, main starts ${full.main.top}`,
         );
@@ -598,6 +641,253 @@ export const scenarios = [
       }
     },
   },
+
+  // The portrait map stage, Google Maps' shape: the map runs to the top of the screen and
+  // the chrome floats over it. Before, at 390x844, a 56px header bar, the pill on a row of
+  // its own under it and the filter bar in flow put the map's top at 200px, and the map
+  // showed 222px between that and the half sheet.
+  ...[
+    { width: 390, height: 844 },
+    { width: 360, height: 800 },
+  ].map(({ width, height }) => ({
+    name: `${width}x${height} the map runs to the top edge under floating chrome`,
+    async run(ctx) {
+      const { checks } = ctx;
+      const page = await bootPhone(ctx, { width, height });
+      try {
+        const inset = await page.eval(SAFE_TOP);
+        await planToSheet(page);
+        await sleep(300);
+        const m = await page.eval(READ_CHROME);
+
+        checks.near("the map pane's top is the screen's", m.map.top, 0, 0.5, `map ${m.map.top}..${m.map.bottom}`);
+        checks.near("and it runs to the foot of the screen", m.map.bottom, m.ih, 0.5, `map ends ${m.map.bottom} of ${m.ih}`);
+
+        checks.near("the back button floats 8px under the top inset", m.back.top, inset + 8, 0.5, `top ${m.back.top}, inset ${inset}`);
+        checks.atLeast("the back button is 44px tall", m.back.h, 44, `${m.back.w}x${m.back.h}`);
+        checks.atLeast("and 44px wide", m.back.w, 44, `${m.back.w}x${m.back.h}`);
+        checks.ok("a touch at its centre reaches it", m.back.reaches, `elementFromPoint(${m.back.cx}, ${m.back.cy}) = ${m.back.hit}`);
+
+        checks.near("the pill rests on the back button's row", m.pill.top, m.back.top, 0.5, `pill top ${m.pill.top}, back top ${m.back.top}`);
+        checks.near("about as tall as the back button", m.pill.h, 48, 2, `${m.pill.h}px`);
+        checks.atLeast("and clear of it to the right", m.pill.left, m.back.right + 4, `pill from ${m.pill.left}, back ends ${m.back.right}`);
+        checks.ok("a touch at the pill's centre reaches it", m.pill.reaches, `elementFromPoint(${m.pill.cx}, ${m.pill.cy}) = ${m.pill.hit}`);
+
+        checks.atLeast("the chip row starts under the pill", m.chipTop, m.pill.bottom, `chips from ${m.chipTop}, pill ends ${m.pill.bottom}`);
+        checks.atMost(
+          "the chip row ends within 116px of the top inset",
+          m.chipBottom,
+          inset + 116,
+          `chips end ${m.chipBottom}, inset ${inset}`,
+        );
+        const lastChip = m.chips[m.chips.length - 1];
+        checks.equal("Map is the last chip", lastChip.text, "Map", m.chips.map((c) => c.text).join(", "));
+        for (const c of m.chips) {
+          checks.atLeast(`"${c.text}" is 44px tall`, c.h, 44, `${c.w}x${c.h}`);
+          checks.atLeast(`"${c.text}" is 44px wide`, c.w, 44, `${c.w}x${c.h}`);
+          checks.ok(`a touch at the centre of "${c.text}" reaches it`, c.reaches, `elementFromPoint(${c.cx}, ${c.cy}) = ${c.hit}`);
+        }
+
+        // Between the chips and the half sheet the screen is map, and takes a touch as one.
+        const band = await page.eval(`
+          const F = window.__fov;
+          const y = Math.round((${m.chipBottom} + ${m.sheetTop}) / 2);
+          return { y, left: F.hit(40, y, '${MAP}'), middle: F.hit(Math.round(innerWidth / 2), y, '${MAP}'),
+                   besideChips: F.hit(innerWidth - 8, Math.round(${m.chipTop} + 22), '${MAP}') };
+        `);
+        checks.ok("a touch on the map under the chips reaches the map", band.left.inside, `elementFromPoint(40, ${band.y}) = ${band.left.desc}`);
+        checks.ok("in the middle of the screen too", band.middle.inside, `elementFromPoint(${Math.round(m.iw / 2)}, ${band.y}) = ${band.middle.desc}`);
+        checks.ok(
+          "and beside a row that does not fill the screen, the map takes the touch",
+          band.besideChips.inside,
+          `elementFromPoint(${m.iw - 8}, ${Math.round(m.chipTop + 22)}) = ${band.besideChips.desc}`,
+        );
+        // All of the upper half of the screen but the floating rows is map. Before, the
+        // map pane started at 200px under a header, a pill and a filter bar, which left it
+        // 222px above the half sheet at 390x844 and 200px at 360x800.
+        checks.atLeast(
+          "the map shows the upper half of the screen, less the chrome rows",
+          m.sheetTop - m.chipBottom,
+          m.ih / 2 - inset - 116,
+          `chips end ${m.chipBottom}, sheet starts ${m.sheetTop}: ${Math.round(m.sheetTop - m.chipBottom)}px of map`,
+        );
+
+        checks.ok("there are no zoom buttons: the map zooms by pinch", !m.zoom, m.zoom ? "a .leaflet-control-zoom is drawn" : "none");
+        checks.atMost("the reset button sits above the sheet", m.reset.bottom, m.sheetTop, `button ends ${m.reset.bottom}, sheet starts ${m.sheetTop}`);
+        checks.near("at the right edge", m.reset.right, m.iw - 12, 0.5, `button ends at x ${m.reset.right}`);
+        checks.atLeast("it is 44px tall", m.reset.h, 44, `${m.reset.w}x${m.reset.h}`);
+        checks.atLeast("and 44px wide", m.reset.w, 44, `${m.reset.w}x${m.reset.h}`);
+        checks.ok("a touch at its centre reaches it", m.reset.reaches, `elementFromPoint(${m.reset.cx}, ${m.reset.cy}) = ${m.reset.hit}`);
+
+        for (const [i, c] of m.corners.entries()) {
+          checks.atLeast(`Leaflet's top corner ${i + 1} starts under the chips`, c.rect.top, m.chipBottom, `corner top ${c.rect.top} (css ${c.top}px)`);
+          for (const ctl of c.controls) {
+            checks.ok(`a control in that corner is not under the chrome`, ctl.reaches, `elementFromPoint(${ctl.cx}, ${ctl.cy}) = ${ctl.hit}`);
+          }
+        }
+
+        // The radar's readout pins itself to the top right of the map: under the chips.
+        const more = m.chips[m.chips.length - 1];
+        await page.tap(more.cx, more.cy);
+        await page.waitFor(`document.querySelector('[data-fov="filter-panel"]')`, { label: "the map tools panel" });
+        const radar = await page.eval(`
+          const b = [...document.querySelectorAll('[data-fov="filter-panel"] button')].find((x) => x.textContent.trim() === "Radar");
+          return b ? window.__fov.rect(b) : null;
+        `);
+        if (!radar) throw new Error("no Radar row in the map tools");
+        await page.tap(radar.x + radar.w / 2, radar.y + radar.h / 2);
+        await page.tap(more.cx, more.cy);
+        await page.waitFor(`!document.querySelector('[data-fov="filter-panel"]')`, { label: "the map tools to close" });
+        await page.waitFor(
+          `[...document.querySelectorAll("button")].some((x) => x.textContent.trim() === "Rain")`,
+          { label: "the radar readout" },
+        );
+        const readout = await page.eval(`
+          const F = window.__fov;
+          const rain = [...document.querySelectorAll("button")].find((x) => x.textContent.trim() === "Rain");
+          const wind = [...document.querySelectorAll("button")].find((x) => x.textContent.trim() === "Wind");
+          const box = rain.closest(".right-3");
+          const hitOf = (b) => { const r = b.getBoundingClientRect(); const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
+                                 const h = document.elementFromPoint(x, y); return { x, y, inside: !!h && b.contains(h), tag: h ? h.tagName : "nothing" }; };
+          return { box: F.rect(box), rain: hitOf(rain), wind: hitOf(wind) };
+        `);
+        checks.atLeast("the radar readout starts under the chips", readout.box.top, m.chipBottom, `readout from ${readout.box.top}, chips end ${m.chipBottom}`);
+        checks.ok("its Rain toggle takes a touch", readout.rain.inside, `elementFromPoint(${readout.rain.x}, ${readout.rain.y}) = ${readout.rain.tag}`);
+        checks.ok("and so does Wind", readout.wind.inside, `elementFromPoint(${readout.wind.x}, ${readout.wind.y}) = ${readout.wind.tag}`);
+
+        // At full the sheet stops under the chips, not under the pill, and the map tools
+        // still open over it: the chip row's layer is above the sheet's.
+        const half = await page.eval(READ_SHEET);
+        await page.tap(Math.round(half.iw / 2), Math.round(half.handle.y + half.handle.h / 2));
+        const full = await sheetAt(page, "full");
+        checks.near("at full the sheet starts 8px under the chips", full.top, m.chipBottom + 8, 1, `sheet top ${full.top}, chips end ${m.chipBottom}`);
+        await page.tap(more.cx, more.cy);
+        await page.waitFor(`document.querySelector('[data-fov="filter-panel"]')`, { label: "the map tools panel over a full sheet" });
+        const panel = await page.eval(`
+          const F = window.__fov;
+          const p = document.querySelector('[data-fov="filter-panel"]');
+          const rows = [...p.querySelectorAll("button")].map((b) => {
+            const r = b.getBoundingClientRect(); const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
+            const h = document.elementFromPoint(x, y);
+            return { text: b.textContent.trim(), x, y, inside: !!h && b.contains(h), tag: h ? h.tagName : "nothing" };
+          });
+          return { rect: F.rect(p), rows };
+        `);
+        checks.ok(
+          "over a full sheet the map tools open whole on the screen",
+          panel.rect.left >= 0 && panel.rect.right <= m.iw && panel.rect.top >= 0 && panel.rect.bottom <= m.ih,
+          `panel ${panel.rect.left}..${panel.rect.right} x ${panel.rect.top}..${panel.rect.bottom}`,
+        );
+        for (const r of panel.rows) {
+          checks.ok(`and "${r.text}" in them takes a touch`, r.inside, `elementFromPoint(${r.x}, ${r.y}) = ${r.tag}`);
+        }
+        await page.tap(more.cx, more.cy);
+        await page.waitFor(`!document.querySelector('[data-fov="filter-panel"]')`, { label: "the map tools to close" });
+
+        // A touch between the chips and the sheet is a touch on the map: armed to set the
+        // start, it moves the trip's start to where it landed.
+        await page.eval(`history.back(); return null;`);
+        const back = await sheetAt(page, "half");
+        await page.tap(more.cx, more.cy);
+        await page.waitFor(`document.querySelector('[data-fov="filter-panel"]')`, { label: "the map tools panel" });
+        const startRow = await page.eval(`
+          const b = [...document.querySelectorAll('[data-fov="filter-panel"] button')].find((x) => x.textContent.trim() === "Start");
+          return b ? window.__fov.rect(b) : null;
+        `);
+        if (!startRow) throw new Error("no Start row in the map tools");
+        await page.tap(startRow.x + startRow.w / 2, startRow.y + startRow.h / 2);
+        await page.waitFor(`!document.querySelector('[data-fov="filter-panel"]')`, { label: "the panel to close on arming" });
+        const label = `document.querySelector('[data-fov="search-entry"]').textContent`;
+        const before = await page.eval(`return ${label};`);
+        const y = Math.round((m.chipBottom + back.top) / 2);
+        await page.tap(40, y);
+        let moved = true;
+        await page
+          .waitFor(`!${label}.includes("Amsterdam Centraal")`, { label: "the start to move", timeout: 4000 })
+          .catch(() => {
+            moved = false;
+          });
+        const after = await page.eval(`return ${label};`);
+        checks.ok("a tap on the map under the chips lands on the map", moved, `tap at (40, ${y}): "${before}" -> "${after}"`);
+      } finally {
+        await page.close();
+      }
+    },
+  })),
+
+  ...[
+    { width: 390, height: 844 },
+    { width: 360, height: 800 },
+  ].map(({ width, height }) => ({
+    name: `${width}x${height} navigation takes the top of the map for its banner`,
+    async run(ctx) {
+      const { checks } = ctx;
+      const page = await bootPhone(ctx, { width, height });
+      try {
+        const inset = await page.eval(SAFE_TOP);
+        await planToSheet(page);
+        const chrome = await page.eval(READ_CHROME);
+        // On a phone the Start button is inside the chosen option's folded steps.
+        await tapOn(page, `${CONTENT} [data-fov="steps-toggle"]`, "the chosen option's steps toggle");
+        await page.waitFor(`document.querySelector('${CONTENT} details[open] [aria-label="Start navigation"]')`, {
+          label: "the steps to open",
+        });
+        await sleep(300);
+        const start = await page.eval(`
+          const F = window.__fov;
+          const b = document.querySelector('${CONTENT} [aria-label="Start navigation"]');
+          if (!b) return null;
+          F.reveal(b);
+          const r = F.rect(b), v = F.visible(b);
+          return { x: Math.round(r.x + r.w / 2), y: Math.round((v.top + v.bottom) / 2), visible: v.h };
+        `);
+        if (!start) throw new Error("no Start navigation button in the sheet");
+        checks.atLeast("the Start button is on the half sheet", start.visible, 44, `${start.visible}px of it showing`);
+        await page.tap(start.x, start.y);
+        await page.waitFor(`document.querySelector('[aria-label="Exit navigation"]')`, { label: "the navigation banner" });
+        await sleep(600);
+        const m = await page.eval(`
+          const F = window.__fov;
+          const exit = document.querySelector('[aria-label="Exit navigation"]');
+          const banner = exit.closest(".rounded-card");
+          const r = exit.getBoundingClientRect();
+          const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
+          const h = document.elementFromPoint(x, y);
+          const probe = (cx, cy, sel) => { const e = document.elementFromPoint(cx, cy); return { inside: !!e && !!e.closest(sel), tag: e ? e.tagName : "nothing" }; };
+          return {
+            banner: F.rect(banner), exit: { x, y, inside: !!h && exit.contains(h), tag: h ? h.tagName : "nothing" },
+            pill: { opacity: Number(getComputedStyle(document.querySelector('[data-fov="search-pill"]')).opacity),
+                    hit: probe(${chrome.pill.cx}, ${chrome.pill.cy}, '[data-fov="search-pill"]') },
+            chips: { opacity: Number(getComputedStyle(document.querySelector('[data-fov="map-chrome"]')).opacity),
+                     hit: probe(${chrome.chips[0].cx}, ${chrome.chips[0].cy}, '[data-fov="filter-bar"]') },
+            back: { hit: probe(${chrome.back.cx}, ${chrome.back.cy}, '[data-fov="map-back"]') },
+            iw: innerWidth, ih: innerHeight,
+          };
+        `);
+        checks.near("the banner starts 8px under the top inset", m.banner.top, inset + 8, 0.5, `banner ${m.banner.top}..${m.banner.bottom}, inset ${inset}`);
+        checks.ok(
+          "and is whole on the screen",
+          m.banner.top >= inset && m.banner.bottom <= m.ih && m.banner.left >= 0 && m.banner.right <= m.iw,
+          `banner ${m.banner.left}..${m.banner.right} x ${m.banner.top}..${m.banner.bottom} in ${m.iw}x${m.ih}`,
+        );
+        checks.ok("a touch on Exit reaches it", m.exit.inside, `elementFromPoint(${m.exit.x}, ${m.exit.y}) = ${m.exit.tag}`);
+        checks.equal("the pill has stepped aside", m.pill.opacity, 0, `opacity ${m.pill.opacity}`);
+        checks.ok("and a touch where it was does not reach it", !m.pill.hit.inside, `hit ${m.pill.hit.tag}`);
+        checks.equal("so have the chips", m.chips.opacity, 0, `opacity ${m.chips.opacity}`);
+        checks.ok("and a touch where they were does not reach them", !m.chips.hit.inside, `hit ${m.chips.hit.tag}`);
+        checks.ok("nor does one where the back button was", !m.back.hit.inside, `hit ${m.back.hit.tag}`);
+
+        await page.tap(m.exit.x, m.exit.y);
+        await page.waitFor(`!document.querySelector('[aria-label="Exit navigation"]')`, { label: "navigation to end" });
+        await sleep(500);
+        const after = await page.eval(READ_CHROME);
+        checks.ok("after Exit the pill takes a touch again", after.pill.reaches, `elementFromPoint(${after.pill.cx}, ${after.pill.cy}) = ${after.pill.hit}`);
+        checks.ok("and so does the first chip", after.chips[0].reaches, `elementFromPoint(${after.chips[0].cx}, ${after.chips[0].cy}) = ${after.chips[0].hit}`);
+      } finally {
+        await page.close();
+      }
+    },
+  })),
 
   {
     name: "844x390 landscape keeps the side-by-side panes and a compact bar",

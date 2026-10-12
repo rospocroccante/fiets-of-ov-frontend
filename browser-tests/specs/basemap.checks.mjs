@@ -159,11 +159,21 @@ async function hasWebGL(page) {
 // way: things drawn inside the map (the route, the markers) are excluded by their boxes,
 // and anything painted over the map from elsewhere in the page is excluded by hit-testing
 // the square's centre and corners, whatever the DOM shape of the thing on top.
+//
+// The grid is laid out over the part of the map that is free of floating chrome. On a
+// portrait phone the map runs to the top of the screen under the back button, the pill
+// and the chips, and Leaflet's top corners start where that chrome ends (MapView's
+// topInset); the grid starts there too, which is where the map pane's own top was when
+// the chrome sat above it. Everywhere else the corners are at the map's top and nothing
+// moves.
 async function mapSpots(page, { size = 28, want = 5 } = {}) {
   const spots = await page.eval(`
     const size = ${size}, want = ${want};
     const map = document.querySelector('${MAP}');
-    const r = map.getBoundingClientRect();
+    const pane = map.getBoundingClientRect();
+    const corner = map.querySelector('.leaflet-top');
+    const free = corner ? corner.getBoundingClientRect().top : pane.top;
+    const r = { left: pane.left, right: pane.right, bottom: pane.bottom, top: Math.max(pane.top, free) };
     const blockers = [
       ...map.querySelectorAll('.leaflet-overlay-pane path, .leaflet-marker-icon, .leaflet-control-container > *'),
     ].map((n) => n.getBoundingClientRect()).filter((b) => b.width > 0 && b.height > 0);
@@ -661,10 +671,14 @@ export const scenarios = [
     // keeps zooming past anything the tiles can draw. MapView sets maxZoom={19} for that
     // reason, and nothing pinned it: removing it left all four gates green while the
     // control tapped 32 times without stopping.
-    name: "390x844 the zoom-in control stops at the basemap's last level",
+    //
+    // On a phone on its side, because that is a phone that still has a + to tap: in
+    // portrait the map zooms by pinch and draws no zoom buttons (phone-nav.checks.mjs
+    // asserts that), and the same maxZoom is the ceiling for the pinch.
+    name: "844x390 the zoom-in control stops at the basemap's last level",
     async run(ctx) {
       const { checks } = ctx;
-      const page = await bootMap(ctx, { width: 390, height: 844, theme: "light" });
+      const page = await bootMap(ctx, { width: 844, height: 390, theme: "light" });
       try {
         await waitForBasemap(page);
         const zoomIn = await page.eval(`
@@ -705,7 +719,9 @@ export const scenarios = [
         // the next settle something to wait for. A screenshot taken mid-load measures how
         // fast the tiles came, not whether there is a map at z19.
         await page.eval(`document.querySelector('${GL}').dataset.fovStyle = "nudged"; return true;`);
-        await page.swipe(195, 320, 290);
+        const pane = await page.eval(`return window.__fov.rect(document.querySelector('${MAP}'));`);
+        const [cx, cy] = [Math.round(pane.x + pane.w / 2), Math.round(pane.y + pane.h / 2)];
+        await page.swipe(cx, cy, cy - 30);
         await waitForBasemap(page);
         const patches = await sample(page, await mapSpots(page));
         checkDrawn(checks, `at the zoom ceiling`, patches);
