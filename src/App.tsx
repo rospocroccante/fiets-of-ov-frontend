@@ -18,6 +18,7 @@ import { WeatherStrip } from "./components/WeatherStrip";
 import { CARD_ACCENTS, PRIMARY_GRADIENT, TEXT_GRADIENT } from "./lib/gradients";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
 import { ResultsSheet } from "./components/ResultsSheet";
+import { SheetSummary } from "./components/SheetSummary";
 import { SavedScreen } from "./components/SavedScreen";
 import { TAB_BAR_COMPACT_PX, TAB_BAR_PX, TabBar } from "./components/TabBar";
 import { TabScreen } from "./components/TabScreen";
@@ -835,23 +836,18 @@ export default function App() {
       compact={isPhone}
     />
   );
-  const resultsPanel = (
-    <ResultsPanel
-      state={panel}
-      onStartNav={
-        route
-          ? () => {
-              // The nav UI (banner, Exit, follow camera) lives in the map
-              // pane: starting nav with the map hidden left the GPS watch
-              // and wake lock running with no banner and no way out.
-              setHideMap(false);
-              setNavigating(true);
-            }
-          : undefined
+  const startNav = route
+    ? () => {
+        // The nav UI (banner, Exit, follow camera) lives in the map
+        // pane: starting nav with the map hidden left the GPS watch
+        // and wake lock running with no banner and no way out.
+        setHideMap(false);
+        setNavigating(true);
       }
-      narrow={isPhone}
-    />
-  );
+    : undefined;
+  // On the sheet layout the summary header carries the one Start, at every height of the
+  // sheet, so the chosen option's steps in the content do not repeat it.
+  const resultsPanel = <ResultsPanel state={panel} onStartNav={sheetLayout ? undefined : startNav} narrow={isPhone} />;
   // Weather and OpenStreetMap credit for the advice itself, which stays on screen whether
   // or not the map is showing. Open-Meteo's CC BY 4.0 terms ask for a link next to where
   // its data is shown, and the forecast strip is at the top of this column.
@@ -1128,7 +1124,12 @@ export default function App() {
                   style={{ top: topInset }}
                 >
                   {placeCard}
-                  <ResultsSheet detent={detent} onDetent={setDetent} onSettle={setSheetInset}>
+                  <ResultsSheet
+                    detent={detent}
+                    onDetent={setDetent}
+                    onSettle={setSheetInset}
+                    header={<SheetSummary state={panel} onStartNav={startNav} onRetry={submitted} />}
+                  >
                     {resultsBody}
                   </ResultsSheet>
                 </div>

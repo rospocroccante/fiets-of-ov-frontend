@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { I18nProvider } from "./lib/i18n";
-import { morphTo, phoneViewport } from "./test/phone";
+import { morphTo, phoneViewport, stubHeights } from "./test/phone";
 
 // The phone shell as one app: the tab bar, the Saved and Profile screens, and the Back
 // button closing whatever is on top. Everything here runs on the phone path.
@@ -126,6 +126,9 @@ test("on a portrait phone a plan lands in the sheet at half height", async () =>
 });
 
 test("Back from a full sheet drops it to half, the next Back goes home", async () => {
+  // A sheet with more content than half the screen, so it has a full detent to open to.
+  const unstub = stubHeights({ "sheet-frame": 700, "sheet-head": 160, "sheet-body": 900 });
+  onTestFinished(unstub);
   renderApp();
   fireEvent.click(screen.getAllByRole("button", { name: /Amsterdam Centraal/ })[0]);
   await morphTo(1);
