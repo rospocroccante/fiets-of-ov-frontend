@@ -198,7 +198,11 @@ changes on a laptop.
 **Only one stage is live at a time.** Both morph stages are mounted from the first paint
 and differ only in opacity, so the off-screen one is marked `inert` (see `inertUnless` in
 `App.tsx`): without it, Tab walks into invisible controls and a screen reader on the home
-reads out the entire map UI. The `main` landmark moves with the visible stage.
+reads out the entire map UI. The `main` landmark moves with the visible stage. Once the
+home has faded out it is `visibility: hidden` as well. It sits over the map stage, and
+Chrome's compositor counted its transparent layers as over the results sheet: a touch on
+the sheet in the bands where the home has layers arrived uncancellable, and a full sheet
+could not be pulled down from its content there.
 
 ### The phone shell: tabs, Back and the results sheet
 
@@ -321,32 +325,75 @@ takes the rider to the home with navigation running, as the arrow did.
 
 #### Results sheet
 
-`ResultsSheet` rests at three detents, and their numbers live in `src/lib/sheetDetents.ts`.
-Peek is `PEEK_PX` (132px) plus the bottom inset, half is half the window height, and full
-is the whole of the sheet's frame (`data-fov="sheet-frame"`), the part of the map stage
-below `topInset`. A full sheet therefore stops 8px under the chip row and leaves the pill
-and the chips on screen. The frame takes no touches itself and clips what it holds. The
-place card lives in it on this layout: a full sheet lifts the card by its own height, and
-the frame cuts it off at the chrome where it would otherwise cover the pill. `MapView`
-clips its bottom-right column at `topInset` the same way. A new search opens at
-half and navigation drops the sheet to peek. Full pushes the `sheet-full` layer, so Back
-brings it down to half, and "Hide map" in the map tools toggles between full and half on
-this layout. A release faster than `FLICK_PX_PER_S` (500px/s) moves one detent in its
-direction; a slower one snaps to the nearest detent.
+`ResultsSheet` has two parts: a header, which is all the collapsed sheet shows, and the
+content under it. The header is `SheetSummary`. Once a plan is in, it shows the chosen
+option (the recommended one until the rider picks another) with its mode, title, minutes
+and Best tag, the weather verdict, a Start, and the other option's minutes as a 44px
+button that selects it. The verdict is `WeatherVerdict` from `ResultsPanel.tsx`, the tag
+and rain figure the advice banner leads with. The summary follows the chosen option
+because Start navigates the chosen route. While a plan is on its way the header reads
+"Planning your trip…" over a placeholder row that pulses only where motion is allowed.
+When a plan fails it reads "Routes are unavailable right now. Try again in a moment."
+with a Try again that bumps the submit nonce, so the same trip is fetched again. The
+backend's message stays out of the sheet; the desktop results column still prints it.
+With no trip there is no sheet. The content is the options, then the forecast strip and
+the credits, and `App` renders it only when there are options to show. The chosen
+option's steps in the content have no Start of their own, since the header carries one
+at every height.
+
+The detents are solved in `src/lib/sheetDetents.ts` from what the sheet measures with a
+`ResizeObserver`. `detentHeights` takes the frame, the window height, the bottom inset,
+the header (handle and summary) and the content's natural height. Peek is the header
+above the bottom inset: 165px at 390x844 and 360x800 (a 1px border, the 44px handle and
+a 120px summary), so the collapsed sheet shows the header whole and no slice of the
+content. At peek the content is inert, `aria-hidden`, transparent and hidden, and it
+fades in over the first 24px the sheet rises. Half is half the window height. Full is
+the whole of the sheet's frame (`data-fov="sheet-frame"`), the part of the map stage
+below `topInset`, or the end of the content if that comes first. A full sheet therefore
+stops 8px or more under the chip row and leaves the pill and the chips on screen. The
+frame takes no touches itself and clips what it holds. The place card lives in it on
+this layout: a full sheet lifts the card by its own height, and the frame cuts it off at
+the chrome where it would otherwise cover the pill. `MapView` clips its bottom-right
+column at `topInset` the same way.
+
+The sheet hugs its content. When the header and the content fit under half, that height
+is its only resting place (`hugs()` is true): there is no handle, a tap on the header
+does nothing, and a drag stretches the sheet against the rubber band and lets it come
+back. A plan on its way or a failed one has no content, so its sheet is the header
+alone. `data-hugs` marks this state on the sheet.
+
+A new search lands at peek, with the map and the route as the screen, and navigation
+drops the sheet to peek as well. A tap on the summary away from its buttons, or on the
+handle, steps from peek to half, half to full and full back to peek. Full pushes the
+`sheet-full` layer, so Back brings it down to half, and "Hide map" in the map tools
+toggles between full and half on this layout; it is disabled while there is no sheet. A
+release faster than `FLICK_PX_PER_S` (500px/s) moves one detent in its direction; a
+slower one snaps to the nearest detent. Every settle runs on `SPRING.sheet` from
+`src/lib/motion.ts`. A release hands the spring the finger's velocity, a settle that
+interrupts another keeps the speed the sheet already has, and a move the app asks for
+starts from rest. Reduced motion jumps (duration 0). The sheet carries 96px of its own
+surface below its tallest detent, so an overshoot after a fast flick shows sheet and no
+strip of map.
 
 Touch goes through native listeners because of the hand-off. Below full every drag moves
 the sheet. At full the content scrolls, and gives the drag back to the sheet only when it
-is at `scrollTop` 0 and the finger moves down. The handle, and the content below full, are
-`touch-action: none`, and Chrome delivers the moves of such a touch with `cancelable`
+is at `scrollTop` 0 and the finger moves down. The header, and the content below full,
+are `touch-action: none`, and Chrome delivers the moves of such a touch with `cancelable`
 false because nothing can scroll under them. The sheet takes those moves anyway. Only in
 the content at full does an uncancellable move mean the browser is scrolling, and there
-the sheet keeps out.
+the sheet keeps out. That rule needs the faded home stage out of the way (see "Only one
+stage is live at a time" above): while it was only transparent, touches on the sheet
+arrived uncancellable in the bands where the home has layers.
 
-The sheet reports its visible height when it settles (`onSettle`, never per frame), and
-`App` passes it as `bottomInset` to `MapView`, which pads `fitBounds` and lifts its chip
-column by it, and to `PlaceInfoCard`. A phone on its side has no sheet, since one would
-not fit in 390px of height: the results column and the map stay side by side
-(`sheetLayout` is `isPhone && !landscapePhone`).
+The sheet reports its visible height when it settles (`onSettle`, never per frame), on
+every path a settle can take, and `App` passes it as `bottomInset` to `MapView`, which
+pads `fitBounds` and lifts its chip column by it, and to `PlaceInfoCard`. A phone on its
+side has no sheet, since one would not fit in 390px of height: the results column and the
+map stay side by side (`sheetLayout` is `isPhone && !landscapePhone`).
+
+In the browser suite the plan lands collapsed, so a scenario that measures the options
+opens the sheet to half first with `openSheetToHalf` from `browser-tests/lib/sheet.mjs`,
+a touch on the handle followed by a wait for the spring to stop.
 
 #### The phone in jsdom
 
@@ -356,6 +403,11 @@ makes the width query match, which is a portrait phone, and `phoneViewport({ lan
 true })` makes the short-screen queries match instead. `stubHeights` gives the hero and
 the pill real heights, and `morphTo(progress)` parks the morph. Call the function
 `phoneViewport` returns after each test, or the next one inherits a phone.
+
+A results sheet whose boxes all measure 0 hugs: it has one height and no handle. A test
+that needs a phone's peek, half and full gives `stubHeights` the frame, the header and
+the content, as `src/App.sheet.test.tsx` does with `{ "sheet-frame": 700, "sheet-head":
+160, "sheet-body": 900 }`.
 
 jsdom drops a Back pressed in the same task as one of the app's own history steps,
 because its `pushState` cancels the traversal still pending. Tests let those steps land
