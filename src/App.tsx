@@ -196,11 +196,27 @@ export default function App() {
   // Whether the radar is on because a plan expected rain rather than because the rider
   // turned it on. The phone's button plays its one cue for that (RadarButton).
   const [radarCued, setRadarCued] = useState(false);
+  // The rider's choice of layers, which the readout's toggles change.
+  const [wLayers, setWLayers] = useState<WeatherLayersState>({ rain: true, wind: true });
+  // A radar the plan turned on shows the rain alone: the wind particles cost battery and
+  // data the rider did not ask for. The hold sits over the rider's choice rather than
+  // changing it, so their own tap on the radar brings back the layers they had, and the
+  // readout's Wind toggle ends it by turning the wind on.
+  const [windHeld, setWindHeld] = useState(false);
+  const mapLayers = useMemo(() => (windHeld ? { ...wLayers, wind: false } : wLayers), [windHeld, wLayers]);
   const toggleRadar = () => {
     setRadar((r) => !r);
     setRadarCued(false);
+    setWindHeld(false);
   };
-  const [wLayers, setWLayers] = useState<WeatherLayersState>({ rain: true, wind: true });
+  const toggleLayer = (k: keyof WeatherLayersState) => {
+    if (k === "wind" && windHeld) {
+      setWindHeld(false);
+      setWLayers((s) => ({ ...s, wind: true }));
+      return;
+    }
+    setWLayers((s) => ({ ...s, [k]: !s[k] }));
+  };
   // Turn-by-turn mode: drives the live-location watch, the wake lock, the maneuver
   // overlay and the follow camera. The whole nav chain derives from this one flag.
   const [navigating, setNavigating] = useState(false);
@@ -334,6 +350,7 @@ export default function App() {
     setHideMap(false);
     setRadar(false);
     setRadarCued(false);
+    setWindHeld(false);
     placeSeq.current++;
     setPlaceInfo(null);
     setNavigating(false);
@@ -660,7 +677,8 @@ export default function App() {
   // rider who turns the radar off keeps it off until the next search, because the search
   // is marked decided the first time its plan is in. A dry plan, or one with no forecast,
   // leaves the radar as it was. A replan during navigation is a new search too, but not
-  // one the rider made, so it is marked and passed over.
+  // one the rider made, so it is marked and passed over. A radar turned on this way shows
+  // the rain alone (windHeld).
   const radarDecidedFor = useRef("");
   useEffect(() => {
     if (!planView || radarDecidedFor.current === search) return;
@@ -668,6 +686,7 @@ export default function App() {
     if (navigating || planView.rainExpected !== true || radar) return;
     setRadar(true);
     setRadarCued(true);
+    setWindHeld(true);
   }, [planView, search, navigating, radar]);
 
   // What the polite live region says. Empty while idle/loading so the region only ever
@@ -1014,8 +1033,8 @@ export default function App() {
           }}
           interactive={progressIs1}
           radar={radar}
-          wLayers={wLayers}
-          onLayerToggle={(k) => setWLayers((s) => ({ ...s, [k]: !s[k] }))}
+          wLayers={mapLayers}
+          onLayerToggle={toggleLayer}
           dark={dark}
           liveFix={fix}
           navigating={navigating}

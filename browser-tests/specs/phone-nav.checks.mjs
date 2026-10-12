@@ -26,6 +26,8 @@ const PANE = "#fov-map-main > section";
 const OPTION = '[data-fov="option"]';
 const RADAR = '[data-fov="radar-button"]';
 const RADAR_TILES = ".rain-radar-tiles";
+// The wind particles' canvas, which leaflet-velocity adds to the map.
+const VELOCITY = "canvas.velocity-overlay";
 
 // The seeded trip that plans three options (the mock answers all three modes only for a
 // "zuid" destination), two more recent trips and two saved places, so the home has more
@@ -1517,6 +1519,31 @@ export const scenarios = [
         checks.equal(`${at}: the button says the plan turned it on`, rainy.button.cue, "auto");
         checks.ok(`${at}: and it still takes a touch`, rainy.button.reaches, `elementFromPoint = ${rainy.button.hit}`);
         checkRadarClear(checks, `${at} rainy`, rainy);
+
+        // The plan's turn-on is the rain alone: no wind particles, which cost battery and
+        // data the rider did not ask for. leaflet-velocity paints them on a canvas of its
+        // own, and the readout's Wind toggle still brings them.
+        await sleep(1500);
+        const READ_WIND = `
+          const wind = [...document.querySelectorAll("button")].find((x) => x.textContent.trim() === "Wind");
+          return { canvases: document.querySelectorAll('${VELOCITY}').length, pressed: wind ? wind.getAttribute("aria-pressed") : null };
+        `;
+        const auto = await page.eval(READ_WIND);
+        checks.equal(`${at}: no wind particle canvas after the plan's turn-on`, auto.canvases, 0, `Wind toggle pressed ${auto.pressed}`);
+        checks.equal(`${at}: and the readout's Wind toggle is off`, auto.pressed, "false");
+        const windAt = await page.eval(`
+          const r = [...document.querySelectorAll("button")].find((x) => x.textContent.trim() === "Wind").getBoundingClientRect();
+          return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+        `);
+        await page.tap(windAt.x, windAt.y);
+        let windOn = true;
+        await page
+          .waitFor(`document.querySelectorAll('${VELOCITY}').length > 0`, { label: "the wind particle canvas", timeout: 6000 })
+          .catch(() => {
+            windOn = false;
+          });
+        const manual = await page.eval(READ_WIND);
+        checks.ok(`${at}: the Wind toggle puts the particles on the map`, windOn && manual.pressed === "true", `${manual.canvases} canvases, Wind pressed ${manual.pressed}`);
         await page.close();
 
         page = await bootPhone(ctx, { width, height });

@@ -176,6 +176,58 @@ test("a plan that expects rain during the trip turns the radar on by itself", as
   await waitFor(() => expect(readoutShown()).toBe(true));
 });
 
+// The readout's layer toggles say which layers the map was given.
+const layerPressed = (name: "Rain" | "Wind") =>
+  within(mapWrap()).getByRole("button", { name }).getAttribute("aria-pressed");
+
+// The owner's call: a radar the plan turned on shows the rain alone. The wind particles
+// cost battery and data the rider did not ask for.
+test("a plan that turns the radar on gives the map the rain layer alone, and the Wind toggle still adds wind", async () => {
+  phone();
+  seedRainyTrip();
+  renderApp();
+  await planRainy();
+  await whenMapMounted();
+  await morphTo(1);
+  expect(floating()).toHaveAttribute("data-cue", "auto");
+  await waitFor(() => expect(readoutShown()).toBe(true));
+  expect(layerPressed("Rain")).toBe("true");
+  expect(layerPressed("Wind")).toBe("false");
+
+  fireEvent.click(within(mapWrap()).getByRole("button", { name: "Wind" }));
+  await waitFor(() => expect(layerPressed("Wind")).toBe("true"));
+  expect(layerPressed("Rain")).toBe("true");
+});
+
+test("the rider's own tap still turns on rain and wind, after a plan's turn-on as well", async () => {
+  phone();
+  seedRainyTrip();
+  renderApp();
+  await planDry();
+  await whenMapMounted();
+  await morphTo(1);
+  fireEvent.click(floating()!);
+  await waitFor(() => expect(readoutShown()).toBe(true));
+  expect(layerPressed("Rain")).toBe("true");
+  expect(layerPressed("Wind")).toBe("true");
+
+  // A plan's turn-on, then the rider's off and on: the rider's tap brings both back.
+  fireEvent.click(floating()!);
+  await waitFor(() => expect(readoutShown()).toBe(false));
+  await morphTo(0);
+  await planRainy();
+  await morphTo(1);
+  await waitFor(() => expect(floating()).toHaveAttribute("data-cue", "auto"));
+  await waitFor(() => expect(readoutShown()).toBe(true));
+  expect(layerPressed("Wind")).toBe("false");
+  fireEvent.click(floating()!);
+  await waitFor(() => expect(readoutShown()).toBe(false));
+  fireEvent.click(floating()!);
+  await waitFor(() => expect(readoutShown()).toBe(true));
+  expect(layerPressed("Rain")).toBe("true");
+  expect(layerPressed("Wind")).toBe("true");
+});
+
 test("a dry plan neither turns the radar on nor turns it off", async () => {
   phone();
   renderApp();

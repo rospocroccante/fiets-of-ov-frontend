@@ -458,6 +458,14 @@ plan turns the radar on, the button's fill arrives with the `overlay` preset (a 
 8px rise, the fade alone under reduced motion) and the button carries `data-cue="auto"`.
 There is no toast. A tap by the rider fills or empties the button at once.
 
+A radar the plan turned on shows the rain layer alone, by the owner's decision: the wind
+particles cost battery and data the rider did not ask for. `App` keeps this as a hold
+(`windHeld`) over the rider's own choice of layers (`wLayers`) and hands `MapView` the
+layers with wind off while it lasts, so the readout's Wind toggle reads off and no
+`canvas.velocity-overlay` is created. The rider's tap on the radar button ends the hold and
+turns the radar on with the layers they had, rain and wind by default, as before. The
+readout's Wind toggle ends it by turning the wind on.
+
 #### The phone in jsdom
 
 jsdom answers false to every media query, so the unit suite renders the desktop layout
