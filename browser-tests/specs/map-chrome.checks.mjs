@@ -49,7 +49,10 @@ function pct(n) {
   return `${(n * 100).toFixed(1)}%`;
 }
 
-async function bootMap(ctx, { width, height, theme = "light", lang = "en", touch = true }) {
+// `reveal` is where the seeded trip is scrolled to before it is touched. The centre,
+// except on a short desktop window: there the home still scrolls under the floating
+// pill, and a row brought to the centre of a 390px screen is behind the pill's From field.
+async function bootMap(ctx, { width, height, theme = "light", lang = "en", touch = true, reveal = "center" }) {
   const page = await ctx.openPhone({ width, height, theme, lang, seed: TRIP_SEED, touch });
   await page.goto(ctx.url);
   await page.waitFor(`document.querySelector('${PILL}')`, { label: "the app to render its search pill" });
@@ -57,7 +60,9 @@ async function bootMap(ctx, { width, height, theme = "light", lang = "en", touch
   const row = await page.eval(`
     const b = [...document.querySelectorAll("button")].find((x) => x.textContent.includes("Zuidplein"));
     if (!b) return null;
-    window.__fov.reveal(b);
+    const y0 = window.scrollY;
+    b.scrollIntoView({ block: ${JSON.stringify(reveal)} });
+    window.scrollTo(0, y0);
     return window.__fov.rect(b);
   `);
   if (!row) throw new Error("the seeded recent trip is not on the home screen");
@@ -367,21 +372,29 @@ export const scenarios = [
     // anchored under a 48px header on a 390px screen, with overflow: visible inside a
     // sticky box that clips at the viewport — 82 to 113px of it, including the whole
     // about block, simply gone.
+    //
+    // A phone has no header menu any more, in either orientation: its contents are the
+    // Profile tab. The menu is still what a wider screen gets, so the two screens it is
+    // measured on are the ones that still open it. Portrait is a 768x1024 tablet. The
+    // short screen is the same 844x390 as before with a mouse instead of a finger: a
+    // laptop window dragged short, which is not a phone and keeps the menu, under a
+    // header of the same 48px.
     name: "the header menu fits the screen it is opened on, portrait and landscape",
     async run(ctx) {
       const { checks } = ctx;
-      for (const [width, height] of [[390, 844], [844, 390]]) {
+      for (const [width, height, touch] of [[768, 1024, true], [844, 390, false]]) {
         for (const lang of LANGS) {
           for (const theme of THEMES) {
-            const at = `${width}x${height} ${lang} ${theme}`;
-            const page = await bootMap(ctx, { width, height, lang, theme });
+            const at = `${width}x${height} ${touch ? "touch" : "mouse"} ${lang} ${theme}`;
+            const page = await bootMap(ctx, { width, height, lang, theme, touch, reveal: touch ? "center" : "end" });
             try {
-              const trig = await page.eval(`const F = window.__fov; return F.rect(document.querySelector('nav button'));`);
-              await page.tap(trig.x + trig.w / 2, trig.y + trig.h / 2);
+              const trig = await page.eval(`const F = window.__fov; return F.rect(document.querySelector('header nav button'));`);
+              if (touch) await page.tap(trig.x + trig.w / 2, trig.y + trig.h / 2);
+              else await page.click(trig.x + trig.w / 2, trig.y + trig.h / 2);
               await sleep(260);
               const m = await page.eval(`
                 const F = window.__fov;
-                const panel = document.querySelector('nav > div');
+                const panel = document.querySelector('header nav > div');
                 if (!panel) return { open: false };
                 const cs = getComputedStyle(panel);
                 const rows = [...panel.querySelectorAll('button')].map((b) => {
@@ -410,7 +423,7 @@ export const scenarios = [
               // named. Scroll the panel to its end and read where that block lands.
               const tail = await page.eval(`
                 const F = window.__fov;
-                const panel = document.querySelector('nav > div');
+                const panel = document.querySelector('header nav > div');
                 panel.scrollTop = panel.scrollHeight;
                 const about = panel.lastElementChild;
                 const pr = panel.getBoundingClientRect(), ar = about.getBoundingClientRect();
@@ -442,12 +455,16 @@ export const scenarios = [
     // An open menu is the only thing on the screen. Before the trap, the seventh Tab
     // out of an open menu at 390x844 landed on the search pill's entry button behind
     // the panel — focus on a control the user could not see, under one they could.
-    name: "390x844 Tab stays inside the open header menu, and closing it gives focus back",
+    //
+    // A 390px phone has no header menu any more (its contents are the Profile tab), so
+    // the trap is measured on the narrowest portrait screen that still has one, a
+    // 768x1024 tablet, with the same twelve Tabs and the same tap on the scrim.
+    name: "768x1024 Tab stays inside the open header menu, and closing it gives focus back",
     async run(ctx) {
       const { checks } = ctx;
-      const page = await bootMap(ctx, { width: 390, height: 844, lang: "nl" });
+      const page = await bootMap(ctx, { width: 768, height: 1024, lang: "nl" });
       try {
-        const trig = await page.eval(`const F = window.__fov; return F.rect(document.querySelector('nav button'));`);
+        const trig = await page.eval(`const F = window.__fov; return F.rect(document.querySelector('header nav button'));`);
         await page.tap(trig.x + trig.w / 2, trig.y + trig.h / 2);
         await sleep(260);
         const stops = [];
@@ -461,7 +478,7 @@ export const scenarios = [
             const r = a.getBoundingClientRect();
             return {
               where: a.tagName + " \\"" + ((a.textContent || a.getAttribute("aria-label") || "").trim().slice(0, 22)) + "\\"",
-              inMenu: !!a.closest('nav'),
+              inMenu: !!a.closest('header nav'),
               onScreen: r.top >= 0 && r.bottom <= innerHeight && r.width > 0,
             };
           `));
@@ -483,8 +500,8 @@ export const scenarios = [
         await sleep(240);
         const after = await page.eval(`
           const a = document.activeElement;
-          const trigger = document.querySelector('nav button');
-          return { closed: !document.querySelector('nav > div'), onTrigger: a === trigger,
+          const trigger = document.querySelector('header nav button');
+          return { closed: !document.querySelector('header nav > div'), onTrigger: a === trigger,
                    where: a ? a.tagName + " \\"" + (a.textContent || "").trim().slice(0, 22) + "\\"" : "none" };
         `);
         checks.ok("a tap outside closes the menu", after.closed, after.closed ? "closed" : "still open");
@@ -541,7 +558,12 @@ export const scenarios = [
           ["the search pill's resting top", PILL, "top", "safe-area-inset-top", "0px"],
           ["the search pill's left edge", PILL, "left", "safe-area-inset-left", "12px"],
           ["the search pill's right edge", PILL, "right", "safe-area-inset-right", "12px"],
-          ["the content's bottom", "#fov-map-main", "padding-bottom", "safe-area-inset-bottom", "16px"],
+          // On a portrait phone the results are a sheet over a full-screen map, and the
+          // bottom inset is the sheet content's: the map runs to the edge under it.
+          ["the content's bottom", '[data-fov="sheet-content"]', "padding-bottom", "safe-area-inset-bottom", "16px"],
+          ["the tab bar's bottom", '[data-fov="tab-bar"]', "padding-bottom", "safe-area-inset-bottom", "0px"],
+          ["the tab bar's left edge", '[data-fov="tab-bar"]', "padding-left", "safe-area-inset-left", "0px"],
+          ["the tab bar's right edge", '[data-fov="tab-bar"]', "padding-right", "safe-area-inset-right", "0px"],
           ["the home stage's top", HOME, "padding-top", "safe-area-inset-top", "0px"],
           ["the home stage's bottom", HOME, "padding-bottom", "safe-area-inset-bottom", "0px"],
         ];
@@ -638,13 +660,17 @@ export const scenarios = [
           `);
           checks.atLeast(`${lang}: the mode filters are still on the bar`, more.chips.length, 3, more.chips.map((c) => c.text).join(", "));
           checks.ok(`${lang}: the map's tools are one tap away`, more.more != null, more.more ? "trailing control present" : `no ${MORE}`);
-          // The pill shares the header bar here, so it must not run into either of the
-          // header's own controls.
+          // The pill shares the header bar here, so it must not run into the wordmark on
+          // its left or past the bar's own right edge. The menu that used to sit at that
+          // end is the Profile tab on a phone now.
           const clear = await page.eval(`
             const F = window.__fov;
-            const wordmark = [...document.querySelectorAll('header button')].find((b) => b.textContent.includes("Fiets of OV"));
-            const menu = document.querySelector('header nav button');
-            return { wordmark: F.rect(wordmark), menu: F.rect(menu), pill: F.rect(document.querySelector('${PILL}')) };
+            const header = document.querySelector('header');
+            const wordmark = [...header.querySelectorAll('button')].find((b) => b.textContent.includes("Fiets of OV"));
+            const r = header.getBoundingClientRect();
+            return { wordmark: F.rect(wordmark), pill: F.rect(document.querySelector('${PILL}')),
+                     menu: !!header.querySelector('nav'),
+                     barEnd: +(r.right - parseFloat(getComputedStyle(header).paddingRight)).toFixed(2) };
           `);
           checks.atLeast(
             `${lang}: the pill clears the wordmark`,
@@ -652,11 +678,12 @@ export const scenarios = [
             4,
             `wordmark ends ${round(clear.wordmark.right)}, pill starts ${round(clear.pill.left)}`,
           );
+          checks.ok(`${lang}: the phone header carries no menu`, !clear.menu, clear.menu ? "a nav in the header" : "none");
           checks.atLeast(
-            `${lang}: the pill clears the menu button`,
-            clear.menu.left - clear.pill.right,
+            `${lang}: the pill ends inside the bar's right edge`,
+            clear.barEnd - clear.pill.right,
             4,
-            `pill ends ${round(clear.pill.right)}, menu starts ${round(clear.menu.left)}`,
+            `pill ends ${round(clear.pill.right)}, the bar's content ends ${round(clear.barEnd)}`,
           );
           checks.atMost(
             `${lang}: and it stays inside the header bar`,

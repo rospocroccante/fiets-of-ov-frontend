@@ -6,7 +6,7 @@
 // judge's breaking mutations kept intact while shipping an unusable screen.
 
 import { sleep } from "../lib/chrome.mjs";
-import { PROBE } from "../lib/measure.mjs";
+import { PROBE, RESULTS } from "../lib/measure.mjs";
 
 // Eight recent trips, which is the cap the app keeps. They become sixteen endpoint
 // history rows, so the suggestion list on an empty focused field is taller than the
@@ -508,10 +508,12 @@ export const scenarios = [
           .catch(() => {});
         await sleep(600);
 
+        // The options land in the results sheet at half height over the map, so "on the
+        // screen" is the visible part of the sheet's content, not its whole box.
         const after = await page.eval(`
           const F = window.__fov;
-          const col = document.querySelector('[data-fov="results-column"]');
-          const c = col ? col.getBoundingClientRect() : null;
+          const col = document.querySelector('${RESULTS}');
+          const c = col ? F.visible(col) : null;
           const rows = [...document.querySelectorAll('[data-fov="option"]')].map((li) => {
             const r = li.getBoundingClientRect();
             return { h: +r.height.toFixed(2),
@@ -522,7 +524,7 @@ export const scenarios = [
           return { scrollY: Math.round(window.scrollY), ih: innerHeight,
                    mapInert: map.hasAttribute("inert"),
                    sheet: !!document.querySelector('${SHEET}'),
-                   rows, colH: c ? +c.height.toFixed(2) : null };
+                   rows, colH: c ? c.h : null };
         `);
         checks.ok("the sheet is gone", !after.sheet, "the search sheet is still mounted");
         checks.atLeast(
@@ -540,7 +542,7 @@ export const scenarios = [
           1,
           after.rows
             .map((r, i) => `option ${i + 1}: ${round(r.visible)} of ${round(r.h)}px, painted ${r.shown.painted}`)
-            .join(", ") + ` in a ${round(after.colH)}px column`,
+            .join(", ") + ` in ${round(after.colH)}px of results on screen`,
         );
       } finally {
         await page.close();

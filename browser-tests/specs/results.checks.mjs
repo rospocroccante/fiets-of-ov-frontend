@@ -25,6 +25,7 @@ import {
   OPTION_STEPS,
   STEPS_TOGGLE,
   COLUMN,
+  RESULTS,
 } from "../lib/measure.mjs";
 
 const AA = 4.5; // WCAG AA for text below 18px / 14px bold, which is all of this.
@@ -88,11 +89,13 @@ async function openSteps(page) {
   return t;
 }
 
-// Every option row, with the list and the column that hold them.
+// Every option row, with the list and the pane that hold them. On a portrait phone the
+// pane is the results sheet's content, whose box runs past the foot of the screen at half
+// height, so `column.visible` is the part of it a user can see.
 const readRows = `
   const F = window.__fov;
   const list = document.querySelector('${OPTION_LIST}');
-  const column = document.querySelector('${COLUMN}');
+  const column = document.querySelector('${RESULTS}');
   const rows = [...document.querySelectorAll('${OPTION}')].map((li) => {
     const btn = li.querySelector('${OPTION_BUTTON}');
     const details = li.querySelector('${OPTION_DETAILS}');
@@ -111,7 +114,8 @@ const readRows = `
     rows,
     list: { ...F.rect(list), scrollWidth: list.scrollWidth, clientWidth: list.clientWidth,
             overflowX: getComputedStyle(list).overflowX },
-    column: { ...F.rect(column), clientHeight: column.clientHeight, scrollHeight: column.scrollHeight },
+    column: { ...F.rect(column), clientHeight: column.clientHeight, scrollHeight: column.scrollHeight,
+              visible: F.visible(column) },
     iw: innerWidth, ih: innerHeight,
   };
 `;
@@ -210,6 +214,11 @@ export const scenarios = [
     // of the other two — 26.5px at 360x800 — with the chosen option's 372px itinerary
     // sitting between row 1 and row 2, so reaching option 2 cost 416px of scrolling and
     // option 3, 513px. Nothing here scrolls: this is the arrival state.
+    //
+    // On a portrait phone the results now arrive in a sheet at half height over a
+    // full-screen map, so "the column" is the sheet's content and only its top half is
+    // on the screen. The rows are measured against that visible part, not the content's
+    // box, which runs on past the foot of the screen.
     name: "phones when the plan lands the option rows are already on screen",
     async run(ctx) {
       const { checks } = ctx;
@@ -230,9 +239,9 @@ export const scenarios = [
         const at = sideways ? `${width}x${height} ${lang}` : `${width}x${height}`;
         const page = await bootResults(ctx, { width, height, lang });
         try {
-          // The forecast arrives on its own schedule and, on portrait, takes room above
-          // the list — so the arrival state is measured once the strip is there rather
-          // than before. Sideways there is no strip to wait for.
+          // The forecast arrives on its own schedule, so the arrival state is measured once
+          // the strip is there rather than before. In the portrait sheet it follows the
+          // list instead of leading it. Sideways there is no strip to wait for.
           if (!sideways) {
             await page.waitFor(`document.querySelector('[data-fov="weather-strip"]')`, {
               label: "the weather strip to settle above the options",
@@ -242,14 +251,15 @@ export const scenarios = [
           await sleep(200);
           const m = await page.eval(`
             const F = window.__fov;
-            const col = document.querySelector('${COLUMN}');
+            const col = document.querySelector('${RESULTS}');
             const list = document.querySelector('${OPTION_LIST}');
-            const c = col.getBoundingClientRect();
+            const box = col.getBoundingClientRect();
+            const c = F.visible(col);
             return {
               strip: !!document.querySelector('[data-fov="weather-strip"]'),
               scrolled: col.scrollTop,
-              col: { top: +c.top.toFixed(2), bottom: +c.bottom.toFixed(2), h: +c.height.toFixed(2) },
-              aboveFirstRow: +(list.getBoundingClientRect().top - c.top + col.scrollTop).toFixed(2),
+              col: { top: c.top, bottom: c.bottom, h: c.h },
+              aboveFirstRow: +(list.getBoundingClientRect().top - box.top + col.scrollTop).toFixed(2),
               rows: [...document.querySelectorAll('${OPTION}')].map((li) => {
                 const r = li.getBoundingClientRect();
                 const visible = Math.max(0, Math.min(r.bottom, c.bottom) - Math.max(r.top, c.top));
@@ -409,11 +419,14 @@ export const scenarios = [
             120,
             `${round(r.box.h)}px (it was 194.5px as a card)`,
           );
+          // The visible part: on a portrait phone the pane is the sheet's content at
+          // half height, and its box runs on past the foot of the screen.
           checks.atMost(
             `an unopened option ${i + 1} takes under half the visible results column`,
-            r.box.h / m.column.h,
+            r.box.h / m.column.visible.h,
             0.5,
-            `${round(r.box.h)}px of a ${round(m.column.h)}px column (${pct(r.box.h / m.column.h)})`,
+            `${round(r.box.h)}px of the ${round(m.column.visible.h)}px of results on screen ` +
+              `(${pct(r.box.h / m.column.visible.h)})`,
           );
         }
         // Every row has to clear a finger as well as fit one.

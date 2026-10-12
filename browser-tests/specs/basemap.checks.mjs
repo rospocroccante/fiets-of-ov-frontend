@@ -377,19 +377,36 @@ export const scenarios = [
         const lightPatches = await sample(page, await mapSpots(page));
         checkDrawn(checks, "before the toggle", lightPatches);
 
-        // The theme switch, the way a user makes it.
-        const menu = await page.eval(`
-          const b = [...document.querySelectorAll('button')].find((x) => /^menu/i.test((x.textContent||"").trim()));
-          return b ? window.__fov.rect(b) : null;
-        `);
-        if (!menu) throw new Error("no header menu button");
-        await page.tap(menu.x + menu.w / 2, menu.y + menu.h / 2);
-        await sleep(250);
+        // The theme switch, the way a phone user makes it. A phone has no header menu
+        // any more: the switch is in the Profile tab, and the tab bar is away while the
+        // map is on the screen. So: the back arrow to the home, Profile, Dark, then Plan
+        // and back up to the map, where the same map has to be waiting, restyled.
+        const tapOn = async (sel, label) => {
+          const b = await page.eval(`
+            const e = document.querySelector(${JSON.stringify(sel)});
+            return e ? window.__fov.rect(e) : null;
+          `);
+          if (!b) throw new Error(`no ${label}`);
+          await page.tap(b.x + b.w / 2, b.y + b.h / 2);
+        };
+        await tapOn('[data-fov="map-back"]', "back arrow on the map stage");
+        await page.waitFor(`Math.round(window.scrollY) <= 2`, { label: "the home stage" });
+        // The bar slides back up with the home; a tap is aimed once it is reachable.
+        await page.waitFor(
+          `(() => { const b = document.querySelector('[data-fov="tab-profile"]').getBoundingClientRect();
+                    return window.__fov.hit(b.x + b.width / 2, b.y + b.height / 2, '[data-fov="tab-profile"]').inside; })()`,
+          { label: "the Profile tab to be reachable" },
+        );
+        await tapOn('[data-fov="tab-profile"]', "Profile tab");
+        await page.waitFor(`getComputedStyle(document.querySelector('[data-fov="profile-screen"]')).visibility === "visible"`, {
+          label: "the Profile screen",
+        });
         const toggle = await page.eval(`
-          const b = [...document.querySelectorAll('button')].find((x) => /dark mode|donkere modus/i.test(x.textContent || ""));
+          const b = [...document.querySelectorAll('[data-fov="profile-screen"] [role="group"] button')]
+            .find((x) => /^(dark|donker)$/i.test((x.textContent || "").trim()));
           return b ? window.__fov.rect(b) : null;
         `);
-        if (!toggle) throw new Error("no dark-mode control in the header menu");
+        if (!toggle) throw new Error("no Dark control in the Profile tab");
         await page.tap(toggle.x + toggle.w / 2, toggle.y + toggle.h / 2);
         // The new theme opens as a circle from the switch (a view transition), and while
         // it runs the browser hit-tests the root instead of the page, so a tap made then
@@ -397,10 +414,16 @@ export const scenarios = [
         await page.waitFor(`!document.documentElement.classList.contains("theme-switching")`, {
           label: "the theme reveal to finish",
         });
-        // The menu stays open after the switch, by design (every label flips in place).
-        // Close it the way it was opened, or it sits over the map the screenshot is of.
-        await page.tap(menu.x + menu.w / 2, menu.y + menu.h / 2);
-        await sleep(250);
+        await tapOn('[data-fov="tab-plan"]', "Plan tab");
+        await page.waitFor(`getComputedStyle(document.querySelector('[data-fov="profile-screen"]')).visibility === "hidden"`, {
+          label: "the Profile screen to close",
+        });
+        // Up to the map again. The trip and the radar were left on it.
+        await page.eval(`window.scrollTo(0, innerHeight); return null;`);
+        await page.waitFor(`Math.round(window.scrollY) >= innerHeight - 2 && !document.querySelector('[data-fov="map-stage"]').hasAttribute("inert")`, {
+          label: "the map stage again",
+        });
+        await sleep(400);
         await waitForBasemap(page);
 
         const after = await page.eval(`

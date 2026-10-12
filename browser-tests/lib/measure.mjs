@@ -63,6 +63,25 @@ window.__fov = {
       (el.className && typeof el.className === "string" ? "." + el.className.trim().split(/\\s+/).slice(0, 3).join(".") : "");
     return { inside: sel ? !!el.closest(sel) : false, desc, text: (el.textContent || "").trim().slice(0, 30) };
   },
+  // The part of an element's box a user can see: the box cut by every ancestor that
+  // clips and by the viewport. A rect alone is not clipped by an ancestor's overflow, and
+  // on a portrait phone the results sheet at half height has a content box that runs off
+  // the foot of the screen: the rows that count are the ones inside what is left.
+  visible(el) {
+    const r = el.getBoundingClientRect();
+    let top = r.top, bottom = r.bottom, left = r.left, right = r.right;
+    for (let n = el.parentElement; n; n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      if (cs.overflowX === "visible" && cs.overflowY === "visible") continue;
+      const b = n.getBoundingClientRect();
+      top = Math.max(top, b.top); bottom = Math.min(bottom, b.bottom);
+      left = Math.max(left, b.left); right = Math.min(right, b.right);
+    }
+    top = Math.max(top, 0); bottom = Math.min(bottom, innerHeight);
+    left = Math.max(left, 0); right = Math.min(right, innerWidth);
+    return { top: +top.toFixed(2), bottom: +bottom.toFixed(2), left: +left.toFixed(2), right: +right.toFixed(2),
+             h: +Math.max(0, bottom - top).toFixed(2), w: +Math.max(0, right - left).toFixed(2) };
+  },
   // Bring a node into view inside whatever scroller holds it, then put the document's
   // own scroll back: moving that would drive the home/map morph and change the screen
   // the test is standing on.
@@ -135,3 +154,7 @@ export const OPTION_METRICS = '[data-fov="option-metrics"]';
 export const OPTION_STEPS = '[data-fov="option-steps"]';
 export const STEPS_TOGGLE = '[data-fov="steps-toggle"]';
 export const COLUMN = '[data-fov="results-column"]';
+// Where the options are drawn, whichever layout is on screen: the results column beside
+// (or under) the map, or on a portrait phone the content of the results sheet over a
+// full-screen map. Only one of the two is ever in the document.
+export const RESULTS = '[data-fov="results-column"], [data-fov="sheet-content"]';
