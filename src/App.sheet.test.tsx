@@ -184,3 +184,39 @@ test("on desktop the results column is unchanged: no sheet, no summary, the Star
   const column = document.querySelector('[data-fov="results-column"]') as HTMLElement;
   expect(within(column).getByRole("button", { name: "Start navigation" })).toBeInTheDocument();
 });
+
+test("the mock badge sits on the map just above the settled sheet, clear of its Start", async () => {
+  phoneLayout();
+  renderApp();
+  const badge = document.querySelector('[data-fov="mock-badge"]') as HTMLElement;
+  // On the home, with the tab bar up, it sits over the bar's top edge as before.
+  expect(badge).toHaveClass("bottom-[calc(4.25rem+env(safe-area-inset-bottom))]", "z-[1850]");
+  expect(badge.style.bottom).toBe("");
+
+  await planVondelpark();
+  // The collapsed sheet is its 160px header (jsdom has no safe area), and the badge sits
+  // 8px above it, on the left: in the corner it used to cover the summary's Start.
+  await waitFor(() => expect(badge.style.bottom).toBe("168px"));
+  expect(badge).toHaveClass("left-[calc(0.75rem+env(safe-area-inset-left))]", "z-[1850]");
+  expect(badge.className).not.toMatch(/(^|\s)bottom-\[/);
+
+  // It follows the sheet when the sheet settles somewhere else: half is half the window.
+  fireEvent.click(within(summary()).getByText("By bike"));
+  const half = Math.round(window.innerHeight / 2);
+  await waitFor(() => expect(badge.style.bottom).toBe(`${half + 8}px`));
+
+  // Back on the home the tab bar returns, and so does the badge's place over it.
+  await morphTo(0);
+  expect(badge.style.bottom).toBe("");
+  expect(badge).toHaveClass("bottom-[calc(4.25rem+env(safe-area-inset-bottom))]");
+});
+
+test("on desktop the mock badge keeps its corner", async () => {
+  for (const r of restore.reverse()) r();
+  restore = [];
+  renderApp();
+  await morphTo(1);
+  const badge = document.querySelector('[data-fov="mock-badge"]') as HTMLElement;
+  expect(badge).toHaveClass("bottom-[calc(0.75rem+env(safe-area-inset-bottom))]");
+  expect(badge.style.bottom).toBe("");
+});
