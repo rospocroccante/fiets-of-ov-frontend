@@ -433,6 +433,20 @@ sheet covers the map, and on a phone on its side the navigation banner spans the
 the map pane, where the button would sit on the banner's Exit. In both cases it fades out
 and goes inert. A wide screen keeps the radar as a segment of the filter bar.
 
+The map's right edge is shared, top to bottom, by the radar button, the readout, the place
+chips and the reset, and the last two ride the sheet up from the foot. At 320x568 with the
+sheet at half there are 168px of map between the chips and the sheet: the readout (91px)
+covered the reset, and the "zoom in" chip ran 4px into the radar button. The rule lives in
+`src/lib/mapEdge.ts` (`fitEdge`). The button and the reset never move. The room between
+them goes, in this order, to the readout's Rain and Wind toggles, to the place chips, and
+to the rest of the readout (the frame clock, the error chips, the legend), each with 8px of
+air, and a part that does not fit whole is not drawn. `MapView` measures the parts after
+every render and through a `ResizeObserver` and applies the result. A part left out stays
+laid out but `position: absolute` and `visibility: hidden`, so it takes no space, no touch
+and no focus and can still be measured for when the sheet comes down. At 320x568 with the
+sheet at half the edge is the button (128 to 176px), the two toggles (184 to 216px) and the
+reset (224 to 272px). At peek, and at half on 360x800 and 390x844, everything is drawn.
+
 A plan that expects rain during the trip turns the radar on, on every layout. The test is
 `PlanView.rainExpected === true`, the field the summary's weather tag reads; the backend's
 reason sentence is never parsed. Each search is decided once, keyed by the `search` string

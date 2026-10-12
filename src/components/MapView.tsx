@@ -63,6 +63,7 @@ import { useI18n } from "../lib/i18n";
 import { modeColor } from "../lib/modeColors";
 import { DURATION_MS, EASE_CSS, prefersReducedMotion } from "../lib/motion";
 import { decodePolyline } from "../lib/polyline";
+import { EDGE_ALL, fitEdge, OUT_OF_ROOM, sameFit, type EdgeFit } from "../lib/mapEdge";
 import { Basemap } from "./Basemap";
 import { RadarOverlay, RadarReadout } from "./RainRadar";
 import type { WeatherLayersState } from "./RainRadar";
@@ -762,6 +763,53 @@ export function MapView({
     L.DomEvent.disableScrollPropagation(el);
   }, [zoomCorner]);
 
+  // The map's right edge: the radar button (App's, on a phone), the readout under it, and
+  // the bottom column's place chips and reset riding the sheet up from the foot. What fits
+  // between the button and the reset is decided in lib/mapEdge.ts from the boxes measured
+  // here; this only measures and applies. It runs after every render because its parts
+  // come and go with the weather layers and the zoom, and a ResizeObserver catches what
+  // changes between renders: the map's own size, and the readout's clock, which arrives
+  // with the first radar frame and re-renders only the readout. Without layout (jsdom,
+  // every box 0) everything is drawn.
+  const readoutRef = useRef<HTMLDivElement | null>(null);
+  const placesRef = useRef<HTMLDivElement | null>(null);
+  const edgeResetRef = useRef<HTMLButtonElement | null>(null);
+  const [edge, setEdge] = useState<EdgeFit>(EDGE_ALL);
+  const readoutOffset = topInset + (radarButton ? RADAR_BUTTON_CLEAR : 0);
+  const edgeInputs = useRef({ readoutOffset, bottomInset, showWeather });
+  edgeInputs.current = { readoutOffset, bottomInset, showWeather };
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const height = (el: Element | null | undefined) => (el ? el.getBoundingClientRect().height : 0);
+    const measure = () => {
+      const { readoutOffset: offset, bottomInset: inset, showWeather: on } = edgeInputs.current;
+      const mapH = wrap.clientHeight;
+      const readout = readoutRef.current;
+      const reset = edgeResetRef.current;
+      const next =
+        mapH > 0
+          ? fitEdge({
+              top: 12 + offset,
+              foot: mapH - 12 - inset - height(reset),
+              readout: on,
+              toggles: height(readout?.querySelector('[data-fov="readout-toggles"]')),
+              extras: height(readout?.querySelector('[data-fov="readout-extras"]')),
+              places: height(placesRef.current),
+              reset: reset != null,
+            })
+          : EDGE_ALL;
+      setEdge((prev) => (sameFit(prev, next) ? prev : next));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    for (const el of [wrap, readoutRef.current?.querySelector('[data-fov="readout-extras"]'), placesRef.current]) {
+      if (el) ro.observe(el);
+    }
+    return () => ro.disconnect();
+  });
+
   const resetView = () => {
     const m = mapRef.current;
     if (m) applyDefaultView(m, allCoords, origin ?? destination, "city", bottomInset, topInset);
@@ -945,7 +993,9 @@ export function MapView({
           siblings both pinned to bottom-3 right-3, which was fine only because nobody
           had hit the state where both are true: a dead Overpass at city zoom drew the
           error chip straight on top of the zoom-in chip. Stacked, each takes its own
-          line. Lifted by the inset, so a results sheet does not cover them. */}
+          line. Lifted by the inset, so a results sheet does not cover them. It shares
+          the right edge with the radar's readout above it, and its chips give way when
+          the two do not fit (edge, above). */}
       {interactive &&
         clipUnderChrome(
           topInset,
@@ -953,41 +1003,52 @@ export function MapView({
             className={`absolute right-3 z-[1000] flex flex-col items-end gap-2 ${topInset > 0 ? "pointer-events-auto" : ""}`.trim()}
             style={{ bottom: 12 + bottomInset }}
           >
-            {/* A dead POI feed must say so, or an Overpass outage reads as "no places". The
-                amber variant is the half-dead case: part of the view loaded, so the labels
-                on screen are real but incomplete, worth a softer warning than
-                "unavailable". */}
-            {(poisError || poisPartial) && (
-              <span
-                className={`rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold shadow dark:bg-night-surface/90 ${
-                  poisError ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"
-                }`}
+            {/* The place chips, which give way when the edge is short of room (edge). */}
+            {(poisError || poisPartial || (viewport != null && viewport.zoom < POI_MIN_ZOOM)) && (
+              <div
+                ref={placesRef}
+                data-fov="map-places"
+                className="flex flex-col items-end gap-2"
+                style={edge.places ? undefined : OUT_OF_ROOM}
               >
-                {poisError ? t("placesUnavailable") : t("placesPartial")}
-              </span>
-            )}
-            {/* Discoverability: the POI layer only exists at street zoom — say so, and let
-                the chip do the zooming (guarded: the test mock's map has no setZoom). */}
-            {viewport != null && viewport.zoom < POI_MIN_ZOOM && (
-              <button
-                type="button"
-                onClick={() => {
-                  const m = mapRef.current;
-                  if (m && typeof m.setZoom === "function") m.setZoom(POI_MIN_ZOOM);
-                }}
-                // px-3, not wider: the chip is already ~200px across on a phone and it sits
-                // on top of the map pane, so every extra pixel is one more place where a
-                // pan gesture starts on a button instead of on the map.
-                className="inline-flex min-h-[44px] items-center rounded-full bg-white/90 px-3 text-xs font-medium text-slate-600 shadow transition hover:bg-white dark:bg-night-surface/90 dark:text-night-text dark:hover:bg-night-hover"
-              >
-                {t("zoomInForPlaces")}
-              </button>
+                {/* A dead POI feed must say so, or an Overpass outage reads as "no places". The
+                    amber variant is the half-dead case: part of the view loaded, so the labels
+                    on screen are real but incomplete, worth a softer warning than
+                    "unavailable". */}
+                {(poisError || poisPartial) && (
+                  <span
+                    className={`rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold shadow dark:bg-night-surface/90 ${
+                      poisError ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"
+                    }`}
+                  >
+                    {poisError ? t("placesUnavailable") : t("placesPartial")}
+                  </span>
+                )}
+                {/* Discoverability: the POI layer only exists at street zoom — say so, and let
+                    the chip do the zooming (guarded: the test mock's map has no setZoom). */}
+                {viewport != null && viewport.zoom < POI_MIN_ZOOM && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const m = mapRef.current;
+                      if (m && typeof m.setZoom === "function") m.setZoom(POI_MIN_ZOOM);
+                    }}
+                    // px-3, not wider: the chip is already ~200px across on a phone and it sits
+                    // on top of the map pane, so every extra pixel is one more place where a
+                    // pan gesture starts on a button instead of on the map.
+                    className="inline-flex min-h-[44px] items-center rounded-full bg-white/90 px-3 text-xs font-medium text-slate-600 shadow transition hover:bg-white dark:bg-night-surface/90 dark:text-night-text dark:hover:bg-night-hover"
+                  >
+                    {t("zoomInForPlaces")}
+                  </button>
+                )}
+              </div>
             )}
             {/* Without the zoom column the way back to the trip joins this one, at its
                 foot, as a round floating button like the rest of the map's chrome on a
                 portrait phone. */}
             {!zoomControl && (
               <button
+                ref={edgeResetRef}
                 type="button"
                 data-fov="map-reset-view"
                 aria-label={t("resetView")}
@@ -1047,7 +1108,9 @@ export function MapView({
         )}
       {showWeather && (
         <RadarReadout
-          offset={topInset + (radarButton ? RADAR_BUTTON_CLEAR : 0)}
+          rootRef={readoutRef}
+          offset={readoutOffset}
+          fit={edge.toggles ? (edge.extras ? "whole" : "toggles") : "none"}
           layers={wLayers}
           onLayerToggle={onLayerToggle}
           rainError={wLayers.rain && rain.error}

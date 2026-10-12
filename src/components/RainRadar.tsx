@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Ref } from "react";
 import { TileLayer } from "react-leaflet";
 import { RADAR_TILE_OPTIONS } from "../hooks/useRainRadar";
 import type { RadarFrame } from "../hooks/useRainRadar";
 import { useI18n } from "../lib/i18n";
 import type { StringKey } from "../lib/i18n";
 import { publishRadarFrame, useRadarFrame } from "../lib/radarFrame";
+import { OUT_OF_ROOM } from "../lib/mapEdge";
 
 // Animated precipitation overlay: all frames stay mounted (tiles cache, no flicker),
 // only the active one is visible; the loop pauses 3 beats on the newest frame so the
@@ -69,12 +70,18 @@ const LAYER_KEY: Record<keyof WeatherLayersState, StringKey> = {
 // legend is the cue that the radar is live; and a failed feed must say so, or an
 // outage reads as "dry". Subscribes to the frame store so the 700ms clock update is
 // isolated to this chip.
+//
+// It shares the map's right edge with the bottom column (lib/mapEdge.ts), and `fit` is
+// what MapView found room for: all of it, the toggles alone, or nothing. A part left out
+// is still laid out, hidden and out of the flow, so MapView can measure it.
 export function RadarReadout({
   layers,
   onLayerToggle,
   rainError,
   windError,
   offset = 0,
+  fit = "whole",
+  rootRef,
 }: {
   layers: WeatherLayersState;
   onLayerToggle?: (layer: keyof WeatherLayersState) => void;
@@ -84,6 +91,8 @@ export function RadarReadout({
   // the floating chrome on a portrait phone (MapView's topInset), whose map edge is under
   // the pill, and on a phone the radar button, which holds the corner above it.
   offset?: number;
+  fit?: "whole" | "toggles" | "none";
+  rootRef?: Ref<HTMLDivElement>;
 }) {
   const { t, lang } = useI18n();
   const frameTime = useRadarFrame();
@@ -97,13 +106,21 @@ export function RadarReadout({
           minute: "2-digit",
         })
       : null;
+  const extras = label != null || rainError || windError || rainLive;
   return (
     <div
+      ref={rootRef}
       className="absolute right-3 top-3 z-[1000] flex flex-col items-end gap-1.5"
-      style={offset > 0 ? { top: 12 + offset } : undefined}
+      style={{
+        ...(offset > 0 ? { top: 12 + offset } : null),
+        ...(fit === "none" ? { visibility: "hidden" as const } : null),
+      }}
     >
       {onLayerToggle && (
-        <div className="flex items-center gap-1 rounded-full bg-white/90 p-1 shadow dark:bg-night-surface/90">
+        <div
+          data-fov="readout-toggles"
+          className="flex items-center gap-1 rounded-full bg-white/90 p-1 shadow dark:bg-night-surface/90"
+        >
           {(Object.keys(LAYER_KEY) as (keyof WeatherLayersState)[]).map((k) => (
             <button
               key={k}
@@ -121,32 +138,40 @@ export function RadarReadout({
           ))}
         </div>
       )}
-      {label && (
-        <span className="rounded-full bg-white/90 px-2 py-1 text-xs font-semibold text-brand shadow dark:bg-night-surface/90 dark:text-night-accent">
-          {label}
-        </span>
-      )}
-      {rainError && (
-        <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-red-600 shadow dark:bg-night-surface/90 dark:text-red-400">
-          {t("rainRadarUnavailable")}
-        </span>
-      )}
-      {windError && (
-        <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-red-600 shadow dark:bg-night-surface/90 dark:text-red-400">
-          {t("windDataUnavailable")}
-        </span>
-      )}
-      {rainLive && (
-        <span className="flex items-center gap-1.5 rounded-full bg-white/90 px-2 py-1 text-[10px] font-medium text-gray-600 shadow dark:bg-night-surface/90 dark:text-night-muted">
-          <span>{t("legendLight")}</span>
-          <span
-            className="h-1.5 w-16 rounded-full"
-            style={{
-              background: "linear-gradient(90deg, #9be1ff, #2f80ed, #7b2ff7, #e63946)",
-            }}
-          />
-          <span>{t("legendHeavy")}</span>
-        </span>
+      {extras && (
+        <div
+          data-fov="readout-extras"
+          className="flex flex-col items-end gap-1.5"
+          style={fit === "whole" ? undefined : OUT_OF_ROOM}
+        >
+          {label && (
+            <span className="rounded-full bg-white/90 px-2 py-1 text-xs font-semibold text-brand shadow dark:bg-night-surface/90 dark:text-night-accent">
+              {label}
+            </span>
+          )}
+          {rainError && (
+            <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-red-600 shadow dark:bg-night-surface/90 dark:text-red-400">
+              {t("rainRadarUnavailable")}
+            </span>
+          )}
+          {windError && (
+            <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-red-600 shadow dark:bg-night-surface/90 dark:text-red-400">
+              {t("windDataUnavailable")}
+            </span>
+          )}
+          {rainLive && (
+            <span className="flex items-center gap-1.5 rounded-full bg-white/90 px-2 py-1 text-[10px] font-medium text-gray-600 shadow dark:bg-night-surface/90 dark:text-night-muted">
+              <span>{t("legendLight")}</span>
+              <span
+                className="h-1.5 w-16 rounded-full"
+                style={{
+                  background: "linear-gradient(90deg, #9be1ff, #2f80ed, #7b2ff7, #e63946)",
+                }}
+              />
+              <span>{t("legendHeavy")}</span>
+            </span>
+          )}
+        </div>
       )}
     </div>
   );
