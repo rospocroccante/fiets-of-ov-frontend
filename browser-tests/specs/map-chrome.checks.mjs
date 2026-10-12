@@ -333,16 +333,17 @@ export const scenarios = [
                   `elementFromPoint(${r.x}, ${r.y}) = ${r.hit}`,
                 );
               }
-              // Every control that used to be on the bar is in here.
+              // Every control that used to be on the bar is in here, but the radar: that is
+              // a round button on the map now, seen without opening anything.
               const names = open.rows.map((r) => r.text.toLowerCase()).join("|");
               for (const [what, re] of [
                 ["the start picker", /(^|\|)start/],
                 ["the end picker", /end|einde/],
-                ["the radar", /radar/],
                 ["hide map", /hide map|verberg kaart/],
               ]) {
                 checks.ok(`${at}: the panel still offers ${what}`, re.test(names), `rows: ${names}`);
               }
+              checks.ok(`${at}: the radar is not in the panel`, !/radar/.test(names), `rows: ${names}`);
               // Google Maps never hides the map behind its own filters.
               checks.atMost(
                 `${at}: the panel leaves most of the map showing`,

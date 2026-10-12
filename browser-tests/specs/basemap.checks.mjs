@@ -35,11 +35,11 @@ import { openSheetToHalf } from "../lib/sheet.mjs";
 import { decodePng, patch, colourCount, BAND_MAX_SHARE } from "../lib/pixels.mjs";
 
 const PILL = '[data-fov="search-pill"]';
-const MORE = '[data-fov="filter-more"]';
 const MAP = ".leaflet-container";
 const GL = 'canvas[data-fov="basemap-gl"]';
 const GL_PAINTED = `${GL}[data-fov-style="loaded"]`;
 const RADAR_TILES = ".rain-radar-tiles";
+const RADAR = '[data-fov="radar-button"]';
 const RASTER = ".basemap-raster";
 const ZOOM_IN = ".leaflet-control-zoom-in";
 
@@ -259,28 +259,18 @@ function checkDrawn(checks, at, patches) {
   );
 }
 
-// Turn the rain radar on the way a user does: the map-tools control on the filter bar,
-// then the Radar row, then a tap outside to put the panel away. That last tap is not
-// cosmetic: while the panel is open it holds a full-screen click catcher over the map,
-// and a screenshot taken then is of a map nobody can point at.
-async function turnRadarOn(page, { height }) {
-  const more = await page.eval(`
-    const b = document.querySelector('${MORE}');
-    return b ? window.__fov.rect(b) : null;
-  `);
-  if (!more) throw new Error("no map-tools control on the filter bar");
-  await page.tap(more.x + more.w / 2, more.y + more.h / 2);
-  await sleep(300);
+// Turn the rain radar on the way a user does. The seeded trip expects rain, so the radar
+// is normally on by the time the map is: the plan turns it on. When it is not, the round
+// radar button on the map (no longer a row in the Map menu) is one tap. Either way the
+// frames have to be on the map before anything is measured.
+async function turnRadarOn(page) {
   const radar = await page.eval(`
-    const scope = document.querySelector('[data-fov="filter-panel"]') || document;
-    const b = [...scope.querySelectorAll('button')].find((x) => /radar/i.test(x.textContent || ""));
+    const b = document.querySelector('${RADAR}');
     return b ? { ...window.__fov.rect(b), pressed: b.getAttribute("aria-pressed") } : null;
   `);
-  if (!radar) throw new Error("no radar control in the map tools");
-  await page.tap(radar.x + radar.w / 2, radar.y + radar.h / 2);
+  if (!radar) throw new Error("no radar button on the map");
+  if (radar.pressed !== "true") await page.tap(radar.x + radar.w / 2, radar.y + radar.h / 2);
   await page.waitFor(`document.querySelectorAll('${RADAR_TILES} img').length > 0`, { label: "radar tiles" });
-  await page.tap(20, height - 40);
-  await page.waitFor(`!document.querySelector('[data-fov="filter-panel"]')`, { label: "the map tools to close" });
   await sleep(400);
   return radar;
 }
@@ -380,8 +370,8 @@ export const scenarios = [
       try {
         await waitForBasemap(page);
 
-        // Radar on first, through the map tools, so the toggle has an overlay to lose.
-        await turnRadarOn(page, { height: 844 });
+        // Radar on first, so the toggle has an overlay to lose.
+        await turnRadarOn(page);
 
         const before = await page.eval(`
           const c = document.querySelector('${GL}');
@@ -491,7 +481,7 @@ export const scenarios = [
       const page = await bootMap(ctx, { width: 390, height: 844, theme: "dark" });
       try {
         await waitForBasemap(page);
-        await turnRadarOn(page, { height: 844 });
+        await turnRadarOn(page);
 
         const order = await page.eval(`
           const pane = document.querySelector('.leaflet-tile-pane');

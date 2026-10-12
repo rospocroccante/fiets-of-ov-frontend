@@ -24,6 +24,8 @@ const MAP = ".leaflet-container";
 // The map's half of the stage: the Leaflet container and the chips MapView floats on it.
 const PANE = "#fov-map-main > section";
 const OPTION = '[data-fov="option"]';
+const RADAR = '[data-fov="radar-button"]';
+const RADAR_TILES = ".rain-radar-tiles";
 
 // The seeded trip that plans three options (the mock answers all three modes only for a
 // "zuid" destination), two more recent trips and two saved places, so the home has more
@@ -252,6 +254,102 @@ const READ_COLLAPSED = `
     iw: innerWidth, ih: innerHeight,
   };
 `;
+
+// The phone's radar button, the readout under it, and everything the two have to keep
+// clear of: the chips, the reset, the place chips in the bottom-right column and the
+// sheet. `reaches` is what a finger at the button's centre gets; `layers` and `tiles` are
+// the RainViewer frames on the map, the overlay itself rather than the button's state.
+const READ_RADAR = `
+  const F = window.__fov;
+  const q = (s) => document.querySelector(s);
+  const box = (e) => { const r = e.getBoundingClientRect();
+    return { left: +r.left.toFixed(2), top: +r.top.toFixed(2), right: +r.right.toFixed(2), bottom: +r.bottom.toFixed(2),
+             w: +r.width.toFixed(2), h: +r.height.toFixed(2) }; };
+  const drawn = (e) => !!e && e.getBoundingClientRect().width > 0 &&
+    e.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+  const b = q('${RADAR}');
+  const r = b.getBoundingClientRect();
+  const cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+  const at = document.elementFromPoint(cx, cy);
+  const rain = [...document.querySelectorAll("button")].find((x) => x.textContent.trim() === "Rain");
+  const readout = rain ? rain.closest(".right-3") : null;
+  const wrap = q('${MAP}').parentElement;
+  const column = [...wrap.querySelectorAll("div.right-3")].find((d) => d.style.bottom);
+  const reset = q('[data-fov="map-reset-view"]');
+  const pois = column ? [...column.children].filter((c) => c !== reset && drawn(c))
+    .map((c) => ({ ...box(c), text: (c.textContent || "").trim().slice(0, 24) })) : [];
+  const sheet = q('${SHEET}');
+  return {
+    button: { ...box(b), cx, cy, reaches: !!at && (at === b || b.contains(at)),
+              hit: at ? at.tagName + (at.getAttribute("data-fov") ? "[" + at.getAttribute("data-fov") + "]" : "") : "nothing",
+              pressed: b.getAttribute("aria-pressed"), cue: b.getAttribute("data-cue"),
+              opacity: Number(getComputedStyle(b).opacity), inert: b.hasAttribute("inert") },
+    chips: [...q('[data-fov="filter-bar"]').querySelectorAll("button")].filter(drawn)
+      .map((c) => ({ ...box(c), text: (c.textContent || "").trim() })),
+    readout: drawn(readout) ? box(readout) : null,
+    rain: rain ? F.shown(rain) : null,
+    reset: drawn(reset) ? box(reset) : null,
+    pois,
+    sheet: sheet ? { top: +sheet.getBoundingClientRect().top.toFixed(2), detent: sheet.getAttribute("data-detent") } : null,
+    layers: document.querySelectorAll('${RADAR_TILES}').length,
+    tiles: document.querySelectorAll('${RADAR_TILES} img').length,
+    map: box(q('${MAP}')),
+    iw: innerWidth, ih: innerHeight,
+  };
+`;
+
+const overlaps = (a, b) =>
+  a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+const span = (r) => `${r.left}..${r.right} x ${r.top}..${r.bottom}`;
+
+// The button, and the readout when it is up, overlap nothing they share the map with.
+function checkRadarClear(checks, at, m) {
+  const b = m.button;
+  for (const c of m.chips) {
+    checks.ok(`${at}: the radar button clears the "${c.text}" chip`, !overlaps(b, c), `button ${span(b)}, chip ${span(c)}`);
+  }
+  if (m.reset) {
+    checks.ok(`${at}: the radar button clears the reset`, !overlaps(b, m.reset), `button ${span(b)}, reset ${span(m.reset)}`);
+  }
+  for (const p of m.pois) {
+    checks.ok(`${at}: the radar button clears "${p.text}"`, !overlaps(b, p), `button ${span(b)}, chip ${span(p)}`);
+  }
+  if (m.sheet) {
+    checks.atMost(`${at}: the radar button ends above the sheet`, b.bottom, m.sheet.top, `button ends ${b.bottom}, sheet (${m.sheet.detent}) starts ${m.sheet.top}`);
+  }
+  if (!m.readout) return;
+  const o = m.readout;
+  checks.ok(`${at}: the readout clears the radar button`, !overlaps(o, b), `readout ${span(o)}, button ${span(b)}`);
+  checks.atLeast(`${at}: the readout starts under the button`, o.top, b.bottom, `readout from ${o.top}, button ends ${b.bottom}`);
+  for (const c of m.chips) {
+    checks.ok(`${at}: the readout clears the "${c.text}" chip`, !overlaps(o, c), `readout ${span(o)}, chip ${span(c)}`);
+  }
+  if (m.reset) checks.ok(`${at}: the readout clears the reset`, !overlaps(o, m.reset), `readout ${span(o)}, reset ${span(m.reset)}`);
+  for (const p of m.pois) {
+    checks.ok(`${at}: the readout clears "${p.text}"`, !overlaps(o, p), `readout ${span(o)}, chip ${span(p)}`);
+  }
+  if (m.sheet) {
+    checks.atMost(`${at}: the readout ends above the sheet`, o.bottom, m.sheet.top, `readout ends ${o.bottom}, sheet (${m.sheet.detent}) starts ${m.sheet.top}`);
+  }
+}
+
+// The first popular trip, which the mock answers dry, planned from the home. On a portrait
+// phone the sheet lands collapsed; on its side the panes are side by side.
+async function planDryTrip(page) {
+  const card = await page.eval(`
+    const c = document.querySelector('[data-fov="popular-trip"]');
+    window.__fov.reveal(c);
+    const r = window.__fov.rect(c);
+    return { x: Math.round(r.x + r.w / 2), y: Math.round(r.y + r.h / 2), label: c.getAttribute("aria-label") };
+  `);
+  await page.tap(card.x, card.y);
+  await page.waitFor(`document.querySelectorAll('${OPTION}').length >= 2`, { label: "the travel options" });
+  await page.waitFor(`Math.round(window.scrollY) === innerHeight`, { label: "the morph to reach the map stage" });
+  if (await page.eval(`return !!document.querySelector('${SHEET}');`)) await sheetAt(page, "peek");
+  else await sleep(900);
+  await page.waitFor(`document.querySelector('${RADAR}')`, { label: "the radar button" });
+  return card.label;
+}
 
 export const scenarios = [
   {
@@ -788,17 +886,15 @@ export const scenarios = [
         }
 
         // The radar's readout pins itself to the top right of the map: under the chips.
+        // The seeded trip expects rain, so the radar is on already; were it not, the round
+        // button on the map is the way to it (the Map menu no longer holds the radar).
         const more = m.chips[m.chips.length - 1];
-        await page.tap(more.cx, more.cy);
-        await page.waitFor(`document.querySelector('[data-fov="filter-panel"]')`, { label: "the map tools panel" });
         const radar = await page.eval(`
-          const b = [...document.querySelectorAll('[data-fov="filter-panel"] button')].find((x) => x.textContent.trim() === "Radar");
-          return b ? window.__fov.rect(b) : null;
+          const b = document.querySelector('${RADAR}');
+          return b ? { ...window.__fov.rect(b), pressed: b.getAttribute("aria-pressed") } : null;
         `);
-        if (!radar) throw new Error("no Radar row in the map tools");
-        await page.tap(radar.x + radar.w / 2, radar.y + radar.h / 2);
-        await page.tap(more.cx, more.cy);
-        await page.waitFor(`!document.querySelector('[data-fov="filter-panel"]')`, { label: "the map tools to close" });
+        if (!radar) throw new Error("no radar button on the map");
+        if (radar.pressed !== "true") await page.tap(radar.x + radar.w / 2, radar.y + radar.h / 2);
         await page.waitFor(
           `[...document.querySelectorAll("button")].some((x) => x.textContent.trim() === "Rain")`,
           { label: "the radar readout" },
@@ -1182,6 +1278,195 @@ export const scenarios = [
             `column ${m.col.left}..${m.col.right}, map ${m.map.left}..${m.map.right}`,
           );
           checks.near("at the same height", m.map.top, m.col.top, 1, `column top ${m.col.top}, map top ${m.map.top}`);
+        }
+      } finally {
+        await page.close();
+      }
+    },
+  },
+
+  // The rain radar on a phone is a round button on the map, in the corner Google Maps keeps
+  // its layers button in: the right side, just under the chips. Before, it was a row in
+  // the chip row's Map menu, two taps away and out of sight until the menu was open.
+  ...[
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+  ].map(({ width, height }) => ({
+    name: `${width}x${height} the radar is a round button on the map, clear of what is around it`,
+    async run(ctx) {
+      const { checks } = ctx;
+      const at = `${width}x${height}`;
+      const page = await bootPhone(ctx, { width, height });
+      try {
+        const trip = await planDryTrip(page);
+        const m = await page.eval(READ_RADAR);
+        const b = m.button;
+        const chipBottom = Math.max(...m.chips.map((c) => c.bottom));
+
+        checks.equal(`${at}: a dry trip (${trip}) leaves the radar off`, b.pressed, "false");
+        checks.equal(`${at}: and no radar frames on the map`, m.layers, 0, `${m.layers} radar layers`);
+        checks.atLeast(`${at}: the button is 44px tall`, b.h, 44, `${b.w}x${b.h}`);
+        checks.atLeast(`${at}: and 44px wide`, b.w, 44, `${b.w}x${b.h}`);
+        checks.ok(`${at}: a touch at its centre reaches it`, b.reaches, `elementFromPoint(${b.cx}, ${b.cy}) = ${b.hit}`);
+        checks.ok(
+          `${at}: it is whole on the screen`,
+          b.left >= 0 && b.right <= m.iw && b.top >= 0 && b.bottom <= m.ih,
+          span(b),
+        );
+        checks.near(`${at}: on the map's right edge, 12px in`, b.right, m.map.right - 12, 1, `button ends ${b.right}, map ends ${m.map.right}`);
+        checks.atLeast(`${at}: under the chip row`, b.top, chipBottom, `button from ${b.top}, chips end ${chipBottom}`);
+        checks.atMost(`${at}: and just under it`, b.top - chipBottom, 24, `${b.top - chipBottom}px between them`);
+        checkRadarClear(checks, `${at} off`, m);
+
+        // One tap turns the radar on: the frames arrive on the map and the readout under
+        // the button.
+        await page.tap(b.cx, b.cy);
+        await page.waitFor(`document.querySelectorAll('${RADAR_TILES} img').length > 0`, { label: "radar tiles on the map" });
+        await page.waitFor(
+          `(() => { const r = [...document.querySelectorAll("button")].find((x) => x.textContent.trim() === "Rain");
+                    return !!r && window.__fov.shown(r).painted; })()`,
+          { label: "the radar readout" },
+        );
+        const on = await page.eval(READ_RADAR);
+        checks.equal(`${at}: a tap turns it on`, on.button.pressed, "true");
+        checks.atLeast(`${at}: the radar frames are on the map`, on.tiles, 1, `${on.layers} layers, ${on.tiles} tiles`);
+        checks.ok(`${at}: the readout's Rain toggle takes a touch`, on.rain && on.rain.painted, on.rain ? `hit ${on.rain.hit}` : "no Rain toggle");
+        checks.ok(`${at}: a rider's tap plays no cue`, on.button.cue == null, `data-cue ${on.button.cue}`);
+        checkRadarClear(checks, `${at} on`, on);
+
+        if (on.sheet) {
+          // At half the sheet comes up under the map's bottom column, still clear of both.
+          await tapOn(page, HANDLE, "sheet handle");
+          await sheetAt(page, "half");
+          await sleep(200);
+          checkRadarClear(checks, `${at} half`, await page.eval(READ_RADAR));
+
+          // A full sheet covers the map, and the button goes with the map rather than sit on
+          // the sheet's summary.
+          await tapOn(page, HANDLE, "sheet handle");
+          await sheetAt(page, "full");
+          await sleep(300);
+          const full = await page.eval(READ_RADAR);
+          checks.ok(
+            `${at}: over a full sheet the button is gone and takes no touch`,
+            full.button.opacity === 0 && full.button.inert && !full.button.reaches,
+            `opacity ${full.button.opacity}, inert ${full.button.inert}, elementFromPoint = ${full.button.hit}`,
+          );
+          await tapOn(page, HANDLE, "sheet handle");
+          await sheetAt(page, "peek");
+          await sleep(300);
+          const back = await page.eval(READ_RADAR);
+          checks.ok(`${at}: back at the peek it takes a touch again`, back.button.reaches, `elementFromPoint = ${back.button.hit}`);
+        }
+
+        // A second tap turns it off: the frames leave the map and the readout goes.
+        await page.tap(b.cx, b.cy);
+        await page.waitFor(`document.querySelectorAll('${RADAR_TILES}').length === 0`, { label: "the radar frames to leave" });
+        const off = await page.eval(READ_RADAR);
+        checks.equal(`${at}: a second tap turns it off`, off.button.pressed, "false");
+        checks.ok(`${at}: and the readout goes`, off.readout == null && off.rain == null, off.readout ? span(off.readout) : "none");
+      } finally {
+        await page.close();
+      }
+    },
+  })),
+
+  // The radar turns itself on for a trip that expects rain, once per search, and leaves a
+  // dry trip alone. The mock answers the seeded "Zuidplein" trip with rain expected and the
+  // first popular trip dry.
+  ...[
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+  ].map(({ width, height }) => ({
+    name: `${width}x${height} a rainy trip opens with the radar on, a dry one with it off`,
+    async run(ctx) {
+      const { checks } = ctx;
+      const at = `${width}x${height}`;
+      let page = await bootPhone(ctx, { width, height });
+      try {
+        await tapHomeRow(page, "Zuidplein");
+        await page.waitFor(`document.querySelectorAll('${OPTION}').length >= 3`, { label: "three travel options" });
+        await page.waitFor(`Math.round(window.scrollY) === innerHeight`, { label: "the morph to reach the map stage" });
+        await page.waitFor(`document.querySelectorAll('${RADAR_TILES} img').length > 0`, { label: "radar tiles on the map" });
+        await page.waitFor(
+          `(() => { const r = [...document.querySelectorAll("button")].find((x) => x.textContent.trim() === "Rain");
+                    return !!r && window.__fov.shown(r).painted; })()`,
+          { label: "the radar readout" },
+        );
+        const rainy = await page.eval(READ_RADAR);
+        const verdict = await page.eval(`return [...document.querySelectorAll('[data-fov="weather-verdict"]')].map((v) => v.innerText.trim()).join(" | ");`);
+        checks.ok(`${at}: the trip expects rain`, /rain expected/i.test(verdict), verdict);
+        checks.equal(`${at}: the radar is on without a tap`, rainy.button.pressed, "true");
+        checks.atLeast(`${at}: its frames are on the map`, rainy.tiles, 1, `${rainy.layers} layers, ${rainy.tiles} tiles`);
+        checks.equal(`${at}: the button says the plan turned it on`, rainy.button.cue, "auto");
+        checks.ok(`${at}: and it still takes a touch`, rainy.button.reaches, `elementFromPoint = ${rainy.button.hit}`);
+        checkRadarClear(checks, `${at} rainy`, rainy);
+        await page.close();
+
+        page = await bootPhone(ctx, { width, height });
+        await planDryTrip(page);
+        await sleep(400);
+        const dry = await page.eval(READ_RADAR);
+        const dryVerdict = await page.eval(`return [...document.querySelectorAll('[data-fov="weather-verdict"]')].map((v) => v.innerText.trim()).join(" | ");`);
+        checks.ok(`${at}: the first popular trip is dry`, /dry/i.test(dryVerdict), dryVerdict);
+        checks.equal(`${at}: it opens with the radar off`, dry.button.pressed, "false");
+        checks.equal(`${at}: and no radar frames`, dry.layers, 0, `${dry.layers} layers`);
+      } finally {
+        await page.close();
+      }
+    },
+  })),
+
+  // In mock mode the badge sat in the bottom-left corner, over the collapsed sheet's Start.
+  // It now sits on the map 8px above the sheet's settled top.
+  {
+    name: "390x844 the mock badge stays off the collapsed sheet's Start",
+    async run(ctx) {
+      const { checks } = ctx;
+      const page = await bootPhone(ctx, { width: 390, height: 844 });
+      try {
+        await planDryTrip(page);
+        await sleep(300);
+        const READ_BADGE = `
+          const F = window.__fov;
+          const badge = document.querySelector('[data-fov="mock-badge"]');
+          const start = document.querySelector('[data-fov="summary-start"]');
+          const sheet = document.querySelector('${SHEET}');
+          const chips = [...document.querySelector('[data-fov="filter-bar"]').querySelectorAll("button")].map((c) => F.rect(c));
+          const controls = [...document.querySelectorAll('[data-fov="sheet-summary"] button')].map((c) => ({ ...F.rect(c), text: c.textContent.trim() }));
+          // The badge takes no touches, so elementFromPoint looks straight through it. For
+          // this probe only it is made hittable, so a point it covers answers "the badge".
+          badge.style.pointerEvents = "auto";
+          const s = F.rect(start);
+          const points = [1, 2, 3].map((i) => {
+            const x = Math.round(s.left + (s.w / 3) * (i / 4)), y = Math.round(s.top + s.h / 2);
+            const el = document.elementFromPoint(x, y);
+            return { x, y, start: !!el && start.contains(el), hit: el ? el.tagName + (el.getAttribute("data-fov") ? "[" + el.getAttribute("data-fov") + "]" : "") : "nothing" };
+          });
+          badge.style.pointerEvents = "";
+          return { badge: F.rect(badge), start: s, sheetTop: +sheet.getBoundingClientRect().top.toFixed(2),
+                   detent: sheet.getAttribute("data-detent"), points, controls,
+                   chipBottom: Math.max(...chips.map((c) => c.bottom)), chips };
+        `;
+        const peek = await page.eval(READ_BADGE);
+        checks.equal("the sheet is collapsed", peek.detent, "peek");
+        for (const p of peek.points) {
+          checks.ok(`a touch at (${p.x}, ${p.y}), in the Start's left third, reaches Start`, p.start, `elementFromPoint = ${p.hit}`);
+        }
+        checks.ok("the badge's box and the Start's do not meet", !overlaps(peek.badge, peek.start), `badge ${span(peek.badge)}, Start ${span(peek.start)}`);
+        checks.near("the badge sits 8px above the sheet's top", peek.sheetTop - peek.badge.bottom, 8, 1, `badge ends ${peek.badge.bottom}, sheet starts ${peek.sheetTop}`);
+        checks.near("on the left", peek.badge.left, 12, 0.5, `badge from x ${peek.badge.left}`);
+
+        // At full the sheet reaches the chips' line, and the badge keeps off both.
+        await tapOn(page, HANDLE, "sheet handle");
+        await sheetAt(page, "half");
+        await tapOn(page, HANDLE, "sheet handle");
+        await sheetAt(page, "full");
+        await sleep(300);
+        const full = await page.eval(READ_BADGE);
+        checks.atLeast("at full the badge stays under the chips", full.badge.top, full.chipBottom, `badge from ${full.badge.top}, chips end ${full.chipBottom}`);
+        for (const c of full.controls) {
+          checks.ok(`and off the summary's "${c.text}"`, !overlaps(full.badge, c), `badge ${span(full.badge)}, control ${span(c)}`);
         }
       } finally {
         await page.close();
