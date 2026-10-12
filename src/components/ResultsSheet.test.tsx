@@ -100,6 +100,65 @@ test("a drag on the handle moves the sheet even when its touchmoves cannot be ca
   restore();
 });
 
+// Chrome sends no click after a touch that moved past its tap slop. A drag that left the
+// sheet waiting for its click had the next real tap on the handle swallowed instead.
+test("after a touch drag on the handle, the next tap on it still moves the sheet", () => {
+  const restore = stubHostHeight(700);
+  const { onDetent } = renderSheet("full");
+  const handle = screen.getByRole("button", { name: "Collapse results" });
+  touch(handle, "touchstart", 100, false);
+  for (const y of [140, 220, 300, 400]) touch(handle, "touchmove", y, false);
+  touch(handle, "touchend", null, false);
+  expect(onDetent.mock.calls).toEqual([["half"]]);
+  // The tap: a touch that does not move, and the click Chrome makes of it.
+  touch(handle, "touchstart", 100, false);
+  touch(handle, "touchend", null, false);
+  fireEvent.click(handle);
+  expect(onDetent.mock.calls).toEqual([["half"], ["peek"]]);
+  restore();
+});
+
+// A mouse as the sheet's listeners see it. jsdom has no PointerEvent; the sheet reads only
+// `pointerType`, `clientY` and the target.
+function mouse(target: EventTarget, type: "pointerdown" | "pointermove" | "pointerup", y: number) {
+  const e = new Event(type, { bubbles: true });
+  Object.defineProperties(e, { pointerType: { value: "mouse" }, clientY: { value: y } });
+  target.dispatchEvent(e);
+}
+
+function mouseDrag(handle: Element, from: number, to: number) {
+  mouse(handle, "pointerdown", from);
+  for (let k = 1; k <= 4; k++) mouse(window, "pointermove", from + ((to - from) * k) / 4);
+  mouse(window, "pointerup", to);
+}
+
+// A mouse released on the handle after a drag makes a click there, which is the drag's
+// own and must not cycle the sheet as well.
+test("a mouse drag ignores the click its release makes on the handle", () => {
+  const restore = stubHostHeight(700);
+  const { onDetent } = renderSheet("full");
+  const handle = screen.getByRole("button", { name: "Collapse results" });
+  mouseDrag(handle, 100, 400);
+  fireEvent.click(handle);
+  expect(onDetent.mock.calls).toEqual([["half"]]);
+  restore();
+});
+
+// Released anywhere else (past the end of its travel the sheet lags the pointer), the drag
+// makes no click on the handle, and the next click there is a tap like any other.
+test("after a mouse drag released off the handle, the next click on it still moves the sheet", () => {
+  const restore = stubHostHeight(700);
+  const { onDetent } = renderSheet("full");
+  const handle = screen.getByRole("button", { name: "Collapse results" });
+  mouseDrag(handle, 100, 400);
+  expect(onDetent.mock.calls).toEqual([["half"]]);
+  mouse(handle, "pointerdown", 100);
+  mouse(window, "pointerup", 100);
+  fireEvent.click(handle);
+  expect(onDetent.mock.calls).toEqual([["half"], ["peek"]]);
+  restore();
+});
+
 // Where the content scrolls by itself (full height, already scrolled), an uncancellable
 // move means the browser is scrolling it, and the sheet keeps out of the way.
 test("at full, an uncancellable drag in scrolled content is left to the content", () => {

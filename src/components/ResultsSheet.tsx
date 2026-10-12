@@ -46,6 +46,14 @@ export function ResultsSheet({
   const full = heights?.full ?? 0;
   const y = useTransform(visible, (v) => full - v);
   const anim = useRef<AnimationPlaybackControls | null>(null);
+  // The click a drag's own release makes on the handle is not a tap. A mouse released on
+  // the handle makes one, and so can a touch that moved only a little, which the browser
+  // still counts as a tap. A touch dragged further makes none (measured in Chrome), so
+  // this flag cannot wait for that click to lower it: it stayed up and swallowed the next
+  // real tap. It lives for one gesture instead, raised when a drag ends and lowered when
+  // the next press or key press begins. No click can belong to a drag once another
+  // gesture has started, so this needs no guess at how soon a browser delivers a click,
+  // which a time window after the drag would.
   const suppressClick = useRef(false);
   const live = useRef({ detent, heights, onDetent, onSettle, reduce });
   live.current = { detent, heights, onDetent, onSettle, reduce };
@@ -95,6 +103,7 @@ export function ResultsSheet({
     let samples: { y: number; t: number }[] = [];
 
     const begin = (clientY: number) => {
+      suppressClick.current = false;
       active = true;
       taking = null;
       startY = clientY;
@@ -222,6 +231,7 @@ export function ResultsSheet({
           onDetent(cycleDetent(detent));
         }}
         onKeyDown={(e) => {
+          suppressClick.current = false;
           if (e.key === "ArrowUp") {
             e.preventDefault();
             onDetent(nextDetent(detent, 1));

@@ -409,6 +409,55 @@ export const scenarios = [
   },
 
   {
+    // Chrome sends no click after a touch that moved past its tap slop, so nothing that
+    // waits for a drag's click to come can be left waiting: it would take the next real
+    // tap instead. Measured before the fix: swiped to full, the first tap on the handle
+    // left the sheet at full and only the second one moved it.
+    name: "390x844 after a drag, the next tap on the handle still moves the sheet",
+    async run(ctx) {
+      const { checks } = ctx;
+      const detentNot = (d) => `document.querySelector('${SHEET}').getAttribute("data-detent") !== "${d}"`;
+      const page = await bootPhone(ctx, { width: 390, height: 844 });
+      try {
+        const half = await planToSheet(page);
+        const bar = await page.eval(`return window.__fov.rect(document.querySelector('[data-fov="filter-bar"]'));`);
+        const x = Math.round(half.iw / 2);
+        const grip = Math.round(half.handle.y + half.handle.h / 2);
+        await page.swipe(x, grip, Math.round(bar.bottom + 10));
+        const full = await sheetAt(page, "full");
+        checks.equal("a drag on the handle takes the sheet to full", full.detent, "full", `from y ${grip}`);
+        const at = Math.round(full.handle.y + full.handle.h / 2);
+        await page.tap(x, at);
+        await page.waitFor(detentNot("full"), { label: "the sheet to leave full", timeout: 3000 }).catch(() => {});
+        const tapped = await page.eval(READ_SHEET);
+        checks.equal("one tap on the handle then moves it from full to peek", tapped.detent, "peek", `tap at (${x}, ${at})`);
+      } finally {
+        await page.close();
+      }
+
+      const page2 = await bootPhone(ctx, { width: 390, height: 844 });
+      try {
+        await planToSheet(page2);
+        const row = await optionPoint(page2, 1);
+        await page2.swipe(row.x, row.y, row.y - 200);
+        const full = await sheetAt(page2, "full");
+        checks.equal("a drag from an option row takes the sheet to full", full.detent, "full", `from y ${row.y}`);
+        await page2.eval(`history.back(); return null;`);
+        const back = await sheetAt(page2, "half");
+        checks.equal("Back drops it to half", back.detent, "half");
+        const x = Math.round(back.iw / 2);
+        const at = Math.round(back.handle.y + back.handle.h / 2);
+        await page2.tap(x, at);
+        await page2.waitFor(detentNot("half"), { label: "the sheet to leave half", timeout: 3000 }).catch(() => {});
+        const tapped = await page2.eval(READ_SHEET);
+        checks.equal("one tap on the handle then moves it from half to full", tapped.detent, "full", `tap at (${x}, ${at})`);
+      } finally {
+        await page2.close();
+      }
+    },
+  },
+
+  {
     // The hand-off: at full the content scrolls, and the sheet takes a downward drag
     // back only once the content is at its top.
     name: "390x844 at full the content scrolls, and pulls the sheet down only from its top",
