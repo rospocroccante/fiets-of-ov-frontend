@@ -217,17 +217,28 @@ describe("the phone tier", () => {
     expect(screen.getByText(/\d\d:\d\d – \d\d:\d\d · \d+ min/)).toBeInTheDocument();
   });
 
-  test("what the fold holds is the Start button and the steps, not a second panel", () => {
-    const onStartNav = vi.fn();
-    panel(onStartNav);
+  test("what the fold holds is the steps, not a second panel", () => {
+    panel(() => {});
     const details = screen.getByText(/Step by step/).closest("details")!;
-    const start = within(details).getByRole("button", { name: "Start navigation" });
-    fireEvent.click(start);
-    expect(onStartNav).toHaveBeenCalledTimes(1);
     // One itinerary, in there. Whether the browser paints it is the disclosure's job,
     // and that is measured for real in the browser layer.
     expect(document.querySelectorAll('[data-fov="itinerary"]')).toHaveLength(1);
     expect(details.querySelector('[data-fov="itinerary"]')).not.toBeNull();
+  });
+
+  // A phone on its side keeps the results column, so the Start is the panel's. It used
+  // to be inside the fold, where a closed <details> lays it out and paints nothing: the
+  // rider had no Start until they opened the steps.
+  test("the Start stays out of the fold, in the chosen option's block", () => {
+    const onStartNav = vi.fn();
+    panel(onStartNav);
+    const [chosen] = optionRows();
+    const details = within(chosen).getByText(/Step by step/).closest("details")!;
+    const start = within(chosen).getByRole("button", { name: "Start navigation" });
+    expect(details).not.toContainElement(start);
+    expect(start.closest('[data-fov="option-details"]')).toBe(details.closest('[data-fov="option-details"]'));
+    fireEvent.click(start);
+    expect(onStartNav).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -368,8 +368,10 @@ html { scroll-snap-type: y proximity; }
 
    The body is clipped so that while it grows it does not spill over the rows under it.
    The clip reaches 4px past its edges, the width of a focus ring (a 2px outline at a 2px
-   offset): the Start button and the estimates row sit flush with those edges, and their
-   rings would otherwise lose a side once the body is open. */
+   offset): the estimates row sits flush with those edges, and its ring would otherwise
+   lose a side once the body is open. Nothing that has to be reachable with the body
+   folded goes inside it: a closed body is laid out and not painted, so a control in it
+   has a box and no pixels (the Start is beside the fold for that reason). */
 @supports (interpolate-size: allow-keywords) {
   .disclosure {
     interpolate-size: allow-keywords;

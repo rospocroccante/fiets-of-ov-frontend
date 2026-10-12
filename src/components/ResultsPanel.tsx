@@ -360,32 +360,44 @@ function SelectedDetails({
       className="border-t border-slate-900/10 px-3 pb-3 pt-2.5 dark:border-night-rim/20"
     >
       {narrow ? (
-        // A named group, not the bare `group` the estimates note uses: nested groups
-        // both answer to `group-open:`, and the note's own chevron would turn when
-        // this one opened. The 44px row is the departure line doing double duty — it
-        // has to be on screen anyway, and a chevron beside it is what says the steps
-        // are under it.
-        <details className="disclosure group/steps" data-fov="option-steps">
-          <summary
-            data-fov="steps-toggle"
-            className="flex min-h-[44px] cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden"
-          >
-            <Chevron />
-            <span
-              data-fov="departure"
-              className="min-w-0 flex-1 truncate text-sm font-medium text-gray-600 dark:text-night-muted"
+        <>
+          {/* The Start rides on the departure line, at its right end, the place it has
+              on anything wider. It cannot go inside the fold: a closed <details> lays
+              its body out and paints none of it, so on a phone on its side (the one
+              phone layout that has a Start here; the portrait sheet's is in its
+              summary) the button had a box under the departure line and nothing on the
+              screen, and a finger there reached the next option. Nor can it go inside
+              the <summary>, a button in a button. A row of its own would push the next
+              option half off the landscape column. Floated, it is beside the 44px
+              departure line, which is a flex box and so narrows to clear it, and the
+              steps open full width underneath both. */}
+          {start && <div className="float-right ml-2 flex">{start}</div>}
+          {/* A named group, not the bare `group` the estimates note uses: nested groups
+              both answer to `group-open:`, and the note's own chevron would turn when
+              this one opened. The 44px row is the departure line doing double duty — it
+              has to be on screen anyway, and a chevron beside it is what says the steps
+              are under it. */}
+          <details className="disclosure group/steps" data-fov="option-steps">
+            <summary
+              data-fov="steps-toggle"
+              className="flex min-h-[44px] cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden"
             >
-              {departure}
-            </span>
-            <span className="shrink-0 text-xs font-semibold text-brand dark:text-night-accent">
-              {t("stepByStep")}
-            </span>
-          </summary>
-          {start && <div className="mt-2 flex">{start}</div>}
-          {/* The summary above already names the steps; a second identical heading
-              inside would be read out twice and drawn twice. */}
-          <ItineraryDetails itinerary={option.itinerary} heading={false} />
-        </details>
+              <Chevron />
+              <span
+                data-fov="departure"
+                className="min-w-0 flex-1 truncate text-sm font-medium text-gray-600 dark:text-night-muted"
+              >
+                {departure}
+              </span>
+              <span className="shrink-0 text-xs font-semibold text-brand dark:text-night-accent">
+                {t("stepByStep")}
+              </span>
+            </summary>
+            {/* The summary above already names the steps; a second identical heading
+                inside would be read out twice and drawn twice. */}
+            <ItineraryDetails itinerary={option.itinerary} heading={false} />
+          </details>
+        </>
       ) : (
         <>
           <div className="flex items-center gap-2">

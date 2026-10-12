@@ -500,6 +500,74 @@ export const scenarios = [
     },
   },
 
+  // The results column's Start, at every size the column is the layout: a phone on its
+  // side (844x390, and 568x320, where the column is the strip under the map), a portrait
+  // tablet and a desktop. On a phone on its side the button used to sit inside the
+  // folded steps. Chrome still lays a closed <details> out, so the button had a box, 40px
+  // of it below the chosen option's own, but nothing was painted there and a finger at
+  // its centre reached the title of the next option. The steps are not opened here: the
+  // Start has to be there when the plan lands.
+  ...[
+    { width: 844, height: 390 },
+    { width: 568, height: 320 },
+    { width: 768, height: 1024 },
+    { width: 1280, height: 900 },
+  ].map(({ width, height }) => ({
+    name: `${width}x${height} the column's Start is inside its option, on top, and a tap on it starts navigation`,
+    async run(ctx) {
+      const { checks } = ctx;
+      const at = `${width}x${height}`;
+      const page = await bootResults(ctx, { width, height });
+      try {
+        const START = `${COLUMN} [aria-label="Start navigation"]`;
+        const found = await page.eval(`
+          const b = document.querySelector('${START}');
+          if (!b) return false;
+          window.__fov.reveal(b);
+          return true;
+        `);
+        checks.ok(`${at}: the results column has a Start`, found, found ? "" : "no Start in the column");
+        if (!found) return;
+        await sleep(200);
+        const m = await page.eval(`
+          const F = window.__fov;
+          const b = document.querySelector('${START}');
+          const box = b.closest('${OPTION_DETAILS}');
+          const steps = box.querySelector('${OPTION_STEPS}');
+          const r = b.getBoundingClientRect();
+          const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
+          const hit = document.elementFromPoint(x, y);
+          const owner = hit && hit.closest("[data-fov]");
+          return { start: F.rect(b), box: F.rect(box), visible: F.visible(b), shown: F.shown(b), x, y,
+                   reaches: !!hit && (hit === b || b.contains(hit)),
+                   hit: hit ? hit.tagName + (owner ? "[" + owner.getAttribute("data-fov") + "]" : "") +
+                     ' "' + (hit.textContent || "").trim().slice(0, 24) + '"' : "nothing",
+                   steps: steps ? (steps.open ? "open" : "folded") : "none" };
+        `);
+        const s = m.start, b = m.box;
+        checks.ok(
+          `${at}: the Start is inside its option's box`,
+          s.top >= b.top - 0.5 && s.bottom <= b.bottom + 0.5 && s.left >= b.left - 0.5 && s.right <= b.right + 0.5,
+          `Start ${s.left}..${s.right} x ${s.top}..${s.bottom}, box ${b.left}..${b.right} x ${b.top}..${b.bottom}, steps ${m.steps}`,
+        );
+        checks.ok(`${at}: the Start is painted`, m.shown.rendered && m.shown.painted, `rendered ${m.shown.rendered}, hit ${m.shown.hit}`);
+        checks.atLeast(`${at}: all 44px of it is in view in the column`, m.visible.h, 44, `${m.visible.h}px of ${s.h} in view`);
+        checks.ok(`${at}: a touch at its centre reaches it`, m.reaches, `elementFromPoint(${m.x}, ${m.y}) = ${m.hit}`);
+
+        await page.tap(m.x, m.y);
+        let started = true;
+        await page
+          .waitFor(`document.querySelector('[aria-label="Exit navigation"]')`, { label: "the navigation banner", timeout: 4000 })
+          .catch(() => {
+            started = false;
+          });
+        checks.ok(`${at}: a tap on it starts navigation`, started, `tap at (${m.x}, ${m.y})`);
+      } finally {
+        await page.close();
+      }
+    },
+  })),
+
   {
     name: "390x844 the chosen option and its itinerary are one block",
     async run(ctx) {
