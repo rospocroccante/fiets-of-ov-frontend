@@ -1,4 +1,6 @@
+import { motion } from "framer-motion";
 import { useI18n } from "../lib/i18n";
+import { overlay, useMotionPreset } from "../lib/motion";
 
 // The rain radar on a phone: a round button on the map, in the corner where Google Maps
 // keeps its layers button, so the radar is one tap away and on screen without opening
@@ -21,11 +23,17 @@ const ON = "border-transparent text-white dark:text-night-bg";
 
 export function RadarButton({
   on,
+  cued,
   onToggle,
   top,
   hidden = false,
 }: {
   on: boolean;
+  // The radar is on because a plan expected rain, not because the rider turned it on.
+  // The fill then arrives with the overlay preset, the one cue that the app did it:
+  // a fade and an 8px rise, the fade alone under reduced motion. A rider's own tap fills
+  // the button at once.
+  cued: boolean;
   onToggle: () => void;
   // Distance from the top of the map, in px.
   top: number;
@@ -33,10 +41,12 @@ export function RadarButton({
   hidden?: boolean;
 }) {
   const { t } = useI18n();
+  const arrive = useMotionPreset(overlay);
   return (
     <button
       type="button"
       data-fov="radar-button"
+      data-cue={on && cued ? "auto" : undefined}
       aria-pressed={on}
       aria-label={t("radar")}
       title={t("radar")}
@@ -48,10 +58,12 @@ export function RadarButton({
       {...(hidden ? { inert: "" as const } : {})}
     >
       {on && (
-        <span
+        <motion.span
           aria-hidden="true"
           data-fov="radar-fill"
           className="absolute inset-0 rounded-full bg-brand dark:bg-night-accent"
+          initial={cued ? arrive.initial : false}
+          animate={arrive.animate}
         />
       )}
       {/* A cloud with rain under it. Inline SVG rather than the icon font: that subset is

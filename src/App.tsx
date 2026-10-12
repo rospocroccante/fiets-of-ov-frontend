@@ -189,7 +189,13 @@ export default function App() {
   // Weather overlay state lives here (not in MapView) so its toggles can sit outside the
   // map: the filter bar's segment on a wide screen, a round button on a phone's map.
   const [radar, setRadar] = useState(false);
-  const toggleRadar = () => setRadar((r) => !r);
+  // Whether the radar is on because a plan expected rain rather than because the rider
+  // turned it on. The phone's button plays its one cue for that (RadarButton).
+  const [radarCued, setRadarCued] = useState(false);
+  const toggleRadar = () => {
+    setRadar((r) => !r);
+    setRadarCued(false);
+  };
   const [wLayers, setWLayers] = useState<WeatherLayersState>({ rain: true, wind: true });
   // Turn-by-turn mode: drives the live-location watch, the wake lock, the maneuver
   // overlay and the follow camera. The whole nav chain derives from this one flag.
@@ -323,6 +329,7 @@ export default function App() {
     setArmed(null);
     setHideMap(false);
     setRadar(false);
+    setRadarCued(false);
     placeSeq.current++;
     setPlaceInfo(null);
     setNavigating(false);
@@ -643,6 +650,21 @@ export default function App() {
         : { status: "idle" };
 
   const count = visible.length;
+
+  // Rain during the trip turns the radar on, once per search. The test is the verdict the
+  // summary's weather tag shows (PlanView.rainExpected), never the backend's sentence. A
+  // rider who turns the radar off keeps it off until the next search, because the search
+  // is marked decided the first time its plan is in. A dry plan, or one with no forecast,
+  // leaves the radar as it was. A replan during navigation is a new search too, but not
+  // one the rider made, so it is marked and passed over.
+  const radarDecidedFor = useRef("");
+  useEffect(() => {
+    if (!planView || radarDecidedFor.current === search) return;
+    radarDecidedFor.current = search;
+    if (navigating || planView.rainExpected !== true || radar) return;
+    setRadar(true);
+    setRadarCued(true);
+  }, [planView, search, navigating, radar]);
 
   // What the polite live region says. Empty while idle/loading so the region only ever
   // speaks on an outcome; the strings are translated like everything else.
@@ -999,6 +1021,7 @@ export default function App() {
       {isPhone && (
         <RadarButton
           on={radar}
+          cued={radarCued}
           onToggle={toggleRadar}
           top={12 + (sheetLayout ? topInset : 0)}
           hidden={(sheetShown && detent === "full") || (landscapePhone && navigating)}

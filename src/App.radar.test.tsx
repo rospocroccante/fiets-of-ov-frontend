@@ -1,12 +1,13 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { I18nProvider } from "./lib/i18n";
 import { whenMapMounted } from "./test/mapReady";
 import { morphTo, phoneViewport, stubHeights } from "./test/phone";
 
-// The rain radar as the app drives it: a round button on a phone's map, and the inline
-// segment on a desktop's filter bar.
+// The rain radar as the app drives it: a round button on a phone's map, the inline
+// segment on a desktop's filter bar, and the radar turning itself on when a plan expects
+// rain during the trip.
 
 function renderApp() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -16,6 +17,22 @@ function renderApp() {
         <App />
       </I18nProvider>
     </QueryClientProvider>,
+  );
+}
+
+// A recent trip to a "zuid" destination: the mock planner expects rain on it.
+function seedRainyTrip() {
+  window.localStorage.setItem(
+    "fov.recentTrips.v1",
+    JSON.stringify([
+      {
+        fromLabel: "Amsterdam Centraal",
+        fromQuery: "Amsterdam Centraal",
+        toLabel: "Zuidplein",
+        toQuery: "Zuidplein",
+        at: Date.now() - 60_000,
+      },
+    ]),
   );
 }
 
@@ -37,9 +54,26 @@ const readoutShown = () => within(mapWrap()).queryByRole("button", { name: "Rain
 const summary = () => document.querySelector('[data-fov="sheet-summary"]') as HTMLElement;
 const sheet = () => document.querySelector('[data-fov="results-sheet"]') as HTMLElement;
 
+// The seeded recent trip, on the home. Once a trip is planned the search pill names it
+// too, so the row is looked for on the home stage alone.
+const rainyRow = () =>
+  within(document.querySelector('[data-fov="home-stage"]') as HTMLElement).getByRole("button", { name: /Zuidplein/ });
+
+async function planRainy() {
+  fireEvent.click(rainyRow());
+  await waitFor(() => expect(screen.getAllByText("Rain expected").length).toBeGreaterThan(0));
+}
+
 async function planDry() {
   fireEvent.click(screen.getByRole("button", { name: "Amsterdam Centraal → Vondelpark" }));
   await waitFor(() => expect(screen.getAllByText("Dry").length).toBeGreaterThan(0));
+}
+
+// A few renders' worth of time, for anything an effect might still do.
+async function idle() {
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 30));
+  });
 }
 
 test("on a portrait phone the radar is a round button on the map, and it turns the map's radar on and off", async () => {
@@ -124,6 +158,94 @@ test("on desktop the radar stays an inline segment of the filter bar, and nothin
   fireEvent.click(segment);
   expect(segment).toHaveAttribute("aria-pressed", "true");
   await waitFor(() => expect(readoutShown()).toBe(true));
+});
+
+test("a plan that expects rain during the trip turns the radar on by itself", async () => {
+  phone();
+  seedRainyTrip();
+  renderApp();
+  await planRainy();
+  await whenMapMounted();
+  await morphTo(1);
+  const b = floating()!;
+  expect(b).toHaveAttribute("aria-pressed", "true");
+  // The one cue that it was the plan, not the rider: the fill arrives with the overlay
+  // preset, which the button says it is playing.
+  expect(b).toHaveAttribute("data-cue", "auto");
+  expect(b.querySelector('[data-fov="radar-fill"]')).not.toBeNull();
+  await waitFor(() => expect(readoutShown()).toBe(true));
+});
+
+test("a dry plan neither turns the radar on nor turns it off", async () => {
+  phone();
+  renderApp();
+  await planDry();
+  await whenMapMounted();
+  await morphTo(1);
+  const b = floating()!;
+  await idle();
+  expect(b).toHaveAttribute("aria-pressed", "false");
+
+  // On by hand, then another dry search: it stays on.
+  fireEvent.click(b);
+  expect(b).toHaveAttribute("aria-pressed", "true");
+  expect(b).not.toHaveAttribute("data-cue");
+  await morphTo(0);
+  await planDry();
+  await morphTo(1);
+  await idle();
+  expect(floating()).toHaveAttribute("aria-pressed", "true");
+});
+
+test("turned off by the rider, the radar stays off for that search; a new search can turn it on again", async () => {
+  phone();
+  seedRainyTrip();
+  renderApp();
+  await planRainy();
+  await whenMapMounted();
+  await morphTo(1);
+  const b = floating()!;
+  expect(b).toHaveAttribute("aria-pressed", "true");
+
+  fireEvent.click(b);
+  expect(b).toHaveAttribute("aria-pressed", "false");
+  expect(b).not.toHaveAttribute("data-cue");
+  // The same search, re-rendered every way the screen can be: another option chosen, a
+  // filter chip off and on, the sheet moved. None of it is a new search.
+  fireEvent.click(within(summary()).getByRole("button", { name: /public transport, 29 min/i }));
+  const transit = within(document.querySelector('[data-fov="filter-bar"]') as HTMLElement).getByRole("button", {
+    name: "Transit",
+  });
+  fireEvent.click(transit);
+  fireEvent.click(transit);
+  await idle();
+  expect(b).toHaveAttribute("aria-pressed", "false");
+  // A language switch rebuilds the plan's view without fetching it again: the same
+  // search, in Dutch.
+  await morphTo(0);
+  fireEvent.click(screen.getByRole("button", { name: "Profile" }));
+  fireEvent.click(screen.getByRole("button", { name: "Nederlands" }));
+  fireEvent.click(screen.getByRole("button", { name: "Plan" }));
+  await morphTo(1);
+  await waitFor(() => expect(screen.getAllByText("Regen op komst").length).toBeGreaterThan(0));
+  await idle();
+  expect(b).toHaveAttribute("aria-pressed", "false");
+  await waitFor(() => expect(readoutShown()).toBe(false));
+
+  // The same trip searched again is a new search, and it may turn the radar on again.
+  await morphTo(0);
+  fireEvent.click(rainyRow());
+  await morphTo(1);
+  await waitFor(() => expect(floating()).toHaveAttribute("aria-pressed", "true"));
+  expect(floating()).toHaveAttribute("data-cue", "auto");
+});
+
+test("on desktop a rainy plan turns the inline segment on as well", async () => {
+  seedRainyTrip();
+  renderApp();
+  await planRainy();
+  const bar = document.querySelector('[data-fov="filter-bar"]') as HTMLElement;
+  await waitFor(() => expect(within(bar).getByRole("button", { name: "Radar" })).toHaveAttribute("aria-pressed", "true"));
 });
 
 test("a full sheet, which hides the map, takes the button away with it", async () => {
