@@ -433,6 +433,24 @@ test("half way through the morph the invisible home takes no taps", async () => 
   expect(homeStage).toHaveAttribute("role", "main");
 });
 
+// Faded out, the home is hidden as well as inert. It sits over the map stage (z-10), and
+// Chrome's compositor still counted its transparent layers as over the results sheet:
+// in the bands where the home has a layer, a touch on the sheet's content arrived
+// uncancellable, and at full height the sheet could not take a downward drag there.
+test("once it has faded out, the home stage is hidden, and shown again on the way back", async () => {
+  const { container } = renderApp();
+  const homeStage = container.querySelector('[data-fov="home-stage"]') as HTMLElement;
+  expect(homeStage.style.visibility).toBe("visible");
+  await morphTo(0.4);
+  expect(homeStage.style.visibility).toBe("visible");
+  await morphTo(0.6);
+  expect(homeStage.style.visibility).toBe("hidden");
+  await morphTo(1);
+  expect(homeStage.style.visibility).toBe("hidden");
+  await morphTo(0);
+  expect(homeStage.style.visibility).toBe("visible");
+});
+
 // The four tests below are DOM facts, not layout, which is why they belong here: an
 // attribute is either on an element or it is not, and jsdom can say which. What jsdom
 // cannot say is how wide, how tall, in front of what, or reachable by a finger — those

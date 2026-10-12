@@ -1223,7 +1223,17 @@ export default function App() {
             // trip focused the To field instead. Nothing scrolls under the pill now.
             isPhone ? "flex flex-col overflow-y-hidden" : "overflow-y-auto"
           }`}
-          style={{ opacity: homeOpacity, y: homeY, pointerEvents: homeLive && !searchBlocking && !tabCovering ? "auto" : "none" }}
+          // Hidden once it has faded out (opacity 0 from HOME_FADED_AT on, the same
+          // number homeLive uses), not only transparent. The stage is over the map stage,
+          // and Chrome's compositor counted its transparent layers as over the results
+          // sheet: in the bands where the home has a layer, the sheet's touches arrived
+          // uncancellable and a full sheet could not be pulled down from its content.
+          style={{
+            opacity: homeOpacity,
+            y: homeY,
+            visibility: homeLive ? "visible" : "hidden",
+            pointerEvents: homeLive && !searchBlocking && !tabCovering ? "auto" : "none",
+          }}
           {...inertUnless(homeLive && !searchBlocking && !tabCovering)}
           {...behindSheet}
         >
