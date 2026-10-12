@@ -14,6 +14,7 @@
 // forming a single block instead of a card above a list.
 
 import { sleep } from "../lib/chrome.mjs";
+import { openSheetToHalf } from "../lib/sheet.mjs";
 import {
   PROBE,
   TRIP_SEED,
@@ -66,6 +67,10 @@ async function bootResults(ctx, { width, height, theme = "light", lang = "en" })
   });
   await sleep(900); // the morph, and the map chunk settling under it
   await page.eval(PROBE);
+  // On a portrait phone the plan lands with the results sheet collapsed on its summary,
+  // the options out of sight under it. Everything this file measures is in those options,
+  // so it opens the sheet to half first, with a touch on the handle.
+  await openSheetToHalf(page);
   return page;
 }
 
@@ -215,11 +220,12 @@ export const scenarios = [
     // sitting between row 1 and row 2, so reaching option 2 cost 416px of scrolling and
     // option 3, 513px. Nothing here scrolls: this is the arrival state.
     //
-    // On a portrait phone the results now arrive in a sheet at half height over a
-    // full-screen map, so "the column" is the sheet's content and only its top half is
-    // on the screen. The rows are measured against that visible part, not the content's
-    // box, which runs on past the foot of the screen.
-    name: "phones when the plan lands the option rows are already on screen",
+    // On a portrait phone the results land collapsed in a sheet over a full-screen map,
+    // with the summary header standing for them, and the first touch on the sheet opens
+    // it to half (bootResults makes that touch). So "the column" is the sheet's content
+    // at half, and only the part above the foot of the screen counts. The rows are
+    // measured against that visible part, not the content's box, which runs on past it.
+    name: "phones when the results open the option rows are already on screen",
     async run(ctx) {
       const { checks } = ctx;
       // 844x390 is the same question turned sideways. F4 pinned the landscape column's

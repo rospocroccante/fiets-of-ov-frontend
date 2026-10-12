@@ -31,6 +31,7 @@
 
 import { sleep } from "../lib/chrome.mjs";
 import { PROBE, TRIP_SEED } from "../lib/measure.mjs";
+import { openSheetToHalf } from "../lib/sheet.mjs";
 import { decodePng, patch, colourCount, BAND_MAX_SHARE } from "../lib/pixels.mjs";
 
 const PILL = '[data-fov="search-pill"]';
@@ -104,6 +105,10 @@ async function bootMap(ctx, { width, height, theme = "light", lang = "en", injec
   await page.waitFor(`document.querySelector('${MAP}')`, { label: "the map" });
   await sleep(900); // the morph, and the map chunk settling under it
   await page.eval(PROBE);
+  // The squares this file samples were chosen on the view the map fits above a half
+  // sheet, and the map refits its route to whatever the sheet covers. The plan now lands
+  // with the sheet collapsed, so it is opened to half to read that same view.
+  await openSheetToHalf(page);
   return page;
 }
 

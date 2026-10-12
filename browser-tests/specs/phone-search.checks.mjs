@@ -7,6 +7,7 @@
 
 import { sleep } from "../lib/chrome.mjs";
 import { PROBE, RESULTS } from "../lib/measure.mjs";
+import { openSheetToHalf, sheetSettledAt } from "../lib/sheet.mjs";
 
 // Eight recent trips, which is the cap the app keeps. They become sixteen endpoint
 // history rows, so the suggestion list on an empty focused field is taller than the
@@ -508,8 +509,22 @@ export const scenarios = [
           .catch(() => {});
         await sleep(600);
 
-        // The options land in the results sheet at half height over the map, so "on the
-        // screen" is the visible part of the sheet's content, not its whole box.
+        // The plan lands with the results sheet collapsed on its summary: the chosen
+        // option's title and minutes are what is on the screen. One touch on the handle
+        // opens the sheet to half, and then "on the screen" is the visible part of the
+        // sheet's content, not its whole box.
+        await sheetSettledAt(page, "peek");
+        const landed = await page.eval(`
+          const F = window.__fov;
+          const title = document.querySelector('[data-fov="summary-title"]');
+          return title ? { ...F.shown(title), text: title.textContent.trim() } : null;
+        `);
+        checks.ok(
+          "the collapsed sheet's summary names the chosen option on the screen",
+          landed != null && landed.painted,
+          landed ? `"${landed.text}" painted ${landed.painted}, hit ${landed.hit}` : "no summary title",
+        );
+        await openSheetToHalf(page);
         const after = await page.eval(`
           const F = window.__fov;
           const col = document.querySelector('${RESULTS}');
@@ -537,7 +552,7 @@ export const scenarios = [
         checks.atLeast("the plan produced options", after.rows.length, 1, `${after.rows.length} options`);
         const whole = after.rows.filter((r) => r.visible >= r.h - 0.5 && r.shown.painted);
         checks.atLeast(
-          "a whole option row is on the screen when the sheet has closed",
+          "a whole option row is on the screen once the results sheet is open",
           whole.length,
           1,
           after.rows

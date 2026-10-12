@@ -21,6 +21,7 @@
 
 import { sleep } from "../lib/chrome.mjs";
 import { PROBE, TRIP_SEED } from "../lib/measure.mjs";
+import { openSheetToHalf } from "../lib/sheet.mjs";
 
 const BAR = '[data-fov="filter-bar"]';
 const SCROLLER = '[data-fov="filter-scroller"]';
@@ -1088,7 +1089,7 @@ scenarios.push(
           checks.atLeast(`${at}: it is 44px tall`, m.h, 44, `${round(m.h)}px`);
           checks.atLeast(`${at}: it is 44px wide`, m.w, 44, `${round(m.w)}px`);
           checks.near(`${at}: it sits at the right edge`, m.right, m.iw - 12, 0.5, `button ends at x ${round(m.right)}`);
-          checks.atMost(`${at}: above the half sheet`, m.bottom, m.sheetTop,
+          checks.atMost(`${at}: above the sheet`, m.bottom, m.sheetTop,
             `button ends ${round(m.bottom)}, the ${m.detent} sheet starts ${round(m.sheetTop)}`);
           for (const o of m.others) {
             const overlapH = Math.max(0, Math.min(o.bottom, m.bottom) - Math.max(o.top, m.top));
@@ -1097,7 +1098,9 @@ scenarios.push(
               `chip ${round(o.top)}..${round(o.bottom)}, button ${round(m.top)}..${round(m.bottom)}`);
           }
 
-          // A full sheet lifts the column by its own height, which is past the chips.
+          // A full sheet lifts the column by its own height, which is past the chips. The
+          // sheet lands collapsed, so it takes two touches on the handle: half, then full.
+          await openSheetToHalf(page);
           const handle = await page.eval(`return window.__fov.rect(document.querySelector('[data-fov="sheet-handle"]'));`);
           await page.tap(handle.x + handle.w / 2, handle.y + handle.h / 2);
           await page.waitFor(`document.querySelector('[data-fov="results-sheet"][data-detent="full"]')`, { label: "the sheet at full" });

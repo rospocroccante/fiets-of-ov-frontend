@@ -136,11 +136,20 @@ async function tapHomeRow(page, text) {
   return row;
 }
 
-// Plan the seeded three-option trip and wait for the map stage and the sheet at half.
-async function planToSheet(page) {
+// Plan the seeded three-option trip and wait for the map stage and the sheet, which lands
+// collapsed on its summary.
+async function planCollapsed(page) {
   await tapHomeRow(page, "Zuidplein");
   await page.waitFor(`document.querySelectorAll('${OPTION}').length >= 3`, { label: "three travel options" });
   await page.waitFor(`Math.round(window.scrollY) === innerHeight`, { label: "the morph to reach the map stage" });
+  return sheetAt(page, "peek");
+}
+
+// The same, then one touch on the handle to open the sheet to half, which is where most of
+// these scenarios start.
+async function planToSheet(page) {
+  await planCollapsed(page);
+  await tapOn(page, HANDLE, "sheet handle");
   return sheetAt(page, "half");
 }
 
@@ -159,6 +168,7 @@ const READ_SHEET = `
     visible: +(main.bottom - s.top).toFixed(2),
     main: { top: +main.top.toFixed(2), bottom: +main.bottom.toFixed(2), h: +main.height.toFixed(2) },
     handle: F.rect(document.querySelector('${HANDLE}')),
+    head: F.rect(document.querySelector('[data-fov="sheet-head"]')),
     content: { ...F.visible(content), scrollTop: content.scrollTop, scrollHeight: content.scrollHeight,
                clientHeight: content.clientHeight },
     iw: innerWidth, ih: innerHeight,
@@ -192,6 +202,56 @@ async function optionPoint(page, n) {
              title: li.querySelector('[data-fov="option-title"]').textContent.trim() };
   `);
 }
+
+// A drag on the screen with its pace set: `steps` moves of equal length, `pauseMs` apart.
+// swipe() moves at one fixed pace; a flick and a slow drag of the same length differ only
+// in this.
+async function dragAt(page, x, fromY, toY, { steps, pauseMs }) {
+  const point = (y) => [{ x, y, radiusX: 12, radiusY: 12, force: 1 }];
+  await page.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: point(fromY) });
+  for (let i = 1; i <= steps; i++) {
+    await page.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: point(fromY + ((toY - fromY) * i) / steps) });
+    await sleep(pauseMs);
+  }
+  await page.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+}
+
+// The collapsed sheet as it is on the screen. `top` and `bottom` bound the part of the
+// sheet that shows: from its top edge (or the frame's, if that is lower) to the foot of
+// the map stage. Every element inside the sheet that is drawn (a box, not transparent,
+// not hidden) is sorted into wholly inside that band, wholly outside it, or cut by it.
+const READ_COLLAPSED = `
+  const F = window.__fov;
+  const sheet = document.querySelector('${SHEET}');
+  const s = sheet.getBoundingClientRect();
+  const main = document.querySelector('#fov-map-main').getBoundingClientRect();
+  const frame = document.querySelector('[data-fov="sheet-frame"]').getBoundingClientRect();
+  const top = Math.max(s.top, frame.top), bottom = Math.min(main.bottom, innerHeight);
+  const drawn = (el) => el.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+  const name = (el) => el.tagName.toLowerCase() + (el.getAttribute("data-fov") ? "[" + el.getAttribute("data-fov") + "]" : "") +
+    ((el.textContent || "").trim() ? ' "' + el.textContent.trim().slice(0, 18) + '"' : "");
+  let inside = 0, outside = 0;
+  const cut = [];
+  for (const el of sheet.querySelectorAll("*")) {
+    if (!drawn(el)) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) continue;
+    if (r.top >= top - 0.5 && r.bottom <= bottom + 0.5) inside++;
+    else if (r.bottom <= top + 0.5 || r.top >= bottom - 0.5) outside++;
+    else cut.push(name(el) + " " + r.top.toFixed(1) + ".." + r.bottom.toFixed(1));
+  }
+  const summary = document.querySelector('[data-fov="sheet-summary"]');
+  const controls = [...summary.querySelectorAll("button")].map((b) => ({
+    ...F.rect(b), ...F.shown(b), label: b.getAttribute("aria-label") || b.textContent.trim() }));
+  const options = [...document.querySelectorAll('${OPTION}')].filter(drawn).length;
+  return {
+    detent: sheet.getAttribute("data-detent"), top: +top.toFixed(2), bottom: +bottom.toFixed(2),
+    visible: +(bottom - s.top).toFixed(2), head: F.rect(document.querySelector('[data-fov="sheet-head"]')),
+    handle: F.rect(document.querySelector('${HANDLE}')), summary: F.rect(summary),
+    text: summary.innerText.replace(/\\s+/g, " ").trim(), inside, outside, cut, controls, options,
+    iw: innerWidth, ih: innerHeight,
+  };
+`;
 
 export const scenarios = [
   {
@@ -310,7 +370,7 @@ export const scenarios = [
   },
 
   {
-    name: "390x844 a planned trip opens the sheet at half, the map above it takes touches",
+    name: "390x844 a planned trip lands with the sheet collapsed on its summary, the map above it takes touches",
     async run(ctx) {
       const { checks } = ctx;
       const page = await bootPhone(ctx, { width: 390, height: 844 });
@@ -326,14 +386,15 @@ export const scenarios = [
         checks.ok("a touch on the first popular trip reaches it", card.hit.inside, `"${card.label}", hit ${card.hit.desc}`);
         await page.tap(card.x, card.y);
         await page.waitFor(`Math.round(window.scrollY) === innerHeight`, { label: "the morph to reach the map stage" });
-        const s = await sheetAt(page, "half");
-        checks.equal("the plan lands with the sheet at half", s.detent, "half");
+        const safe = await page.eval(SAFE_BOTTOM);
+        const s = await sheetAt(page, "peek");
+        checks.equal("the plan lands with the sheet collapsed", s.detent, "peek");
         checks.near(
-          "the sheet shows half the screen",
+          "the collapsed sheet shows its handle and summary, measured, above the bottom inset",
           s.visible,
-          Math.round(s.ih * 0.5),
-          2,
-          `sheet top ${s.top}, main ends ${s.main.bottom}: ${s.visible}px of a ${s.ih}px screen`,
+          s.head.h + safe,
+          1,
+          `sheet top ${s.top}, main ends ${s.main.bottom}: ${s.visible}px showing, header ${s.head.h}px, inset ${safe}px`,
         );
         // 40px above the sheet, in the middle, is where the map's own hint chip sits:
         // MapView lifts its chip column by the sheet's height so the chips stay on the
@@ -405,11 +466,11 @@ export const scenarios = [
         const peek = await sheetAt(page, "peek");
         checks.equal("dragging the handle down takes the sheet to its peek", peek.detent, "peek", `from y ${grip2} to ${back.ih - 20}`);
         checks.near(
-          "the peek is 132px above the bottom inset",
+          "the peek is the handle and the summary, measured, above the bottom inset",
           peek.visible,
-          132 + safe,
-          2,
-          `${peek.visible}px showing, inset ${safe}px`,
+          peek.head.h + safe,
+          1,
+          `${peek.visible}px showing, header ${peek.head.h}px, inset ${safe}px`,
         );
       } finally {
         await page.close();
@@ -827,22 +888,16 @@ export const scenarios = [
         const inset = await page.eval(SAFE_TOP);
         await planToSheet(page);
         const chrome = await page.eval(READ_CHROME);
-        // On a phone the Start button is inside the chosen option's folded steps.
-        await tapOn(page, `${CONTENT} [data-fov="steps-toggle"]`, "the chosen option's steps toggle");
-        await page.waitFor(`document.querySelector('${CONTENT} details[open] [aria-label="Start navigation"]')`, {
-          label: "the steps to open",
-        });
-        await sleep(300);
+        // On a portrait phone the Start button is the summary's, at the top of the sheet.
         const start = await page.eval(`
           const F = window.__fov;
-          const b = document.querySelector('${CONTENT} [aria-label="Start navigation"]');
+          const b = document.querySelector('[data-fov="summary-start"]');
           if (!b) return null;
-          F.reveal(b);
           const r = F.rect(b), v = F.visible(b);
           return { x: Math.round(r.x + r.w / 2), y: Math.round((v.top + v.bottom) / 2), visible: v.h };
         `);
-        if (!start) throw new Error("no Start navigation button in the sheet");
-        checks.atLeast("the Start button is on the half sheet", start.visible, 44, `${start.visible}px of it showing`);
+        if (!start) throw new Error("no Start navigation button in the sheet's summary");
+        checks.atLeast("the summary's Start button is on the half sheet", start.visible, 44, `${start.visible}px of it showing`);
         await page.tap(start.x, start.y);
         await page.waitFor(`document.querySelector('[aria-label="Exit navigation"]')`, { label: "the navigation banner" });
         await sleep(600);
@@ -883,6 +938,201 @@ export const scenarios = [
         const after = await page.eval(READ_CHROME);
         checks.ok("after Exit the pill takes a touch again", after.pill.reaches, `elementFromPoint(${after.pill.cx}, ${after.pill.cy}) = ${after.pill.hit}`);
         checks.ok("and so does the first chip", after.chips[0].reaches, `elementFromPoint(${after.chips[0].cx}, ${after.chips[0].cy}) = ${after.chips[0].hit}`);
+      } finally {
+        await page.close();
+      }
+    },
+  })),
+
+  // The collapsed sheet, Google Maps' shape: the summary of the trip and nothing else. It
+  // used to be a fixed 132px slice of the content, which at 390x844 cut an error card and
+  // the weather strip's hour labels in half at the screen's edge.
+  ...[
+    { width: 390, height: 844 },
+    { width: 360, height: 800 },
+  ].map(({ width, height }) => ({
+    name: `${width}x${height} the collapsed sheet is its summary, whole, and nothing in it is cut by the screen's edge`,
+    async run(ctx) {
+      const { checks } = ctx;
+      const page = await bootPhone(ctx, { width, height });
+      try {
+        const safe = await page.eval(SAFE_BOTTOM);
+        await planCollapsed(page);
+        await sleep(300);
+        const m = await page.eval(READ_COLLAPSED);
+        checks.equal("the plan lands collapsed", m.detent, "peek");
+        checks.near(
+          "the collapsed height is the handle and the summary, measured, above the bottom inset",
+          m.visible,
+          m.head.h + safe,
+          1,
+          `${m.visible}px showing: handle ${m.handle.h}px + summary ${m.summary.h}px = ${m.head.h}px, inset ${safe}px. ` +
+            `Summary reads "${m.text}"`,
+        );
+        checks.ok(
+          "the summary is whole on the screen",
+          m.summary.top >= m.top - 0.5 && m.summary.bottom <= m.bottom + 0.5,
+          `summary ${m.summary.top}..${m.summary.bottom}, sheet shows ${m.top}..${m.bottom}`,
+        );
+        checks.equal(
+          "nothing drawn in the sheet is cut by the screen's edge",
+          m.cut.length,
+          0,
+          m.cut.length ? m.cut.join("; ") : `${m.inside} elements wholly on screen, ${m.outside} wholly below it`,
+        );
+        checks.equal("no option row is drawn under the collapsed summary", m.options, 0);
+        checks.atLeast("the summary has its Start and the other option", m.controls.length, 2, m.controls.map((c) => c.label).join(", "));
+        for (const c of m.controls) {
+          checks.atLeast(`"${c.label}" is 44px tall`, c.h, 44, `${c.w}x${c.h}`);
+          checks.atLeast(`"${c.label}" is 44px wide`, c.w, 44, `${c.w}x${c.h}`);
+          checks.ok(`"${c.label}" is painted and a touch at its centre reaches it`, c.painted, `hit ${c.hit}`);
+        }
+      } finally {
+        await page.close();
+      }
+    },
+  })),
+
+  ...[
+    { width: 390, height: 844 },
+    { width: 360, height: 800 },
+  ].map(({ width, height }) => ({
+    name: `${width}x${height} Start in the collapsed summary starts navigation`,
+    async run(ctx) {
+      const { checks } = ctx;
+      const page = await bootPhone(ctx, { width, height });
+      try {
+        await planCollapsed(page);
+        const start = await tapOn(page, '[data-fov="summary-start"]', "the summary's Start");
+        let started = true;
+        await page
+          .waitFor(`document.querySelector('[aria-label="Exit navigation"]')`, { label: "the navigation banner", timeout: 4000 })
+          .catch(() => {
+            started = false;
+          });
+        checks.ok("a tap on Start starts navigation", started, `tap at (${Math.round(start.x + start.w / 2)}, ${Math.round(start.y + start.h / 2)})`);
+        const s = await page.eval(READ_SHEET);
+        checks.equal("and the sheet stays collapsed under the banner", s.detent, "peek");
+      } finally {
+        await page.close();
+      }
+    },
+  })),
+
+  ...[
+    { width: 390, height: 844 },
+    { width: 360, height: 800 },
+  ].map(({ width, height }) => ({
+    name: `${width}x${height} a tap on the summary opens the sheet to half`,
+    async run(ctx) {
+      const { checks } = ctx;
+      const page = await bootPhone(ctx, { width, height });
+      try {
+        await planCollapsed(page);
+        // The title: a part of the summary that is not one of its buttons.
+        const title = await tapOn(page, '[data-fov="summary-title"]', "the summary's title");
+        const s = await sheetAt(page, "half");
+        checks.equal("a tap on the summary's title opens the sheet to half", s.detent, "half", `tap at y ${Math.round(title.y + title.h / 2)}`);
+        checks.near("half is half the screen", s.visible, Math.round(s.ih * 0.5), 2, `${s.visible}px of ${s.ih}`);
+        const rows = await page.eval(`
+          return [...document.querySelectorAll('${OPTION}')].filter((li) =>
+            li.checkVisibility({ opacityProperty: true, visibilityProperty: true })).length;
+        `);
+        checks.atLeast("and the options are drawn under the summary", rows, 1, `${rows} option rows drawn`);
+      } finally {
+        await page.close();
+      }
+    },
+  })),
+
+  // A release keeps the finger's speed. The same 80px drag up from the collapsed sheet
+  // goes back to the peek when it is slow and carries on to half when it is a flick.
+  ...[
+    { width: 390, height: 844 },
+    { width: 360, height: 800 },
+  ].map(({ width, height }) => ({
+    name: `${width}x${height} a flick carries the sheet past where a slow drag of the same length settles`,
+    async run(ctx) {
+      const { checks } = ctx;
+      const page = await bootPhone(ctx, { width, height });
+      try {
+        const peek = await planCollapsed(page);
+        const x = Math.round(peek.iw / 2);
+        const grip = Math.round(peek.handle.y + peek.handle.h / 2);
+
+        await dragAt(page, x, grip, grip - 80, { steps: 20, pauseMs: 40 });
+        await page.waitFor(`document.querySelector('${SHEET}').getAttribute("data-detent") !== "peek"`, { timeout: 1200 }).catch(() => {});
+        const slow = await sheetAt(page, "peek").catch(() => page.eval(READ_SHEET));
+        checks.equal("a slow 80px drag up settles back on the peek", slow.detent, "peek", `${slow.visible}px showing`);
+
+        const grip2 = Math.round(slow.handle.y + slow.handle.h / 2);
+        await dragAt(page, x, grip2, grip2 - 80, { steps: 4, pauseMs: 4 });
+        let fast;
+        try {
+          fast = await sheetAt(page, "half", { timeout: 3000 });
+        } catch {
+          fast = await page.eval(READ_SHEET);
+        }
+        checks.equal("the same 80px as a flick carries on to half", fast.detent, "half", `${fast.visible}px showing`);
+        checks.atLeast(
+          "so the flick settles well above where the slow drag did",
+          fast.visible - slow.visible,
+          100,
+          `slow ${slow.visible}px, flick ${fast.visible}px`,
+        );
+      } finally {
+        await page.close();
+      }
+    },
+  })),
+
+  ...[
+    { width: 390, height: 844 },
+    { width: 360, height: 800 },
+  ].map(({ width, height }) => ({
+    name: `${width}x${height} the map between the chips and the collapsed sheet takes touches`,
+    async run(ctx) {
+      const { checks } = ctx;
+      const page = await bootPhone(ctx, { width, height });
+      try {
+        await planCollapsed(page);
+        await sleep(300);
+        const m = await page.eval(READ_CHROME);
+        checks.equal("the sheet is collapsed", m.detent, "peek");
+        const band = await page.eval(`
+          const F = window.__fov;
+          const top = ${m.chipBottom}, bottom = ${m.sheetTop};
+          const out = [];
+          for (const f of [0.15, 0.5, 0.85]) {
+            const y = Math.round(top + (bottom - top) * f);
+            out.push({ y, left: F.hit(40, y, '${MAP}'), middle: F.hit(Math.round(innerWidth / 2), y, '${PANE}'),
+                       sheet: F.hit(Math.round(innerWidth / 2), y, '${SHEET}') });
+          }
+          return { top, bottom, out };
+        `);
+        checks.atLeast(
+          "the collapsed sheet leaves most of the screen to the map",
+          band.bottom - band.top,
+          m.ih * 0.5,
+          `chips end ${band.top}, sheet starts ${band.bottom}: ${Math.round(band.bottom - band.top)}px of map`,
+        );
+        for (const p of band.out) {
+          checks.ok(`a touch at (40, ${p.y}) reaches the map`, p.left.inside, `hit ${p.left.desc}`);
+          checks.ok(
+            `a touch at the middle of y ${p.y} reaches the map pane, not the sheet`,
+            p.middle.inside && !p.sheet.inside,
+            `hit ${p.middle.desc} "${p.middle.text}"`,
+          );
+        }
+        // And a real drag there pans the map and leaves the sheet where it is.
+        const pane = `getComputedStyle(document.querySelector('.leaflet-map-pane')).transform`;
+        const before = await page.eval(`return ${pane};`);
+        const y0 = band.out[1].y;
+        await page.swipe(40, y0, y0 + 80);
+        await sleep(300);
+        const after = await page.eval(`return { pane: ${pane}, detent: document.querySelector('${SHEET}').getAttribute("data-detent") };`);
+        checks.ok("a drag on the map under the chips pans the map", after.pane !== before, `map pane ${before} -> ${after.pane}`);
+        checks.equal("and leaves the sheet collapsed", after.detent, "peek");
       } finally {
         await page.close();
       }
