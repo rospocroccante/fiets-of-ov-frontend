@@ -121,6 +121,32 @@ test("the collapsed height is the measured header, whatever it measures", async 
   await waitFor(() => expect(onSettle).toHaveBeenLastCalledWith(172));
 });
 
+// Measured in Chrome at 320x568: the plan lands mid-morph, so the sheet's top is
+// fractional, and the two edges the header is read from subtract to 165.00003 for a 1px
+// border over a 164px header. Rounded up as it stood, that was a 166px peek, and a 1px
+// strip of sheet under the header.
+test("the collapsed height is the header to the pixel, whatever fraction its edges carry", async () => {
+  layout({ head: 164 });
+  const real = Element.prototype.getBoundingClientRect;
+  const rects: Record<string, Partial<DOMRect>> = {
+    "results-sheet": { top: 432.4906921386719 },
+    // 164.00003: the head's own height carries the noise too.
+    "sheet-head": { top: 433.4906921386719, bottom: 597.49072265625, height: 164 + 2 ** -15 },
+  };
+  const spy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const r = rects[this.getAttribute("data-fov") ?? ""];
+    if (!r) return real.call(this);
+    const base = { x: 0, y: 0, left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 };
+    return { ...base, ...r, toJSON: () => r } as DOMRect;
+  });
+  try {
+    const { onSettle } = renderSheet("peek");
+    await waitFor(() => expect(onSettle).toHaveBeenLastCalledWith(165));
+  } finally {
+    spy.mockRestore();
+  }
+});
+
 test("reports the visible height once it settles", async () => {
   layout();
   const { onSettle } = renderSheet("half");

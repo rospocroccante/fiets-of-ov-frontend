@@ -56,12 +56,20 @@ interface Layout {
   frame: number;
 }
 
+// Up to the next whole pixel, from a measurement in Chrome's layout unit, 1/64px. A box
+// read while the sheet's top is fractional (a plan landing mid-morph) carries float
+// noise: the header's two edges subtracted to 165.00003 for a 165px header, and rounding
+// that straight up made a 166px peek with a 1px strip of sheet under the header.
+function ceilPx(v: number): number {
+  return Math.ceil(Math.round(v * 64) / 64);
+}
+
 // The height of a box, rounded up. offsetHeight rounds a fractional box to the nearest
 // pixel, and a peek half a pixel short of the header would leave the header's last half
 // pixel under the screen's edge.
 function boxHeight(el: Element | null): number {
   if (!(el instanceof HTMLElement)) return 0;
-  return Math.max(el.offsetHeight, Math.ceil(el.getBoundingClientRect().height));
+  return Math.max(el.offsetHeight, ceilPx(el.getBoundingClientRect().height));
 }
 
 function settle(
@@ -137,7 +145,7 @@ export function ResultsSheet({
       // The header runs from the sheet's top edge, its border included, to the foot of
       // the summary.
       const top = root.getBoundingClientRect().top;
-      const header = Math.max(boxHeight(head), head ? Math.ceil(head.getBoundingClientRect().bottom - top) : 0);
+      const header = Math.max(boxHeight(head), head ? ceilPx(head.getBoundingClientRect().bottom - top) : 0);
       const body = boxHeight(bodyRef.current);
       let padding = 0;
       if (body > 0 && content) {

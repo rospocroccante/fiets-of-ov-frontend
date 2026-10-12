@@ -351,9 +351,13 @@ at every height.
 The detents are solved in `src/lib/sheetDetents.ts` from what the sheet measures with a
 `ResizeObserver`. `detentHeights` takes the frame, the window height, the bottom inset,
 the header (handle and summary) and the content's natural height. Peek is the header
-above the bottom inset: 165px at 390x844 and 360x800 (a 1px border, the 44px handle and
-a 120px summary), so the collapsed sheet shows the header whole and no slice of the
-content. At peek the content is inert, `aria-hidden`, transparent and hidden, and it
+above the bottom inset: 165px at 390x844, 360x800 and 320x568, in English and in Dutch (a
+1px border, the 44px handle and a 120px summary), so the collapsed sheet shows the header
+whole and no slice of the content. The header is rounded up to a whole pixel, so a
+fractional one is never cut by the screen's edge, but only after it is snapped to
+Chrome's 1/64px layout unit. A plan lands while the morph is still moving the stage, and
+the header's edges read at that moment subtracted to 165.00003; rounded straight up, that
+was a 166px peek with a 1px strip of sheet under the header. At peek the content is inert, `aria-hidden`, transparent and hidden, and it
 fades in over the first 24px the sheet rises. Half is half the window height. Full is
 the whole of the sheet's frame (`data-fov="sheet-frame"`), the part of the map stage
 below `topInset`, or the end of the content if that comes first. A full sheet therefore

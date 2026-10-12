@@ -1138,6 +1138,52 @@ export const scenarios = [
     },
   })),
 
+  // The collapsed height is read off the header's edges while the plan lands mid-morph,
+  // when the sheet's top is fractional. Two such edges subtracted to 165.00003 for a 165px
+  // header, which rounded up to a 166px peek and a 1px strip of sheet under the header.
+  // It depends on where the morph is when the plan lands: at 320x568 it came and went
+  // between runs, in both languages (5 of 16 plans in one probe, 0 of 16 after the fix).
+  // Both languages, three widths, and 3x screens as well as the suite's usual 2x.
+  ...[
+    { width: 320, height: 568 },
+    { width: 360, height: 800 },
+    { width: 390, height: 844 },
+  ].flatMap(({ width, height }) => ["en", "nl"].map((lang) => ({ width, height, lang }))).map(({ width, height, lang }) => ({
+    name: `${width}x${height} ${lang} the collapsed sheet is as tall as its header, to the pixel`,
+    async run(ctx) {
+      const { checks } = ctx;
+      for (const deviceScaleFactor of [2, 3]) {
+        const at = `${width}x${height} ${lang} @${deviceScaleFactor}x`;
+        const page = await ctx.openPhone({ width, height, theme: "light", lang, deviceScaleFactor });
+        try {
+          await page.goto(ctx.url);
+          await page.waitFor(`document.querySelector('[data-fov="search-pill"]')`, { label: "the app" });
+          await page.eval(PROBE);
+          const safe = await page.eval(SAFE_BOTTOM);
+          // The first popular trip: from the card the plan lands while the morph is still
+          // moving the stage, which is when the fraction is there to be read.
+          await planDryTrip(page);
+          await sleep(300);
+          const m = await page.eval(READ_COLLAPSED);
+          const foot = await page.eval(`
+            return document.querySelector('#fov-map-main').getBoundingClientRect().bottom -
+              document.querySelector('[data-fov="sheet-head"]').getBoundingClientRect().bottom;
+          `);
+          checks.near(
+            `${at}: the collapsed height is the measured header, within 1px`,
+            m.visible,
+            m.head.h + safe,
+            1,
+            `${m.visible}px showing for a ${m.head.h}px header (the sheet's 1px border on top), inset ${safe}px`,
+          );
+          checks.near(`${at}: the header's foot is the screen's foot, above the inset`, foot, safe, 0.5, `${foot}px between them`);
+        } finally {
+          await page.close();
+        }
+      }
+    },
+  })),
+
   ...[
     { width: 390, height: 844 },
     { width: 360, height: 800 },
