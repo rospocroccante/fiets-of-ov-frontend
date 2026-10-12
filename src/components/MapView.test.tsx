@@ -613,3 +613,92 @@ test("the zoom buttons and the reset under them stay where they are by default",
   expect(reset).toHaveClass("rounded-[3px]");
   expect(reset.parentElement).toHaveClass("absolute", "left-3");
 });
+
+// The map's right edge (lib/mapEdge.ts) is decided from layout: the map's height and the
+// boxes of the readout, the place chips and the reset, with a ResizeObserver for what
+// changes between renders. While navigating, MapView re-renders on every GPS fix, and
+// nothing the edge is decided from changes with a fix. So a fix reads no layout and builds
+// no observer; a new inset, or a resize the observer reports, still decides the edge again.
+test("a new GPS fix leaves the map's right edge alone; an inset or a resize decides it again", () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ host: "https://tc.test", radar: { past: [], nowcast: [] } }),
+    })),
+  );
+  const observers: Array<() => void> = [];
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(cb: ResizeObserverCallback) {
+        observers.push(() => cb([], this as unknown as ResizeObserver));
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  // Layout, which jsdom has none of: a 400px map, the readout's toggles 36px and the rest
+  // of it (here the legend) 80px, and the round reset 48px. The readout starts at 68, under
+  // the radar button, so with the sheet down there is room for all of it.
+  let mapHeight = 400;
+  let mapReads = 0;
+  const heights: Record<string, number> = { "readout-toggles": 36, "readout-extras": 80, "map-reset-view": 48 };
+  const clientHeight = vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(function (this: Element) {
+    if (!this.querySelector(":scope > .leaflet-container")) return 0;
+    mapReads++;
+    return mapHeight;
+  });
+  const rect = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const h = heights[this.getAttribute("data-fov") ?? ""] ?? 0;
+    return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: h, width: 0, height: h, toJSON: () => ({}) } as DOMRect;
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const fix = (i: number) => ({ lat: 52.379 - i * 0.0005, lon: 4.9, accuracy: 10 });
+  const view = (i: number, bottomInset = 0) => (
+    <QueryClientProvider client={client}>
+      <MapView
+        origin={{ lat: 52.379, lon: 4.9 }}
+        destination={{ lat: 52.358, lon: 4.868 }}
+        stops={[]}
+        route={route}
+        navigating
+        liveFix={fix(i)}
+        radar
+        wLayers={{ rain: true, wind: false }}
+        onLayerToggle={() => {}}
+        radarButton
+        zoomControl={false}
+        bottomInset={bottomInset}
+      />
+    </QueryClientProvider>
+  );
+  try {
+    const { rerender } = render(view(0));
+    const legend = () => document.querySelector('[data-fov="readout-extras"]') as HTMLElement;
+    expect(legend().style.visibility).toBe("");
+    expect(observers).toHaveLength(1);
+    const reads = mapReads;
+
+    for (let i = 1; i <= 10; i++) rerender(view(i));
+    expect(observers).toHaveLength(1);
+    expect(mapReads).toBe(reads);
+
+    // The sheet settles 200px up: 72px between the readout's top and the reset, which is
+    // the toggles' 44 and not the legend's 86 after them.
+    rerender(view(10, 200));
+    expect(legend().style.visibility).toBe("hidden");
+    rerender(view(10, 0));
+    expect(legend().style.visibility).toBe("");
+
+    // The map shrinks to 250px and the observer says so: 122px of room, short of 130.
+    mapHeight = 250;
+    act(() => observers[0]());
+    expect(legend().style.visibility).toBe("hidden");
+    expect(observers).toHaveLength(1);
+  } finally {
+    clientHeight.mockRestore();
+    rect.mockRestore();
+  }
+});

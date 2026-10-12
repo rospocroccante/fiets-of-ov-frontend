@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Circle,
@@ -766,11 +766,17 @@ export function MapView({
   // The map's right edge: the radar button (App's, on a phone), the readout under it, and
   // the bottom column's place chips and reset riding the sheet up from the foot. What fits
   // between the button and the reset is decided in lib/mapEdge.ts from the boxes measured
-  // here; this only measures and applies. It runs after every render because its parts
-  // come and go with the weather layers and the zoom, and a ResizeObserver catches what
-  // changes between renders: the map's own size, and the readout's clock, which arrives
-  // with the first radar frame and re-renders only the readout. Without layout (jsdom,
-  // every box 0) everything is drawn.
+  // here; this only measures and applies. Without layout (jsdom, every box 0) everything
+  // is drawn.
+  //
+  // It measures when something the fit is decided from changes, and at no other time.
+  // Some of that changes with a render: the insets, the radar going on or off, what the
+  // readout holds, and whether the place chips and the reset are there (the second effect's
+  // dependencies, which are also what mounts and unmounts the boxes it watches). The rest
+  // changes between renders, and one ResizeObserver, built once, reports it: the map's own
+  // size, the readout's clock, which arrives with the first radar frame and re-renders only
+  // the readout, and the place chips. Navigation re-renders the map on every GPS fix and a
+  // fix changes none of this, so it reads no layout and builds no observer.
   const readoutRef = useRef<HTMLDivElement | null>(null);
   const placesRef = useRef<HTMLDivElement | null>(null);
   const edgeResetRef = useRef<HTMLButtonElement | null>(null);
@@ -778,37 +784,70 @@ export function MapView({
   const readoutOffset = topInset + (radarButton ? RADAR_BUTTON_CLEAR : 0);
   const edgeInputs = useRef({ readoutOffset, bottomInset, showWeather });
   edgeInputs.current = { readoutOffset, bottomInset, showWeather };
-  useLayoutEffect(() => {
+  // What the readout and the bottom column are drawn from, as their JSX below reads it.
+  const rainError = wLayers.rain && rain.error;
+  const windError = wLayers.wind && wind.error;
+  const hasToggles = onLayerToggle != null;
+  const placesShown = poisError || poisPartial || (viewport != null && viewport.zoom < POI_MIN_ZOOM);
+  const measureEdge = useCallback(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
     const height = (el: Element | null | undefined) => (el ? el.getBoundingClientRect().height : 0);
-    const measure = () => {
-      const { readoutOffset: offset, bottomInset: inset, showWeather: on } = edgeInputs.current;
-      const mapH = wrap.clientHeight;
-      const readout = readoutRef.current;
-      const reset = edgeResetRef.current;
-      const next =
-        mapH > 0
-          ? fitEdge({
-              top: 12 + offset,
-              foot: mapH - 12 - inset - height(reset),
-              readout: on,
-              toggles: height(readout?.querySelector('[data-fov="readout-toggles"]')),
-              extras: height(readout?.querySelector('[data-fov="readout-extras"]')),
-              places: height(placesRef.current),
-              reset: reset != null,
-            })
-          : EDGE_ALL;
-      setEdge((prev) => (sameFit(prev, next) ? prev : next));
-    };
-    measure();
+    const { readoutOffset: offset, bottomInset: inset, showWeather: on } = edgeInputs.current;
+    const mapH = wrap.clientHeight;
+    const readout = readoutRef.current;
+    const reset = edgeResetRef.current;
+    const next =
+      mapH > 0
+        ? fitEdge({
+            top: 12 + offset,
+            foot: mapH - 12 - inset - height(reset),
+            readout: on,
+            toggles: height(readout?.querySelector('[data-fov="readout-toggles"]')),
+            extras: height(readout?.querySelector('[data-fov="readout-extras"]')),
+            places: height(placesRef.current),
+            reset: reset != null,
+          })
+        : EDGE_ALL;
+    setEdge((prev) => (sameFit(prev, next) ? prev : next));
+  }, []);
+  const edgeObserver = useRef<ResizeObserver | null>(null);
+  useLayoutEffect(() => {
     if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(measure);
-    for (const el of [wrap, readoutRef.current?.querySelector('[data-fov="readout-extras"]'), placesRef.current]) {
-      if (el) ro.observe(el);
-    }
-    return () => ro.disconnect();
-  });
+    const ro = new ResizeObserver(measureEdge);
+    edgeObserver.current = ro;
+    return () => {
+      ro.disconnect();
+      edgeObserver.current = null;
+    };
+  }, [measureEdge]);
+  // topInset is here for itself as well as for the readout: it decides whether the bottom
+  // column is wrapped in clipUnderChrome, so a change across 0 mounts new place chips.
+  useLayoutEffect(() => {
+    measureEdge();
+    const ro = edgeObserver.current;
+    if (!ro) return;
+    const watched = [wrapRef.current, readoutRef.current?.querySelector('[data-fov="readout-extras"]'), placesRef.current];
+    const boxes = watched.filter((el): el is Element => el != null);
+    for (const el of boxes) ro.observe(el);
+    return () => {
+      for (const el of boxes) ro.unobserve(el);
+    };
+  }, [
+    measureEdge,
+    interactive,
+    topInset,
+    readoutOffset,
+    bottomInset,
+    showWeather,
+    wLayers.rain,
+    wLayers.wind,
+    rainError,
+    windError,
+    hasToggles,
+    placesShown,
+    zoomControl,
+  ]);
 
   const resetView = () => {
     const m = mapRef.current;
@@ -1004,7 +1043,7 @@ export function MapView({
             style={{ bottom: 12 + bottomInset }}
           >
             {/* The place chips, which give way when the edge is short of room (edge). */}
-            {(poisError || poisPartial || (viewport != null && viewport.zoom < POI_MIN_ZOOM)) && (
+            {placesShown && (
               <div
                 ref={placesRef}
                 data-fov="map-places"
@@ -1113,8 +1152,8 @@ export function MapView({
           fit={edge.toggles ? (edge.extras ? "whole" : "toggles") : "none"}
           layers={wLayers}
           onLayerToggle={onLayerToggle}
-          rainError={wLayers.rain && rain.error}
-          windError={wLayers.wind && wind.error}
+          rainError={rainError}
+          windError={windError}
         />
       )}
 
