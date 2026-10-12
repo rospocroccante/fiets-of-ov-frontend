@@ -35,9 +35,16 @@ export function TabBar({
       initial={false}
       animate={{ y: hidden ? "110%" : "0%" }}
       transition={{ duration: DURATION.base, ease: hidden ? EASE.exit : EASE.enter }}
-      className="fixed inset-x-0 bottom-0 z-[1800] border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur-md dark:border-night-rim/30 dark:bg-night-surface/70"
+      className="fixed inset-x-0 bottom-0 z-[1800] bg-white/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur-md dark:bg-night-surface/70"
       {...(hidden ? { inert: "" as const, "aria-hidden": true as const } : {})}
     >
+      {/* The top rule, drawn inside the bar so it adds no height: the bar is its row plus
+          the inset, which is the number the home's scroller ends on. */}
+      <span
+        aria-hidden="true"
+        data-fov="tab-bar-rule"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-slate-200 dark:bg-night-rim/30"
+      />
       <ul className={`flex ${compact ? "h-11" : "h-14"}`}>
         {TABS.map(({ id, label }) => {
           const active = id === tab;

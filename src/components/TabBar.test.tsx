@@ -32,3 +32,19 @@ test("a hidden bar is out of reach", () => {
   expect(nav).toHaveAttribute("inert");
   expect(nav).toHaveAttribute("aria-hidden", "true");
 });
+
+// The bar is its row (56px, or 44 on its side) plus the bottom inset, which is the number
+// App ends the home's scroller on. A border on the bar added a pixel to that: measured in
+// Chrome at 57 and 45, with the home's scroller running 1px under the bar. The top rule is
+// drawn inside the bar instead, where it takes no height.
+test.each([
+  [false, "h-14"],
+  [true, "h-11"],
+] as const)("compact %s: the bar is its %s row, the top rule takes no height", (compact, row) => {
+  render(<TabBar tab="plan" onSelect={() => {}} hidden={false} compact={compact} />);
+  const nav = screen.getByRole("navigation", { name: "Sections" });
+  expect(nav.className).not.toMatch(/(^|\s)border(-t)?(\s|$)/);
+  expect(nav.querySelector("ul")).toHaveClass(row);
+  const rule = nav.querySelector('[data-fov="tab-bar-rule"]');
+  expect(rule).toHaveClass("absolute", "h-px");
+});
