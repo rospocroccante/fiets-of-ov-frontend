@@ -200,3 +200,17 @@ test("closing a layer whose push is still queued cancels the push", async () => 
   expect(entry(h).layers).toEqual([]);
   expect(onBack).not.toHaveBeenCalled();
 });
+
+// The document's scroll is the home/map morph, and every in-app close is a history.back().
+// With the browser's default restoration that traversal put back the scroll position saved
+// in the entry it landed on: measured in Chrome, planning from the phone search screen
+// closed it, the step back restored scrollY 0, and the smooth scroll to the map was
+// cancelled with the app left on the home. The app owns its scroll, so restoration is off
+// while the hook is mounted, and back to what it was afterwards.
+test("turns the browser's scroll restoration off while mounted", () => {
+  const h = Object.assign(fakeHistory(), { scrollRestoration: "auto" as ScrollRestoration });
+  const view = renderHook(() => useAppNav(vi.fn(), h as unknown as History));
+  expect(h.scrollRestoration).toBe("manual");
+  view.unmount();
+  expect(h.scrollRestoration).toBe("auto");
+});

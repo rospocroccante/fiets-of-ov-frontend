@@ -19,7 +19,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 export type Tab = "plan" | "saved" | "profile";
 export type Layer = "map" | "sheet-full" | "search" | "place" | "privacy";
 
-export type HistoryLike = Pick<History, "pushState" | "replaceState" | "back" | "state">;
+export type HistoryLike = Pick<History, "pushState" | "replaceState" | "back" | "state"> &
+  Partial<Pick<History, "scrollRestoration">>;
 
 export interface AppNav {
   tab: Tab;
@@ -82,6 +83,21 @@ export function useAppNav(onBack: (layer: Layer) => void, history: HistoryLike =
     }
     ignore.current += 1;
     h.current.back();
+  }, []);
+
+  // The document's scroll is the home/map morph, and the app moves it itself. With the
+  // browser's restoration on, the history.back() that consumes a closed layer's entry
+  // put back the scroll position saved in the entry it landed on: closing the phone
+  // search screen to plan a trip restored scrollY 0 and cancelled the smooth scroll to
+  // the map, leaving the app on the home.
+  useEffect(() => {
+    const hist = h.current;
+    const before = hist.scrollRestoration;
+    if (before === undefined) return;
+    hist.scrollRestoration = "manual";
+    return () => {
+      hist.scrollRestoration = before;
+    };
   }, []);
 
   useEffect(() => {
