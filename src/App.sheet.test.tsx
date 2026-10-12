@@ -137,6 +137,63 @@ test("while a ride is on, nothing in the summary can change the trip it navigate
   expect(screen.queryByText(/~29 min/)).toBeNull();
 });
 
+// The same for the sheet opened over a ride: its option rows would choose another option
+// and swap the route being ridden. They show the options and choose none; the chosen
+// option's steps stay there to read.
+test("while a ride is on, the option rows in the opened sheet choose nothing, and the steps stay", async () => {
+  phoneLayout();
+  renderApp();
+  await planVondelpark();
+  fireEvent.click(within(summary()).getByRole("button", { name: "Start navigation" }));
+  expect(screen.getByText(/~24 min/)).toBeInTheDocument();
+  fireEvent.click(within(summary()).getByText("By bike"));
+  expect(sheet()).toHaveAttribute("data-detent", "half");
+  expect(content()).not.toHaveAttribute("inert");
+
+  const rows = [...content().querySelectorAll('[data-fov="option-button"]')];
+  expect(rows).toHaveLength(2);
+  for (const row of rows) fireEvent.click(row);
+  const chosen = content().querySelector('[data-fov="option"][data-selected="true"]') as HTMLElement;
+  expect(within(chosen).getByText("By bike")).toBeInTheDocument();
+  expect(within(summary()).getByText("By bike")).toHaveAttribute("data-fov", "summary-title");
+  expect(screen.getByText(/~24 min/)).toBeInTheDocument();
+  expect(screen.queryByText(/~29 min/)).toBeNull();
+  // The ride's steps: the disclosure is there and opens.
+  const steps = chosen.querySelector('[data-fov="option-steps"]') as HTMLDetailsElement;
+  expect(steps).not.toBeNull();
+  fireEvent.click(chosen.querySelector('[data-fov="steps-toggle"]') as HTMLElement);
+  expect(steps.open).toBe(true);
+  // Shown as the sheet rises, which framer paints on its next frame.
+  await waitFor(() => expect(within(steps).getAllByRole("listitem").length).toBeGreaterThan(0));
+});
+
+// The desktop results column and a phone on its side list the same rows beside the map.
+test.each([
+  ["on desktop", false],
+  ["on a phone on its side", true],
+] as const)("%s, while a ride is on, the results column's option rows choose nothing", async (_where, landscape) => {
+  for (const r of restore.reverse()) r();
+  restore = landscape ? [phoneViewport({ landscape: true })] : [];
+  renderApp();
+  fireEvent.click(screen.getByRole("button", { name: "Amsterdam Centraal → Vondelpark" }));
+  await morphTo(1);
+  const column = await waitFor(() => {
+    const c = document.querySelector('[data-fov="results-column"]') as HTMLElement | null;
+    if (!c || !within(c).queryByRole("button", { name: "Start navigation" })) throw new Error("no results yet");
+    return c;
+  });
+  fireEvent.click(within(column).getByRole("button", { name: "Start navigation" }));
+  expect(screen.getByText(/~24 min/)).toBeInTheDocument();
+
+  const rows = [...column.querySelectorAll('[data-fov="option-button"]')];
+  expect(rows).toHaveLength(2);
+  for (const row of rows) fireEvent.click(row);
+  const chosen = column.querySelector('[data-fov="option"][data-selected="true"]') as HTMLElement;
+  expect(within(chosen).getByText("By bike")).toBeInTheDocument();
+  expect(screen.getByText(/~24 min/)).toBeInTheDocument();
+  expect(screen.queryByText(/~29 min/)).toBeNull();
+});
+
 test("the other option's minutes choose it, as a tap on its row would", async () => {
   renderApp();
   await planVondelpark();

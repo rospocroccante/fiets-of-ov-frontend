@@ -663,7 +663,16 @@ export default function App() {
   // brings back arrives, on its own.
   const search = trip ? JSON.stringify([trip.from, trip.to, trip.submit ?? 0]) : "";
   const panel: PanelState = filteredView
-    ? { status: "ready", view: filteredView, search, selectedMode: effectiveMode, onSelect: setSelectedMode }
+    ? {
+        status: "ready",
+        view: filteredView,
+        search,
+        selectedMode: effectiveMode,
+        // While a ride is on nothing in the results chooses another option: that would
+        // swap the route being ridden, rebuilt from the itinerary's start rather than
+        // from the rider. The banner's Exit ends the ride.
+        onSelect: navigating ? undefined : setSelectedMode,
+      }
     : view.status === "error"
       ? { status: "error", message: view.message ?? "error" }
       : view.status === "loading"

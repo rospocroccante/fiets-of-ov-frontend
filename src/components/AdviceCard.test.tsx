@@ -54,6 +54,16 @@ test("shows the Best tag, title and minutes", () => {
   expect(screen.getByText("24 min")).toBeInTheDocument();
 });
 
+test("with no way to choose it (a ride is on) the row is disabled, reads the same and answers no pointer", () => {
+  render(<AdviceCard option={transit} selected={false} />);
+  const row = screen.getByRole("button", { pressed: false });
+  expect(row).toBeDisabled();
+  expect(row).toHaveTextContent("Public transport");
+  expect(row).toHaveTextContent("29 min");
+  expect(row.className).not.toMatch(/hover:bg-/);
+  expect(row).toHaveClass("disabled:cursor-default");
+});
+
 test("no tag when not recommended", () => {
   render(
     <AdviceCard option={{ ...recommended, recommended: false }} selected={false} onSelect={() => {}} />

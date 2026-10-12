@@ -94,8 +94,8 @@ export function SheetSummary({
     );
   }
   // The best-ranked option that is not the chosen one: the backend sends them ranked.
-  // Neither it nor the Start is offered during a ride.
-  const other = navigating ? undefined : view.options.find((o) => o.mode !== chosen.mode);
+  // Neither it nor the Start is offered during a ride, and it needs a way to choose it.
+  const other = navigating || !onSelect ? undefined : view.options.find((o) => o.mode !== chosen.mode);
   const start = navigating ? undefined : onStartNav;
   const fill = modeColor(BADGE_LEG[chosen.mode]);
   return (
@@ -150,7 +150,7 @@ export function SheetSummary({
               type="button"
               data-fov="summary-alt"
               aria-label={`${other.title}, ${other.minutes} min`}
-              onClick={() => onSelect(other.mode)}
+              onClick={() => onSelect?.(other.mode)}
               className={SECONDARY}
             >
               <ModeIcon mode={other.mode} className="h-4 w-4" />

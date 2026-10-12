@@ -142,7 +142,8 @@ export function AdviceCard({
 }: {
   option: OptionView;
   selected: boolean;
-  onSelect: () => void;
+  // Absent while a ride is on: the row is disabled, and says the same as ever.
+  onSelect?: () => void;
   // The panel this row expands to, when it is the selected one.
   detailsId?: string;
 }) {
@@ -161,6 +162,7 @@ export function AdviceCard({
     <button
       type="button"
       onClick={onSelect}
+      disabled={!onSelect}
       aria-pressed={selected}
       // The row is also the disclosure for its own itinerary, so it says so. Both
       // states are true of the same control: it selects the option and it opens it.
@@ -168,9 +170,10 @@ export function AdviceCard({
       aria-controls={selected ? detailsId : undefined}
       data-fov="option-button"
       // A row that is not chosen answers a pointer with a flat tint and nothing else:
-      // no lift, no shadow. The chosen one already carries the caller's tint.
-      className={`flex min-h-[44px] w-full flex-col rounded-card px-3 py-3 text-left transition-colors ${
-        selected ? "" : "hover:bg-slate-900/5 dark:hover:bg-night-hover/60"
+      // no lift, no shadow. The chosen one already carries the caller's tint, and a row
+      // that cannot be chosen answers nothing.
+      className={`flex min-h-[44px] w-full flex-col rounded-card px-3 py-3 text-left transition-colors disabled:cursor-default ${
+        selected || !onSelect ? "" : "hover:bg-slate-900/5 dark:hover:bg-night-hover/60"
       }`}
     >
       <span className="flex w-full items-baseline gap-3">

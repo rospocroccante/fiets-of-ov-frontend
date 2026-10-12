@@ -337,9 +337,14 @@ states the trip and has no button at all: no Start, no other option and no Try a
 The other option's minutes used to stay live under the banner, and one tap chose that
 option and swapped the route being ridden for its own, rebuilt from the itinerary's
 start rather than from the rider's position. Without the button row the collapsed sheet
-is that much shorter during a ride. The option rows in the content, at half and full,
-are not locked. While a plan is on its way the header reads "Planning your trip…" over
-a placeholder row that pulses only where motion is allowed.
+is that much shorter during a ride. The option rows in the content did the same at half
+and full, and so did the rows of the results column beside the map on a desktop and on a
+phone on its side. While a ride is on, `App` passes the ready panel no `onSelect`, and
+every `AdviceCard` row is a disabled button: it reads as before, takes no tap and no
+focus, and has no hover tint. The chosen option's steps still open and scroll, and
+nothing in the results ends the ride: that is the banner's Exit. While a plan is on its
+way the header reads "Planning your trip…" over a placeholder row that pulses only where
+motion is allowed.
 When a plan fails it reads "Routes are unavailable right now. Try again in a moment."
 with a Try again that bumps the submit nonce, so the same trip is fetched again. The
 backend's message stays out of the sheet; the desktop results column still prints it.

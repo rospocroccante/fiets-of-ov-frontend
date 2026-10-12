@@ -300,6 +300,17 @@ const READ_RADAR = `
   };
 `;
 
+// The ride as the screen states it: the banner's ETA, the summary's option and the option
+// the content has selected.
+const READ_RIDE = `
+  const banner = document.querySelector('[aria-label="Exit navigation"]').closest(".rounded-card");
+  const eta = (banner.innerText.match(/~(\\d+) min/) || [])[1];
+  const title = document.querySelector('[data-fov="summary-title"]');
+  const chosen = document.querySelector('[data-fov="option"][data-selected="true"] [data-fov="option-title"]');
+  return { eta: eta == null ? null : Number(eta), title: title ? title.textContent.trim() : null,
+           chosen: chosen ? chosen.textContent.trim() : null, banner: banner.innerText.replace(/\\s+/g, " ") };
+`;
+
 // The map's right edge, as a finger meets it: the radar button, the readout's Rain and Wind
 // toggles, the place chips in the bottom column and the reset, each with what a touch at
 // its centre reaches, and the readout as the box everything of it that is drawn spans. A
@@ -1306,16 +1317,6 @@ export const scenarios = [
         // Start. In that order: a tap on the summary away from a button opens the sheet.
         const riding = await page.eval(ALT);
         const points = [...(riding ? [{ ...riding, when: "under the banner" }] : []), { ...alt, when: "before Start" }];
-        // The ride as the screen states it: the banner's ETA, the summary's option and the
-        // option the content has selected.
-        const READ_RIDE = `
-          const banner = document.querySelector('[aria-label="Exit navigation"]').closest(".rounded-card");
-          const eta = (banner.innerText.match(/~(\\d+) min/) || [])[1];
-          const title = document.querySelector('[data-fov="summary-title"]');
-          const chosen = document.querySelector('[data-fov="option"][data-selected="true"] [data-fov="option-title"]');
-          return { eta: eta == null ? null : Number(eta), title: title ? title.textContent.trim() : null,
-                   chosen: chosen ? chosen.textContent.trim() : null, banner: banner.innerText.replace(/\\s+/g, " ") };
-        `;
         const before = await page.eval(READ_RIDE);
         for (const p of points) {
           const hit = await page.eval(`
@@ -1342,6 +1343,72 @@ export const scenarios = [
             `banner before "${before.banner}", after "${after.banner}"`,
           );
         }
+      } finally {
+        await page.close();
+      }
+    },
+  },
+
+  // The sheet opened over a ride: its option rows used to choose, and one tap on another
+  // row swapped the route being ridden. They choose nothing now, and the ride's steps
+  // still open and scroll.
+  {
+    name: "390x844 while navigating, the opened sheet's option rows leave the ride's route alone",
+    async run(ctx) {
+      const { checks } = ctx;
+      const page = await bootPhone(ctx, { width: 390, height: 844 });
+      try {
+        await planCollapsed(page);
+        await tapOn(page, '[data-fov="summary-start"]', "the summary's Start");
+        await page.waitFor(`document.querySelector('[aria-label="Exit navigation"]')`, { label: "the navigation banner" });
+        await sheetAt(page, "peek");
+        await tapOn(page, HANDLE, "sheet handle");
+        await sheetAt(page, "half");
+        await sleep(400);
+        const before = await page.eval(READ_RIDE);
+        const rows = await page.eval(`
+          const F = window.__fov;
+          return [...document.querySelectorAll('${OPTION}')].filter((li) => li.getAttribute("data-selected") !== "true").map((li) => {
+            const b = li.querySelector('[data-fov="option-button"]');
+            const r = F.rect(b), v = F.visible(b);
+            return { x: Math.round(r.x + r.w / 2), y: Math.round((v.top + v.bottom) / 2), visible: v.h,
+                     title: li.querySelector('[data-fov="option-title"]').textContent.trim() };
+          });
+        `);
+        const reachable = rows.filter((r) => r.visible >= 20);
+        checks.atLeast("the half sheet shows another option's row", reachable.length, 1, rows.map((r) => `${r.title} ${r.visible}px`).join(", "));
+        for (const row of reachable) {
+          await page.tap(row.x, row.y);
+          await sleep(800);
+          const after = await page.eval(READ_RIDE);
+          checks.equal(`after a tap on "${row.title}" the ride's option is still the chosen one`, after.chosen, before.chosen);
+          checks.equal("and the summary still names it", after.title, before.title);
+          checks.atMost(
+            "and the banner's ETA has not jumped to another route",
+            after.eta ?? Infinity,
+            before.eta,
+            `banner before "${before.banner}", after "${after.banner}"`,
+          );
+        }
+
+        // The ride's steps open, and at full they scroll.
+        await tapOn(page, `${CONTENT} [data-fov="option"][data-selected="true"] [data-fov="steps-toggle"]`, "the steps toggle");
+        let opened = true;
+        await page
+          .waitFor(`document.querySelector('${CONTENT} [data-fov="option-steps"][open]')`, { label: "the steps to open", timeout: 3000 })
+          .catch(() => {
+            opened = false;
+          });
+        checks.ok("the ride's steps open", opened);
+        await tapOn(page, HANDLE, "sheet handle");
+        const full = await sheetAt(page, "full");
+        const x = Math.round(full.iw / 2);
+        const y = Math.round(full.content.top + 250);
+        await page.swipe(x, y, y - 200);
+        const scrolled = await page.eval(READ_SHEET);
+        checks.atLeast("and at full a drag up scrolls them", scrolled.content.scrollTop, 1, `scrollTop ${scrolled.content.scrollTop}`);
+        const end = await page.eval(READ_RIDE);
+        checks.equal("the ride is the same one at the end", end.chosen, before.chosen, end.banner);
       } finally {
         await page.close();
       }

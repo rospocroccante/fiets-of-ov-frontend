@@ -20,7 +20,9 @@ export type PanelState =
       // and nothing arrives again.
       search: string;
       selectedMode: Mode;
-      onSelect: (mode: Mode) => void;
+      // Chooses an option. Absent while a ride is on: the route being ridden is the
+      // chosen option's, so the rows show every option and choose none.
+      onSelect?: (mode: Mode) => void;
     };
 
 // A clock the panel can render from. Reading Date.now() during render makes the render
@@ -293,7 +295,7 @@ function PanelBody({
               <AdviceCard
                 option={option}
                 selected={isSelected}
-                onSelect={() => onSelect(option.mode)}
+                onSelect={onSelect ? () => onSelect(option.mode) : undefined}
                 detailsId={detailsId}
               />
               {isSelected && (
