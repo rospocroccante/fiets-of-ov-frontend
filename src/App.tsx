@@ -738,7 +738,8 @@ export default function App() {
   // custom properties that only the portrait class list reads. framer leaves a motion
   // value it was given on the element when the key is later dropped, so a margin or a
   // padding written directly stayed on the pill after the phone turned on its side and
-  // pushed the landscape pill 56px into the menu; an unread custom property does nothing.
+  // cut 56px off the left end of the landscape pill; an unread custom property does
+  // nothing.
   const pillShift = useTransform(progress, [HOME_FADED_AT, PILL_SHIFTED_AT], ["0px", `${MAP_PILL_SHIFT}px`]);
   const pillPad = useTransform(progress, [HOME_FADED_AT, 1], [`${HOME_PILL_PAD}px`, `${MAP_PILL_PAD}px`]);
   // The hole the home's scroller leaves for the pill.

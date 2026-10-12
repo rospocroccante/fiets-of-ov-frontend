@@ -177,7 +177,9 @@ breakpoint — an iPhone in landscape is 844px wide, past `sm`, and zooms just t
 under the notch and the home indicator, so anything pinned to an edge has to add the
 matching inset: the header, the map stage, the tab bar, the results sheet's content and
 the mock badge all use `calc(<base> + env(safe-area-inset-*))`. A new fixed element without one
-will sit under the status bar on a modern iPhone.
+will sit under the status bar on a modern iPhone. The map stage on a portrait phone is the
+one deliberate exception at the top: its map paints under the status bar, and the back
+button and the chip row floating over it carry the inset instead.
 
 **The morph geometry is in `dvh`, not `vh`.** On a phone `100vh` is the *large* viewport
 (URL bar collapsed) while `useMorphProgress` divides the scroll by the current
@@ -215,6 +217,7 @@ slot from this table instead of a number of its own.
 | Map stage, home stage | `z-0`, `z-10` | the sticky morph box |
 | Map overlays: chips, place card, navigation banner | `z-[1000]` | the map pane |
 | Results sheet | `z-[1100]` | the map stage's `main`, portrait phone only |
+| Floating chip row | `z-[1150]` | the map stage, portrait phone only |
 | Filter popups | `z-[1150]`, `z-[1200]` | the filter bar |
 | Saved and Profile screens | `z-[1400]` | `App`, outside both stages |
 | Tab bar | `z-[1800]` | `App`, outside both stages |
@@ -222,6 +225,10 @@ slot from this table instead of a number of its own.
 | Undo snackbar | `z-[1900]` | the Saved screen |
 | Search screen, privacy notice | `z-[2000]` | `App`, outside both stages |
 | Skip link | `z-[3000]` | the top of `App` |
+
+The chip row shares the filter popups' z-index because the Map panel it opens has to
+clear a full sheet. The round back button and the search pill float over the map from
+outside the map stage, in the sticky morph box, so they paint over everything in it.
 
 #### Tab bar
 
@@ -267,11 +274,61 @@ To add a layer, add its name to the `Layer` type, close it in the `onBack` callb
 `App.tsx`, and add one `useNavLayer(nav, "<layer>", isOpen)` line next to the others. The
 order of those lines is the order of the stack when several layers open in one render.
 
+#### The map stage on a portrait phone
+
+On a portrait phone the map covers the whole map stage, edge to edge and under the status
+bar, and its chrome floats over it the way Google Maps' does. The stage has no top padding,
+and there is no header bar and no wordmark. Two rows sit under the top inset. The first,
+8px down, holds the round back button (48px, `data-fov="map-back"`, the same `toHome` as
+the arrow on the other layouts) and the search pill beside it, 48px tall. The second, 64px
+down, is `FilterBar` with `floating` set: a row as wide as its chips, with no background, a
+shadow and an opaque surface on each chip and "Map" last. When the chips do not fit, the row
+scrolls sideways with no scrollbar drawn. Its layer (`data-fov="map-chrome"`) takes no
+touches itself, so the map beside a short row still pans. At inset 0 the chips end at
+108px; the map used to start at 200px, under a header, the pill on a row of its own and an
+in-flow filter bar.
+
+The pill is still the one element that flies from the home. On this layout its map end is
+the first row: `searchY` ends at 8, and two custom properties read only by the portrait
+class list, `--pill-shift` and `--pill-pad`, move its left edge 56px right and take its
+padding from 6px to 1px once the home has faded. The shift is complete at progress 0.75,
+before the pill reaches the back button's row. The two are custom properties because framer
+leaves a motion value it was given on the element after the key is dropped from `style`: a
+margin written directly stayed on the pill when the phone turned on its side, and cut 56px
+off the left end of the landscape pill. While the map stage is up, the home's measurement of the
+pill keeps its last value, so the slot in the home ignores the pill's map-end shape.
+
+`MapView` has `topInset`, the twin of `bottomInset`. `App` measures it with a
+`ResizeObserver` as the chip row's bottom relative to the map pane, plus 8px: 116px at
+inset 0, and 0 in jsdom. Route fits and the reset pad the top by it (`paddingTopLeft:
+[50, 50 + topInset]`). Leaflet's top corners start at it through `--fov-map-top`, which
+`index.css` hands to `.leaflet-top`, and the radar readout, the armed-pick chip and the
+far-from-route chip start 12px under it. The chip row keeps its box while navigation hides
+it, so the number holds when a ride starts.
+
+This layout has no + and - buttons. The map zooms by pinch, and Leaflet's keyboard zoom
+still works. `zoomControl={false}` builds the map without them and also removes them from a
+live map, since react-leaflet freezes the option at creation. The reset
+(`data-fov="map-reset-view"`) moves out of the zoom column to a round button at the foot of
+the bottom-right column, lifted by `bottomInset` above the sheet. A phone on its side and
+every wider screen keep the + and - with the reset as a third button under them.
+
+When navigation starts, the pill, the chips and the back button fade out and go inert, and
+the banner takes the top at 8px under the inset. The back button hides with the others. The
+banner spans the whole row, so a button left there would cover its maneuver glyph, and with
+it gone the banner's Exit is the one control at the top of the screen. The system Back still
+takes the rider to the home with navigation running, as the arrow did.
+
 #### Results sheet
 
 `ResultsSheet` rests at three detents, and their numbers live in `src/lib/sheetDetents.ts`.
 Peek is `PEEK_PX` (132px) plus the bottom inset, half is half the window height, and full
-is the whole of the map stage's `main`, just under the filter bar. A new search opens at
+is the whole of the sheet's frame (`data-fov="sheet-frame"`), the part of the map stage
+below `topInset`. A full sheet therefore stops 8px under the chip row and leaves the pill
+and the chips on screen. The frame takes no touches itself and clips what it holds. The
+place card lives in it on this layout: a full sheet lifts the card by its own height, and
+the frame cuts it off at the chrome where it would otherwise cover the pill. `MapView`
+clips its bottom-right column at `topInset` the same way. A new search opens at
 half and navigation drops the sheet to peek. Full pushes the `sheet-full` layer, so Back
 brings it down to half, and "Hide map" in the map tools toggles between full and half on
 this layout. A release faster than `FLICK_PX_PER_S` (500px/s) moves one detent in its
