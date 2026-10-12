@@ -219,7 +219,7 @@ slot from this table instead of a number of its own.
 | Layer | z-index | Mounted in |
 | --- | --- | --- |
 | Map stage, home stage | `z-0`, `z-10` | the sticky morph box |
-| Map overlays: chips, place card, navigation banner | `z-[1000]` | the map pane |
+| Map overlays: chips, radar button, place card, navigation banner | `z-[1000]` | the map pane |
 | Results sheet | `z-[1100]` | the map stage's `main`, portrait phone only |
 | Floating chip row | `z-[1150]` | the map stage, portrait phone only |
 | Filter popups | `z-[1150]`, `z-[1200]` | the filter bar |
@@ -306,8 +306,9 @@ pill keeps its last value, so the slot in the home ignores the pill's map-end sh
 `ResizeObserver` as the chip row's bottom relative to the map pane, plus 8px: 116px at
 inset 0, and 0 in jsdom. Route fits and the reset pad the top by it (`paddingTopLeft:
 [50, 50 + topInset]`). Leaflet's top corners start at it through `--fov-map-top`, which
-`index.css` hands to `.leaflet-top`, and the radar readout, the armed-pick chip and the
-far-from-route chip start 12px under it. The chip row keeps its box while navigation hides
+`index.css` hands to `.leaflet-top`, and the radar button, the armed-pick chip and the
+far-from-route chip start 12px under it. The radar readout starts under the button (see
+"The rain radar" below). The chip row keeps its box while navigation hides
 it, so the number holds when a ride starts.
 
 This layout has no + and - buttons. The map zooms by pinch, and Leaflet's keyboard zoom
@@ -394,6 +395,48 @@ map stay side by side (`sheetLayout` is `isPhone && !landscapePhone`).
 In the browser suite the plan lands collapsed, so a scenario that measures the options
 opens the sheet to half first with `openSheetToHalf` from `browser-tests/lib/sheet.mjs`,
 a touch on the handle followed by a wait for the spring to stop.
+
+In mock mode the badge used to sit in the bottom-left corner of the map stage, over the
+collapsed sheet's Start. While the sheet is on screen and the tab bar is away, it now sits
+on the map on the left, 8px above the sheet's settled top: `sheetInset + 8` from the foot
+of the screen, 647 to 671px down at 390x844 with the sheet at peek. A sheet too high to
+leave it room under the chips (full) stops it 8px under `topInset`, in the empty left end
+of the handle row. On the home it keeps its place over the tab bar, and everywhere else
+its corner.
+
+#### The rain radar
+
+On a phone, portrait or on its side, the radar is a round button on the map
+(`RadarButton`, `data-fov="radar-button"`) in the corner where Google Maps keeps its layers
+button. It used to be a row in the chip row's Map menu, two taps away and out of sight
+until the menu was open; that menu now holds Start, End and Hide map. The button is 48px,
+12px in from the map's right edge and 12px under the top of the map's free area:
+`topInset + 12` on a portrait phone (128 to 176px down at 390x844, 20px under the chips),
+12px into the map pane on a phone on its side (132 to 180px at 844x390, 18px under the
+in-flow chip row). Off, it has the reset button's white surface and shadow. On, it is a
+filled disc, `brand` by day and `night.accent` at night, with the icon in white or
+`night.bg`. Its accessible name is the existing `radar` string, and the icon, a cloud with
+rain, is inline SVG because the icon font is a frozen subset.
+
+The readout (the Rain and Wind toggles, the frame clock and the legend) starts 8px under
+the button. `MapView` takes `radarButton` and moves the readout's column down by the
+button and that gap (`RADAR_BUTTON_CLEAR`, 56px). At 390x844 the readout runs from 184 to
+275px, clear of the bottom-right column at peek and at half; at 844x390 it runs from 188
+to 279px, above the "zoom in" chip. The button leaves with the map. At the full detent the
+sheet covers the map, and on a phone on its side the navigation banner spans the top of
+the map pane, where the button would sit on the banner's Exit. In both cases it fades out
+and goes inert. A wide screen keeps the radar as a segment of the filter bar.
+
+A plan that expects rain during the trip turns the radar on, on every layout. The test is
+`PlanView.rainExpected === true`, the field the summary's weather tag reads; the backend's
+reason sentence is never parsed. Each search is decided once, keyed by the `search` string
+the results panel already uses (from, to and the submit nonce). A rider who turns the radar
+off keeps it off for that search, and the next search may turn it on again. A dry plan, or
+one with no forecast, leaves the radar as it was. A replan during navigation changes the
+key as well, but the rider did not ask for it, so it is marked decided and skipped. When a
+plan turns the radar on, the button's fill arrives with the `overlay` preset (a fade and an
+8px rise, the fade alone under reduced motion) and the button carries `data-cue="auto"`.
+There is no toast. A tap by the rider fills or empties the button at once.
 
 #### The phone in jsdom
 
