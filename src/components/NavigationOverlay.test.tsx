@@ -82,3 +82,17 @@ test("inside AnimatePresence, an exited banner is out of reach until it has gone
 
   await waitForExit(banner);
 });
+
+test("over a full-bleed map the banner keeps 8px under the status bar", () => {
+  // On a portrait phone the map runs under the status bar, so the banner's 12px from the
+  // map's edge would put it behind the clock. Everywhere else the map starts lower and
+  // top-3 stays.
+  const { container, rerender } = render(
+    <NavigationOverlay next={right} toNext={100} remaining={100} etaMinutes={1} onExit={() => {}} />,
+  );
+  const banner = container.firstElementChild as HTMLElement;
+  expect(banner).toHaveClass("top-3");
+  rerender(<NavigationOverlay next={right} toNext={100} remaining={100} etaMinutes={1} onExit={() => {}} fullBleed />);
+  expect(banner).toHaveClass("top-[calc(0.5rem+env(safe-area-inset-top))]");
+  expect(banner).not.toHaveClass("top-3");
+});

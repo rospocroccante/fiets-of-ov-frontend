@@ -26,6 +26,7 @@ export function FilterBar({
   hideMapDisabled = false,
   phone = false,
   compact = false,
+  floating = false,
 }: {
   count: number;
   hideMap: boolean;
@@ -47,6 +48,9 @@ export function FilterBar({
   // A phone on its side. Only the vertical padding changes: at 390px of height every
   // row above the map is a row the advice does not get.
   compact?: boolean;
+  // The portrait phone's chip row, floating over a full-bleed map instead of sitting
+  // above it. Only with `phone`.
+  floating?: boolean;
 }) {
   const { t } = useI18n();
   // Two button treatments, both with a constant box so toggling never resizes the bar:
@@ -102,6 +106,7 @@ export function FilterBar({
         onToggleRadar={onToggleRadar}
         kinds={kinds}
         onToggleKind={onToggleKind}
+        floating={floating}
       />
     );
   }
@@ -202,6 +207,7 @@ function PhoneFilterBar({
   onToggleRadar,
   kinds,
   onToggleKind,
+  floating,
 }: {
   pad: string;
   chip: (pressed: boolean) => string;
@@ -214,9 +220,16 @@ function PhoneFilterBar({
   onToggleRadar: () => void;
   kinds: KindFilter;
   onToggleKind: (m: Mode) => void;
+  floating: boolean;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  // Floating over the map there is no bar behind the chips, so each one brings its own
+  // surface and its own shadow, the way Google Maps' category chips do. A pressed chip
+  // already has a fill; an unpressed one gets the card surface of either theme, opaque
+  // because the map under it is never the same colour twice.
+  const onMap = (pressed: boolean) =>
+    floating ? ` shadow-md${pressed ? "" : " bg-white dark:bg-night-surface"}` : "";
   const moreRef = useRef<HTMLButtonElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -266,12 +279,29 @@ function PhoneFilterBar({
   }, [open]);
 
   return (
-    <div data-fov="filter-bar" className={`relative flex items-center gap-2 ${pad}`}>
-      <div className="relative min-w-0 flex-1">
+    // Floating, the bar is as wide as its chips and no wider (up to the screen), so the
+    // map beside a short row still takes a touch, and "Map" follows the last mode chip
+    // instead of being pushed to the far edge. The scroller then shrinks rather than
+    // grows. Its 8px of padding top and bottom, taken back with a negative margin, is
+    // room for the chips' shadows inside the box that clips them, and the scrollbar is
+    // never drawn: the cue and the cut chip are what say there is more.
+    <div
+      data-fov="filter-bar"
+      className={
+        floating
+          ? "pointer-events-auto relative flex w-fit max-w-full items-center gap-2"
+          : `relative flex items-center gap-2 ${pad}`
+      }
+    >
+      <div className={floating ? "relative min-w-0" : "relative min-w-0 flex-1"}>
         <div
           ref={scrollerRef}
           data-fov="filter-scroller"
-          className="flex items-center gap-2 overflow-x-auto"
+          className={
+            floating
+              ? "-my-2 flex items-center gap-2 overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              : "flex items-center gap-2 overflow-x-auto"
+          }
         >
           <div ref={contentRef} className="flex items-center gap-2">
             {(Object.keys(KIND_KEY) as Mode[]).map((m) => (
@@ -280,7 +310,7 @@ function PhoneFilterBar({
                 type="button"
                 aria-pressed={kinds[m]}
                 onClick={() => onToggleKind(m)}
-                className={chip(kinds[m])}
+                className={chip(kinds[m]) + onMap(kinds[m])}
               >
                 {t(KIND_KEY[m])}
               </button>
@@ -330,7 +360,7 @@ function PhoneFilterBar({
           open
             ? "border-gray-300 bg-gray-100 text-gray-800 dark:border-night-border dark:bg-night-hover dark:text-night-text"
             : "border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-night-border dark:text-night-muted dark:hover:bg-night-hover"
-        }`}
+        }${onMap(open)}`}
       >
         {t("mapTools")}
         <svg

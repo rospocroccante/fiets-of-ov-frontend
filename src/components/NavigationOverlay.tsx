@@ -39,12 +39,16 @@ export function NavigationOverlay({
   remaining,
   etaMinutes,
   onExit,
+  fullBleed = false,
 }: {
   next: NavManeuver | null;
   toNext: number; // meters to the next maneuver
   remaining: number; // meters to the destination
   etaMinutes: number;
   onExit: () => void;
+  // The map runs under the status bar (a portrait phone), so the banner keeps 8px under
+  // the top inset instead of 12px under the map's edge.
+  fullBleed?: boolean;
 }) {
   const { t } = useI18n();
   // next === null only past the final ARRIVE maneuver: the trip is done.
@@ -56,7 +60,7 @@ export function NavigationOverlay({
     <motion.div
       {...motionProps}
       {...leavingProps}
-      className="absolute left-3 right-3 top-3 z-[1000] rounded-card border border-slate-100 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-night-rim/20 dark:bg-night-raised/95">
+      className={`absolute left-3 right-3 ${fullBleed ? "top-[calc(0.5rem+env(safe-area-inset-top))]" : "top-3"} z-[1000] rounded-card border border-slate-100 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-night-rim/20 dark:bg-night-raised/95`}>
       <div className="flex items-center gap-3">
         <span
           aria-hidden="true"

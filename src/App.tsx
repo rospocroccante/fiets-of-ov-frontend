@@ -91,10 +91,29 @@ const HOME_PILL_CLEAR = 16;
 // The pill's resting offset on anything wider: unchanged, and unmeasured.
 const DESKTOP_PILL_TOP = 260;
 
+// The portrait phone's map stage. The map runs to the top of the screen and its chrome
+// floats over it in two rows under the top inset: the round back button and the search
+// pill share the first, MAP_ROW_Y down, and the filter chips are the second, a gap of the
+// same 8px under it (the stage's `top-[calc(4rem+...)]` is 8 + 48 + 8). The pill flies
+// from the home into that row: it moves right by MAP_PILL_SHIFT to clear the back button
+// and loses padding until it is the button's 48px tall (a 44px target, a 1px border each
+// side and 1px of padding).
+const MAP_ROW_Y = 8;
+const MAP_BACK_PX = 48;
+const MAP_PILL_SHIFT = MAP_BACK_PX + 8;
+const HOME_PILL_PAD = 6;
+const MAP_PILL_PAD = 1;
+// Where the pill's sideways move ends. Its rise ends at 1, and with both ending together
+// the pill crossed the back button's corner on the way up; by 0.75 it is still below that
+// button's row.
+const PILL_SHIFTED_AT = 0.75;
+
 // Height of an element, live. Used for the two boxes the phone home has to fit around
 // each other. Returns 0 where there is no layout (jsdom) or while disabled, and the
-// callers fall back to the desktop constants in that case.
-function useLiveHeight(ref: React.RefObject<HTMLElement>, enabled: boolean): number {
+// callers fall back to the desktop constants in that case. While `frozen` it keeps the
+// last height it read: the portrait pill changes shape on its way to the map, and the
+// home it was measured for is not on screen then.
+function useLiveHeight(ref: React.RefObject<HTMLElement>, enabled: boolean, frozen = false): number {
   const [height, setHeight] = useState(0);
   useLayoutEffect(() => {
     const el = ref.current;
@@ -102,14 +121,47 @@ function useLiveHeight(ref: React.RefObject<HTMLElement>, enabled: boolean): num
       setHeight(0);
       return;
     }
+    if (frozen) return;
     const read = () => setHeight(el.offsetHeight);
     read();
     if (typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(read);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [ref, enabled]);
+  }, [ref, enabled, frozen]);
   return height;
+}
+
+// How far down the map the portrait phone's floating chrome reaches, in px: the bottom of
+// the chip row measured from the top of the map pane, plus 8px of air. This is the map's
+// topInset and the top of the results sheet's frame. 0 without layout (jsdom) or off that
+// layout. The row's box keeps its place while navigation hides it, so the number does
+// not move when a ride starts.
+function useChromeInset(
+  chrome: React.RefObject<HTMLElement>,
+  pane: React.RefObject<HTMLElement>,
+  enabled: boolean,
+): number {
+  const [inset, setInset] = useState(0);
+  useLayoutEffect(() => {
+    const el = chrome.current;
+    const map = pane.current;
+    if (!enabled || !el || !map) {
+      setInset(0);
+      return;
+    }
+    const read = () => {
+      const row = el.getBoundingClientRect();
+      setInset(row.height > 0 ? Math.round(row.bottom - map.getBoundingClientRect().top + 8) : 0);
+    };
+    read();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    ro.observe(map);
+    return () => ro.disconnect();
+  }, [chrome, pane, enabled]);
+  return inset;
 }
 
 const POPULAR: PopularTrip[] = [
@@ -645,9 +697,17 @@ export default function App() {
   // Portrait phone: the results live in a sheet over a full-screen map. A phone on its
   // side is wider than md and keeps the side-by-side panes.
   const sheetLayout = isPhone && !landscapePhone;
+  // Navigation takes the top of a portrait phone's map for its banner: the floating
+  // pill, chips and back button step aside, and nothing up there but the banner's Exit
+  // takes a touch.
+  const navChromeHidden = sheetLayout && navigating;
   const [detent, setDetent] = useState<Detent>("half");
   // The visible height of the sheet once it has settled, for the map's bottom padding.
   const [sheetInset, setSheetInset] = useState(0);
+  // The floating chrome over the top of a portrait phone's map, for the map's top padding.
+  const mapChromeRef = useRef<HTMLDivElement>(null);
+  const mapMainRef = useRef<HTMLElement>(null);
+  const topInset = useChromeInset(mapChromeRef, mapMainRef, sheetLayout);
   // A new search opens at half height; navigation drops the sheet to its peek.
   useEffect(() => {
     setDetent("half");
@@ -658,7 +718,7 @@ export default function App() {
   const heroRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLDivElement>(null);
   const heroHeight = useLiveHeight(heroRef, isPhone);
-  const pillHeight = useLiveHeight(pillRef, isPhone);
+  const pillHeight = useLiveHeight(pillRef, isPhone, sheetLayout && !homeLive);
   // On a phone the pill rests just under the hero instead of at a fixed 260px. At 260
   // it covered the last line of the subtitle on every portrait phone (23px of a 24px
   // line), and a tap aimed at the end of that sentence landed in the To field.
@@ -666,12 +726,21 @@ export default function App() {
   // Every number here is an offset inside the pill's own containing block, whose top is
   // env(safe-area-inset-top) — so 60 means "60px below the notch", not 60px below the
   // physical edge, and the header (3.5rem + the same inset) is cleared on any phone.
-  // 3 centres the 50px landscape pill in its 56px header.
+  // 3 centres the 50px landscape pill in its 56px header. A portrait phone has no header
+  // on the map stage: the pill rests in the floating row beside the back button.
   const searchY = useTransform(
     progress,
     [0, 1],
-    [pillTop, wideChrome ? 9 : landscapePhone ? 3 : shortChrome ? 52 : 60],
+    [pillTop, sheetLayout ? MAP_ROW_Y : wideChrome ? 9 : landscapePhone ? 3 : shortChrome ? 52 : 60],
   );
+  // The rest of the portrait pill's flight, after the home has faded: it moves right to
+  // clear the back button and slims to that button's height. Both reach the pill as CSS
+  // custom properties that only the portrait class list reads. framer leaves a motion
+  // value it was given on the element when the key is later dropped, so a margin or a
+  // padding written directly stayed on the pill after the phone turned on its side and
+  // pushed the landscape pill 56px into the menu; an unread custom property does nothing.
+  const pillShift = useTransform(progress, [HOME_FADED_AT, PILL_SHIFTED_AT], ["0px", `${MAP_PILL_SHIFT}px`]);
+  const pillPad = useTransform(progress, [HOME_FADED_AT, 1], [`${HOME_PILL_PAD}px`, `${MAP_PILL_PAD}px`]);
   // The hole the home's scroller leaves for the pill.
   const pillSlot =
     pillHeight > 0 ? HOME_PILL_GAP + pillHeight + HOME_PILL_CLEAR : HOME_PILL_GAP + 58 + HOME_PILL_CLEAR;
@@ -801,10 +870,79 @@ export default function App() {
       {attribution}
     </>
   );
+  // The back arrow. Inline SVG, not the icon font: that subset is frozen and a glyph
+  // missing from it paints as the word "ARROW_BACK" across the bar.
+  const backArrow = (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-6 w-6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M19 12H5" />
+      <path d="M12 19l-7-7 7-7" />
+    </svg>
+  );
+  const filterBar = (
+    <FilterBar
+      count={count}
+      // A full sheet already covers the map, so on the sheet layout "Hide map"
+      // takes the sheet to full and back.
+      hideMap={sheetLayout ? detent === "full" : hideMap}
+      onToggleMap={sheetLayout ? () => setDetent((d) => (d === "full" ? "half" : "full")) : () => setHideMap((v) => !v)}
+      hideMapDisabled={navigating}
+      armed={armed}
+      onArm={armPick}
+      radar={radar}
+      onToggleRadar={() => setRadar((r) => !r)}
+      kinds={kinds}
+      onToggleKind={(m) => setKinds((s) => ({ ...s, [m]: !s[m] }))}
+      phone={isPhone}
+      compact={landscapePhone}
+      floating={sheetLayout}
+    />
+  );
+  // The place card, lifted above a results sheet. On a portrait phone it lives in the
+  // sheet's frame rather than over the map, which clips it at the chrome when a full sheet
+  // lifts it that far (see the sheet layout below).
+  const placeCard = (
+    <AnimatePresence>
+      {placeInfo && (
+        <PlaceInfoCard
+          key="place-info"
+          place={placeInfo}
+          saved={isSaved(placeInfo.lat, placeInfo.lon)}
+          onToggleSave={() =>
+            toggleSaved({
+              name: placeInfo.name,
+              label: placeInfo.address ?? placeInfo.name,
+              lat: placeInfo.lat,
+              lon: placeInfo.lon,
+            })
+          }
+          onDirections={infoDirections}
+          bottomInset={sheetLayout ? sheetInset : 0}
+          onClose={() => {
+            placeSeq.current++;
+            setPlaceInfo(null);
+          }}
+        />
+      )}
+    </AnimatePresence>
+  );
   const mapPane = (
     <>
+      {/* On a portrait phone everything pinned to the top of the map starts under the
+          floating chrome (topInset), not under the map's own edge. */}
       {armed && (
-        <div className="absolute left-3 top-3 z-[1000] rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow dark:bg-night-accent dark:text-night-bg">
+        <div
+          className="absolute left-3 top-3 z-[1000] rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow dark:bg-night-accent dark:text-night-bg"
+          style={sheetLayout ? { top: 12 + topInset } : undefined}
+        >
           {armed === "start" ? t("clickMapSetStart") : t("clickMapSetEnd")}
         </div>
       )}
@@ -839,6 +977,8 @@ export default function App() {
           liveFix={fix}
           navigating={navigating}
           bottomInset={sheetLayout ? sheetInset : 0}
+          topInset={sheetLayout ? topInset : 0}
+          zoomControl={!sheetLayout}
         />
       </Suspense>
       )}
@@ -854,37 +994,22 @@ export default function App() {
             remaining={navProgress.remaining}
             etaMinutes={etaMinutes}
             onExit={() => setNavigating(false)}
+            fullBleed={sheetLayout}
           />
         )}
       </AnimatePresence>
+      {/* Under the banner. On a portrait phone the banner starts 8px under the status bar
+          and ends above topInset (which the hidden chip row still holds), so 12px under
+          topInset is the line under it there. */}
       {farFromRoute && (
-        <div className="absolute left-3 top-24 z-[1000] rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-amber-700 shadow dark:bg-night-surface/95 dark:text-amber-300">
+        <div
+          className="absolute left-3 top-24 z-[1000] rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-amber-700 shadow dark:bg-night-surface/95 dark:text-amber-300"
+          style={sheetLayout ? { top: 12 + topInset } : undefined}
+        >
           {t("farFromRoute")}
         </div>
       )}
-      <AnimatePresence>
-        {placeInfo && (
-          <PlaceInfoCard
-            key="place-info"
-            place={placeInfo}
-            saved={isSaved(placeInfo.lat, placeInfo.lon)}
-            onToggleSave={() =>
-              toggleSaved({
-                name: placeInfo.name,
-                label: placeInfo.address ?? placeInfo.name,
-                lat: placeInfo.lat,
-                lon: placeInfo.lon,
-              })
-            }
-            onDirections={infoDirections}
-            bottomInset={sheetLayout ? sheetInset : 0}
-            onClose={() => {
-              placeSeq.current++;
-              setPlaceInfo(null);
-            }}
-          />
-        )}
-      </AnimatePresence>
+      {!sheetLayout && placeCard}
     </>
   );
 
@@ -932,36 +1057,39 @@ export default function App() {
             leaving the map and the advice two thirds of the screen. With the pill inside
             the header on that layout there is nothing under the bar to clear any more,
             so the headroom is the 56px bar plus 8px of air, and the whole stack above
-            the content comes to 120px of 390 (30.8%). Every other tier is unchanged. */}
+            the content comes to 120px of 390 (30.8%). A portrait phone has no headroom at
+            all: its map runs to the top of the screen, under the status bar, and the
+            chrome floats over it. Every other tier is unchanged. */}
         <motion.div
           data-fov="map-stage"
           className={`absolute inset-0 z-0 flex flex-col bg-white pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] dark:bg-night-bg ${
             landscapePhone
               ? "pt-[calc(4rem+env(safe-area-inset-top))]"
-              : "pt-[calc(8.25rem+env(safe-area-inset-top))] [@media(max-height:500px)]:pt-[calc(6rem+env(safe-area-inset-top))] lg:pt-[calc(6rem+env(safe-area-inset-top))]"
-          }`}
+              : sheetLayout
+                ? ""
+                : "pt-[calc(8.25rem+env(safe-area-inset-top))] [@media(max-height:500px)]:pt-[calc(6rem+env(safe-area-inset-top))] lg:pt-[calc(6rem+env(safe-area-inset-top))]"
+          }`.trimEnd()}
           style={{ opacity: mapOpacity, pointerEvents: progressIs1 && !searchBlocking && !tabCovering ? "auto" : "none" }}
           {...inertUnless(progressIs1 && !searchBlocking && !tabCovering)}
           {...behindSheet}
         >
-          <div className="px-4 md:px-6">
-            <FilterBar
-              count={count}
-              // A full sheet already covers the map, so on the sheet layout "Hide map"
-              // takes the sheet to full and back.
-              hideMap={sheetLayout ? detent === "full" : hideMap}
-              onToggleMap={sheetLayout ? () => setDetent((d) => (d === "full" ? "half" : "full")) : () => setHideMap((v) => !v)}
-              hideMapDisabled={navigating}
-              armed={armed}
-              onArm={armPick}
-              radar={radar}
-              onToggleRadar={() => setRadar((r) => !r)}
-              kinds={kinds}
-              onToggleKind={(m) => setKinds((s) => ({ ...s, [m]: !s[m] }))}
-              phone={isPhone}
-              compact={landscapePhone}
-            />
-          </div>
+          {/* On a portrait phone the chips float over the map in a row of their own,
+              under the pill, and the row's box takes no touches: only the chips do. It is
+              a layer over the map pane, not part of it, at the filter popups' own z: the
+              panel it opens has to clear a full sheet, which is z-[1100]. */}
+          {sheetLayout ? (
+            <div
+              ref={mapChromeRef}
+              data-fov="map-chrome"
+              className="pointer-events-none absolute inset-x-0 top-[calc(4rem+env(safe-area-inset-top))] z-[1150] pl-[calc(0.75rem+env(safe-area-inset-left))] pr-[calc(0.75rem+env(safe-area-inset-right))] transition-opacity"
+              style={{ opacity: navChromeHidden ? 0 : 1 }}
+              {...inertUnless(!navChromeHidden)}
+            >
+              {filterBar}
+            </div>
+          ) : (
+            <div className="px-4 md:px-6">{filterBar}</div>
+          )}
           {/* Below md the two panes stack, map first (Maps-style: map on top, results
               scrolling under it); from md up they sit side by side, results left. On a
               portrait phone the map fills the stage and the results are a sheet over it. */}
@@ -969,6 +1097,7 @@ export default function App() {
               scrolls to the anchor but focus stays where it was and the next Tab
               starts again from the top. */}
           <main
+            ref={mapMainRef}
             id="fov-map-main"
             tabIndex={-1}
             className={
@@ -986,9 +1115,22 @@ export default function App() {
             {sheetLayout ? (
               <>
                 <section className="absolute inset-0">{mapPane}</section>
-                <ResultsSheet detent={detent} onDetent={setDetent} onSettle={setSheetInset}>
-                  {resultsBody}
-                </ResultsSheet>
+                {/* The sheet's frame: the part of the map under the floating chrome, so the
+                    full detent stops under the chips rather than under the pill. Half and
+                    peek are measured from the screen and do not move. The frame takes no
+                    touches, only the sheet and the place card in it do, and it clips what
+                    it holds: a full sheet lifts the place card by its own height, which
+                    would otherwise carry the card up under the pill. */}
+                <div
+                  data-fov="sheet-frame"
+                  className="pointer-events-none absolute inset-x-0 bottom-0 overflow-hidden [&>*]:pointer-events-auto"
+                  style={{ top: topInset }}
+                >
+                  {placeCard}
+                  <ResultsSheet detent={detent} onDetent={setDetent} onSettle={setSheetInset}>
+                    {resultsBody}
+                  </ResultsSheet>
+                </div>
               </>
             ) : (
               <>
@@ -1204,8 +1346,13 @@ export default function App() {
             the dropdown's z-50 finally outranks it. The home stage (z-10) now paints over
             the header, which is inert: the two never share a visible moment (homeOpacity
             hits 0 at progress 0.5, chromeOpacity only leaves 0 from there on). */}
+        {/* On a portrait phone there is no bar: what is left of the header is the round
+            back button, floating over the map at the start of the pill's row. */}
         <motion.header
-          className={`absolute inset-x-0 top-0 flex items-center justify-between border-b border-gray-100 bg-white/95 pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] dark:border-night-rim/20 dark:bg-night-bg/95 sm:pl-[calc(1.5rem+env(safe-area-inset-left))] sm:pr-[calc(1.5rem+env(safe-area-inset-right))] ${
+          className={
+            sheetLayout
+              ? "absolute left-[calc(0.75rem+env(safe-area-inset-left))] top-[calc(0.5rem+env(safe-area-inset-top))]"
+              : `absolute inset-x-0 top-0 flex items-center justify-between border-b border-gray-100 bg-white/95 pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] dark:border-night-rim/20 dark:bg-night-bg/95 sm:pl-[calc(1.5rem+env(safe-area-inset-left))] sm:pr-[calc(1.5rem+env(safe-area-inset-right))] ${
             // Decided in JS rather than by a media variant: the short tier has to beat
             // `lg` on a wide short window, and which of two arbitrary variants wins is
             // a question about the generated stylesheet's order, not about the design.
@@ -1216,59 +1363,65 @@ export default function App() {
               : shortChrome
                 ? "h-[calc(3rem+env(safe-area-inset-top))]"
                 : "h-[calc(3.5rem+env(safe-area-inset-top))] lg:h-[calc(5rem+env(safe-area-inset-top))]"
-          }`}
-          style={{ opacity: chromeOpacity, pointerEvents: progressIs1 && !searchBlocking && !tabCovering ? "auto" : "none" }}
-          {...inertUnless(progressIs1 && !searchBlocking && !tabCovering)}
+          }`
+          }
+          style={{
+            opacity: chromeOpacity,
+            pointerEvents: progressIs1 && !searchBlocking && !tabCovering && !navChromeHidden ? "auto" : "none",
+          }}
+          {...inertUnless(progressIs1 && !searchBlocking && !tabCovering && !navChromeHidden)}
           {...behindSheet}
         >
-          <div className="flex min-w-0 items-center gap-1">
-            {/* Getting off the map. On a phone the only way back used to be the wordmark,
-                which is a 5px-tall word in the corner reading as branding rather than as
-                a control, and nothing else on the stage said the home was still there.
-                This is the arrow every map app puts in that corner. It walks back to the
-                stage the user came from and leaves the trip alone; the wordmark next to
-                it still means "home, and start again".
-                The arrow is inline SVG, not the icon font: that subset is frozen and a
-                glyph missing from it paints as the word "ARROW_BACK" across the bar. */}
-            {isPhone && (
-              <button
-                type="button"
-                data-fov="map-back"
-                aria-label={t("backToHome")}
-                onClick={toHome}
-                className="-ml-2 flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 dark:text-night-muted dark:hover:bg-night-hover"
-              >
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  className="h-6 w-6"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M19 12H5" />
-                  <path d="M12 19l-7-7 7-7" />
-                </svg>
-              </button>
-            )}
+          {sheetLayout ? (
             <button
-              onClick={goHome}
-              className="flex min-h-[44px] items-center truncate text-xl font-bold text-brand dark:text-night-accent"
+              type="button"
+              data-fov="map-back"
+              aria-label={t("backToHome")}
+              onClick={toHome}
+              className={`flex h-12 w-12 items-center justify-center rounded-full border border-transparent bg-white text-slate-700 shadow-md transition hover:bg-slate-50 dark:border-night-rim/30 dark:bg-night-raised dark:text-night-text dark:hover:bg-night-hover ${
+                navChromeHidden ? "opacity-0" : ""
+              }`.trimEnd()}
             >
-              Fiets of OV
+              {backArrow}
             </button>
-          </div>
-          {/* On a phone the menu's contents live in the Profile tab. */}
-          {!isPhone && (
-            <HeaderMenu
-              onClearRecents={clearRecents}
-              onClearSaved={clearSaved}
-              onOpenPrivacy={() => setPrivacyOpen(true)}
-              dark={dark}
-              onToggleTheme={toggleTheme}
-            />
+          ) : (
+            <>
+              <div className="flex min-w-0 items-center gap-1">
+                {/* Getting off the map. On a phone the only way back used to be the wordmark,
+                    which is a 5px-tall word in the corner reading as branding rather than as
+                    a control, and nothing else on the stage said the home was still there.
+                    This is the arrow every map app puts in that corner. It walks back to the
+                    stage the user came from and leaves the trip alone; the wordmark next to
+                    it still means "home, and start again". */}
+                {isPhone && (
+                  <button
+                    type="button"
+                    data-fov="map-back"
+                    aria-label={t("backToHome")}
+                    onClick={toHome}
+                    className="-ml-2 flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 dark:text-night-muted dark:hover:bg-night-hover"
+                  >
+                    {backArrow}
+                  </button>
+                )}
+                <button
+                  onClick={goHome}
+                  className="flex min-h-[44px] items-center truncate text-xl font-bold text-brand dark:text-night-accent"
+                >
+                  Fiets of OV
+                </button>
+              </div>
+              {/* On a phone the menu's contents live in the Profile tab. */}
+              {!isPhone && (
+                <HeaderMenu
+                  onClearRecents={clearRecents}
+                  onClearSaved={clearSaved}
+                  onOpenPrivacy={() => setPrivacyOpen(true)}
+                  dark={dark}
+                  onToggleTheme={toggleTheme}
+                />
+              )}
+            </>
           )}
         </motion.header>
 
@@ -1282,7 +1435,9 @@ export default function App() {
 
             Portrait and desktop: 12px in from each edge plus whatever the device's own
             left/right inset is, centred, capped at max-w-2xl — identical geometry to the
-            `w-[calc(100%-1.5rem)]` it replaces whenever the insets are 0.
+            `w-[calc(100%-1.5rem)]` it replaces whenever the insets are 0. On a portrait
+            phone's map stage a left margin (pillShift) takes the left edge past the
+            floating back button.
 
             Landscape phone: the pill is in the header row, so it stops short of the
             wordmark on its left (which ends at 166px) and the menu on its right (which
@@ -1292,18 +1447,31 @@ export default function App() {
           role="search"
           data-fov="search-pill"
           data-rest-y={pillTop}
-          className={`absolute top-[env(safe-area-inset-top)] z-30 mx-auto flex w-auto items-center gap-0.5 rounded-full border border-gray-200 bg-white shadow-md dark:border-night-border dark:bg-night-surface sm:gap-2 ${
+          className={`absolute top-[env(safe-area-inset-top)] z-30 ${
+            sheetLayout ? "" : "mx-auto "
+          }flex w-auto items-center gap-0.5 rounded-full border border-gray-200 bg-white shadow-md dark:border-night-border dark:bg-night-surface sm:gap-2 ${
             landscapePhone
               ? "left-[calc(11rem+env(safe-area-inset-left))] right-[calc(7.5rem+env(safe-area-inset-right))] max-w-none p-0.5"
-              : `left-[calc(0.75rem+env(safe-area-inset-left))] right-[calc(0.75rem+env(safe-area-inset-right))] max-w-2xl xl:max-w-3xl ${
-                  shortChrome ? "p-1" : "p-1.5 sm:p-2"
-                }`
+              : sheetLayout
+                ? "left-[calc(0.75rem+env(safe-area-inset-left))] right-[calc(0.75rem+env(safe-area-inset-right))] ml-[var(--pill-shift)] p-[var(--pill-pad)] transition-opacity"
+                : `left-[calc(0.75rem+env(safe-area-inset-left))] right-[calc(0.75rem+env(safe-area-inset-right))] max-w-2xl xl:max-w-3xl ${
+                    shortChrome ? "p-1" : "p-1.5 sm:p-2"
+                  }`
           }`}
-          style={{ y: searchY, pointerEvents: searchBlocking || tabCovering ? "none" : "auto" }}
+          style={{
+            y: searchY,
+            // The portrait pill's flight into the floating row beside the back button,
+            // and its step aside for the navigation banner. Nothing here on any other
+            // layout, whose pill keeps its shape all the way.
+            ...(sheetLayout
+              ? { "--pill-shift": pillShift, "--pill-pad": pillPad, opacity: navChromeHidden ? 0 : 1 }
+              : {}),
+            pointerEvents: searchBlocking || tabCovering || navChromeHidden ? "none" : "auto",
+          }}
           // The pill opened the sheet, so it is behind it now — including for the focus
           // ring, which is why inert leaves before the close handler puts focus back on
           // the trigger (React commits the DOM, then runs the effect).
-          {...inertUnless(!searchBlocking && !tabCovering)}
+          {...inertUnless(!searchBlocking && !tabCovering && !navChromeHidden)}
           {...behindSheet}
         >
           {isPhone ? (

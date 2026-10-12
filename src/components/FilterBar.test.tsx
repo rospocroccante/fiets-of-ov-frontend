@@ -225,3 +225,32 @@ test("mode chips are real filters: pressed state reflects kinds, click toggles",
   fireEvent.click(screen.getByRole("button", { name: "Transit" }));
   expect(toggled).toEqual(["transit"]);
 });
+
+test("floating over a full-bleed map, every chip carries its own shadow and the row no background", () => {
+  // The portrait phone's map stage: the chips sit over the map in a row of their own,
+  // like Google Maps' category chips. The row is as wide as its chips, so the map beside
+  // them still takes a touch, and "Map" closes it.
+  renderBar({ phone: true, floating: true });
+  const bar = document.querySelector('[data-fov="filter-bar"]') as HTMLElement;
+  expect(bar).toHaveClass("w-fit", "max-w-full", "pointer-events-auto");
+  expect(bar.className).not.toMatch(/(^|\s)(bg-|py-|border)/);
+  const buttons = [...bar.querySelectorAll("button")];
+  expect(buttons[buttons.length - 1]).toHaveAttribute("data-fov", "filter-more");
+  for (const b of buttons) {
+    expect(b).toHaveClass("shadow-md", "min-h-[44px]");
+  }
+  // Unpressed chips get a surface of their own, opaque in both themes.
+  const more = screen.getByRole("button", { name: /map options/i });
+  expect(more).toHaveClass("bg-white", "dark:bg-night-surface");
+  // The chips still scroll sideways when they do not fit, with no scrollbar drawn.
+  const scroller = bar.querySelector('[data-fov="filter-scroller"]') as HTMLElement;
+  expect(scroller).toHaveClass("overflow-x-auto", "[scrollbar-width:none]", "[&::-webkit-scrollbar]:hidden");
+});
+
+test("in flow the phone bar keeps its padding and its full-width row", () => {
+  renderBar({ phone: true });
+  const bar = document.querySelector('[data-fov="filter-bar"]') as HTMLElement;
+  expect(bar).toHaveClass("py-3");
+  expect(bar).not.toHaveClass("w-fit");
+  for (const b of bar.querySelectorAll("button")) expect(b).not.toHaveClass("shadow-md");
+});
