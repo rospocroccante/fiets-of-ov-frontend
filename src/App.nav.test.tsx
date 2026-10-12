@@ -115,12 +115,12 @@ test("Profile holds the theme, and System is the first-visit choice", () => {
   expect(within(group).getByRole("button", { name: "System" })).toHaveAttribute("aria-pressed", "true");
 });
 
-test("on a portrait phone a plan lands in the sheet at half height", async () => {
+test("on a portrait phone a plan lands in the sheet, collapsed on its summary", async () => {
   renderApp();
   fireEvent.click(screen.getAllByRole("button", { name: /Amsterdam Centraal/ })[0]);
   await morphTo(1);
   const sheet = await screen.findByRole("region", { name: "Trip results" });
-  expect(sheet).toHaveAttribute("data-detent", "half");
+  expect(sheet).toHaveAttribute("data-detent", "peek");
   expect(document.querySelector('[data-fov="results-column"]')).toBeNull();
   await waitFor(() => expect(within(sheet).getByRole("list", { name: /travel options/i })).toBeInTheDocument());
 });
@@ -133,6 +133,9 @@ test("Back from a full sheet drops it to half, the next Back goes home", async (
   fireEvent.click(screen.getAllByRole("button", { name: /Amsterdam Centraal/ })[0]);
   await morphTo(1);
   const sheet = await screen.findByRole("region", { name: "Trip results" });
+  // Collapsed after the plan: one tap on the handle opens half, the next full.
+  fireEvent.click(within(sheet).getByRole("button", { name: "Expand results" }));
+  expect(sheet).toHaveAttribute("data-detent", "half");
   fireEvent.click(within(sheet).getByRole("button", { name: "Expand results" }));
   expect(sheet).toHaveAttribute("data-detent", "full");
   await pressBack();

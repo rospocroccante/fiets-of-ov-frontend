@@ -702,16 +702,20 @@ export default function App() {
   // pill, chips and back button step aside, and nothing up there but the banner's Exit
   // takes a touch.
   const navChromeHidden = sheetLayout && navigating;
-  const [detent, setDetent] = useState<Detent>("half");
+  // The sheet is there once there is a trip: planning, planned or failed. With no trip
+  // there is nothing to say, and no sheet.
+  const sheetShown = sheetLayout && panel.status !== "idle";
+  const [detent, setDetent] = useState<Detent>("peek");
   // The visible height of the sheet once it has settled, for the map's bottom padding.
   const [sheetInset, setSheetInset] = useState(0);
   // The floating chrome over the top of a portrait phone's map, for the map's top padding.
   const mapChromeRef = useRef<HTMLDivElement>(null);
   const mapMainRef = useRef<HTMLElement>(null);
   const topInset = useChromeInset(mapChromeRef, mapMainRef, sheetLayout);
-  // A new search opens at half height; navigation drops the sheet to its peek.
+  // A new search lands collapsed, on the summary, so the map and the route stay the
+  // screen; navigation drops the sheet to its peek as well.
   useEffect(() => {
-    setDetent("half");
+    setDetent("peek");
   }, [search]);
   useEffect(() => {
     if (navigating) setDetent("peek");
@@ -803,7 +807,7 @@ export default function App() {
   // The order of these calls matters: `map` before `sheet-full`, so a stack built in one
   // render matches the order the user sees.
   useNavLayer(nav, "map", mapOpen);
-  useNavLayer(nav, "sheet-full", sheetLayout && mapOpen && detent === "full");
+  useNavLayer(nav, "sheet-full", sheetShown && mapOpen && detent === "full");
   useNavLayer(nav, "place", placeInfo !== null);
   useNavLayer(nav, "search", isPhone && searchOpen);
   useNavLayer(nav, "privacy", privacyOpen);
@@ -852,14 +856,17 @@ export default function App() {
   // or not the map is showing. Open-Meteo's CC BY 4.0 terms ask for a link next to where
   // its data is shown, and the forecast strip is at the top of this column.
   const attribution = <AdviceAttribution />;
-  // In the sheet the advice comes first and the strip follows it, so the peek shows the
-  // start of the advice rather than the forecast.
+  // In the sheet the content is the options, then the forecast and the credits under
+  // them, and only once there are options to show. A plan on its way, a plan that failed
+  // and a filter that hides every option are the summary header alone, which says so.
   const resultsBody = sheetLayout ? (
-    <>
-      {resultsPanel}
-      {weatherStrip}
-      {attribution}
-    </>
+    panel.status === "ready" && panel.view.options.length > 0 ? (
+      <>
+        {resultsPanel}
+        {weatherStrip}
+        {attribution}
+      </>
+    ) : null
   ) : (
     <>
       {weatherStrip}
@@ -891,7 +898,8 @@ export default function App() {
       // takes the sheet to full and back.
       hideMap={sheetLayout ? detent === "full" : hideMap}
       onToggleMap={sheetLayout ? () => setDetent((d) => (d === "full" ? "half" : "full")) : () => setHideMap((v) => !v)}
-      hideMapDisabled={navigating}
+      // With no trip on a portrait phone there is no sheet for "Hide map" to raise.
+      hideMapDisabled={navigating || (sheetLayout && !sheetShown)}
       armed={armed}
       onArm={armPick}
       radar={radar}
@@ -922,7 +930,7 @@ export default function App() {
             })
           }
           onDirections={infoDirections}
-          bottomInset={sheetLayout ? sheetInset : 0}
+          bottomInset={sheetShown ? sheetInset : 0}
           onClose={() => {
             placeSeq.current++;
             setPlaceInfo(null);
@@ -973,7 +981,7 @@ export default function App() {
           dark={dark}
           liveFix={fix}
           navigating={navigating}
-          bottomInset={sheetLayout ? sheetInset : 0}
+          bottomInset={sheetShown ? sheetInset : 0}
           topInset={sheetLayout ? topInset : 0}
           zoomControl={!sheetLayout}
         />
@@ -1124,14 +1132,24 @@ export default function App() {
                   style={{ top: topInset }}
                 >
                   {placeCard}
-                  <ResultsSheet
-                    detent={detent}
-                    onDetent={setDetent}
-                    onSettle={setSheetInset}
-                    header={<SheetSummary state={panel} onStartNav={startNav} onRetry={submitted} />}
-                  >
-                    {resultsBody}
-                  </ResultsSheet>
+                  {sheetShown && (
+                    <ResultsSheet
+                      detent={detent}
+                      onDetent={setDetent}
+                      onSettle={setSheetInset}
+                      header={
+                        // No Start while a ride is on: the banner's Exit is the control
+                        // then. Try again is a new submit of the same trip.
+                        <SheetSummary
+                          state={panel}
+                          onStartNav={navigating ? undefined : startNav}
+                          onRetry={submitted}
+                        />
+                      }
+                    >
+                      {resultsBody}
+                    </ResultsSheet>
+                  )}
                 </div>
               </>
             ) : (

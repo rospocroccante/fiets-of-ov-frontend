@@ -650,10 +650,12 @@ test("on a portrait phone the map runs to the top of the screen under floating c
     expect(pill.style.getPropertyValue("--pill-shift")).toBe("0px");
     expect(pill.style.getPropertyValue("--pill-pad")).toBe("6px");
     await morphTo(1);
-    // The sheet's parent starts under that row (0 in jsdom, which has no layout), so the
-    // full detent reaches the chips and not the pill.
-    const frame = document.querySelector('[data-fov="results-sheet"]')!.parentElement as HTMLElement;
-    expect(frame).toHaveAttribute("data-fov", "sheet-frame");
+    // The sheet's frame starts under that row (0 in jsdom, which has no layout), so the
+    // full detent reaches the chips and not the pill. With no trip there is no sheet in
+    // it yet, but the frame is there: the place card lives in it.
+    const frame = document.querySelector('[data-fov="sheet-frame"]') as HTMLElement;
+    expect(frame).not.toBeNull();
+    expect(document.querySelector('[data-fov="results-sheet"]')).toBeNull();
     expect(frame.style.top).toBe("0px");
   } finally {
     Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
