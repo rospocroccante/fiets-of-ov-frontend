@@ -50,19 +50,33 @@ distance — with Centraal Station 43 m away you'll see it first, platforms and 
 
 Create an account (email + password) and save a recurring trip — label, endpoints,
 departure time, weekdays. The service then watches the forecast for that exact trip
-and warns you before you leave whether today is a bike day. Manage alerts from the
-account menu.
+and warns you before you leave whether today is a bike day. The service already
+supports this; signing in from the app arrives with accounts.
 
 ## The interface
 
 - **Dark theme — blue & white.** The night look is the daytime look inverted: deep
   canal-water navy surfaces with white text, the exact mirror of the light theme's
-  navy-on-white. It follows your system preference, or toggle it from the header.
+  navy-on-white. It follows your system setting until you choose one: under Profile on
+  a phone, or with the theme switch on a larger screen.
   Both themes hold WCAG AA/AAA contrast throughout.
 - **Phone-first.** Every control meets the 44 px touch floor; the home screen morphs
   into the map as you scroll, and search arrives as its own sheet.
 - **Keyboard and screen-reader friendly.** Focus is always visible, including on the
   dark theme.
+
+## On a phone
+
+Three tabs run along the bottom of the screen. Plan is the home screen and the map.
+Saved lists every place you have starred and every recent trip: tap one to plan it, and
+swipe a place to the left (or tap Edit) to delete it, with five seconds to undo. Profile
+holds the theme (Light, Dark or System), the language, the privacy notice and the
+buttons that clear what the app keeps on your phone.
+
+Trip results open in a sheet over the map. Drag it up for the whole list, or down to see
+more of the map. The phone's Back button closes whatever is on top, one layer at a time:
+the search screen, a place card, a sheet pulled up to full height, then the map. On the
+Plan home, Back leaves the app.
 
 ---
 

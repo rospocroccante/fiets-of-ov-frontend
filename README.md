@@ -5,7 +5,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)
 ![Tailwind](https://img.shields.io/badge/Tailwind-3-38BDF8?logo=tailwindcss&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-359%20passing-brightgreen?logo=vitest&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-559%20passing-brightgreen?logo=vitest&logoColor=white)
 ![PWA](https://img.shields.io/badge/PWA-installable-5A0FC8)
 
 Rain-aware bike vs public-transport advice for Amsterdam. The app routes both

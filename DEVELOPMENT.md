@@ -154,8 +154,9 @@ right. Everything below is verified against a real headless Chromium driven over
 every interactive control and real `Input.dispatchTouchEvent` gestures.
 
 **Viewports checked:** 390×844 (iPhone 12–15) and 360×800 (the common small Android) in
-portrait, plus 844×390 landscape, each on home, mid-morph, the full map stage, with the
-menu open and with the autocomplete open.
+portrait, plus 844×390 landscape, each on home, mid-morph, the full map stage, on the
+tabs and the results sheet, and with the autocomplete open. The header menu, which a
+phone no longer has, is checked at 768×1024 and on an 844×390 window with a mouse.
 
 ### Rules that are easy to break by accident
 
@@ -174,8 +175,8 @@ breakpoint — an iPhone in landscape is 844px wide, past `sm`, and zooms just t
 
 **Fixed chrome pays for `viewport-fit=cover`.** The viewport meta opts into painting
 under the notch and the home indicator, so anything pinned to an edge has to add the
-matching inset: the header, the home's language/theme pills, the map stage and the mock
-badge all use `calc(<base> + env(safe-area-inset-*))`. A new fixed element without one
+matching inset: the header, the map stage, the tab bar, the results sheet's content and
+the mock badge all use `calc(<base> + env(safe-area-inset-*))`. A new fixed element without one
 will sit under the status bar on a modern iPhone.
 
 **The morph geometry is in `dvh`, not `vh`.** On a phone `100vh` is the *large* viewport
@@ -196,6 +197,114 @@ changes on a laptop.
 and differ only in opacity, so the off-screen one is marked `inert` (see `inertUnless` in
 `App.tsx`): without it, Tab walks into invisible controls and a screen reader on the home
 reads out the entire map UI. The `main` landmark moves with the visible stage.
+
+### The phone shell: tabs, Back and the results sheet
+
+On a phone (`isPhone` in `App.tsx`) the app has a tab bar with three tabs, Plan, Saved and
+Profile, and the results of a plan open in a sheet over a full-screen map. The header
+menu and the home's language and theme pills exist only on wider screens. On a phone
+their contents are the Profile tab.
+
+#### Layers
+
+Everything that can cover something else has a place in one order. A new overlay takes a
+slot from this table instead of a number of its own.
+
+| Layer | z-index | Mounted in |
+| --- | --- | --- |
+| Map stage, home stage | `z-0`, `z-10` | the sticky morph box |
+| Map overlays: chips, place card, navigation banner | `z-[1000]` | the map pane |
+| Results sheet | `z-[1100]` | the map stage's `main`, portrait phone only |
+| Filter popups | `z-[1150]`, `z-[1200]` | the filter bar |
+| Saved and Profile screens | `z-[1400]` | `App`, outside both stages |
+| Tab bar | `z-[1800]` | `App`, outside both stages |
+| Mock badge on a phone | `z-[1850]` | `App`, outside both stages |
+| Undo snackbar | `z-[1900]` | the Saved screen |
+| Search screen, privacy notice | `z-[2000]` | `App`, outside both stages |
+| Skip link | `z-[3000]` | the top of `App` |
+
+#### Tab bar
+
+`TabBar` is mounted outside both morph stages: a tab screen makes both stages inert, and
+the bar has to stay usable over it. It slides away on the map stage, where the sheet owns
+the bottom edge, during navigation and under the search screen. It is 56px tall (44px and
+icons only on a phone on its side) plus `env(safe-area-inset-bottom)`, and its top rule is
+drawn inside it, so that is its whole height.
+
+The home's scroller ends where the bar starts. Its box has a bottom margin of `TAB_BAR_PX`
+or `TAB_BAR_COMPACT_PX` above the stage's own safe-area padding. Padding only the content
+left the box running under the bar, and at 844×390 a touch on a popular trip half above
+the bar's edge reached a tab. The margin is dropped during navigation, the one time the
+bar is away while the home is on screen.
+
+Saved and Profile (`TabScreen`) stay mounted while another tab is showing, hidden with
+`visibility: hidden` and `inert`, so each keeps its scroll position. Tapping the tab that
+is already active scrolls its screen to the top.
+
+#### The Back button
+
+`src/hooks/useAppNav.ts` mirrors the app's open layers and its active tab into history
+entries. There is no router and the URL never changes. Opening a layer pushes an entry,
+and so does going from Plan to Saved or Profile; Saved to Profile replaces it. A Back
+press is a `popstate` the hook did not cause, and it closes the layers that the entry it
+lands on does not have, through the `onBack` callback in `App.tsx`.
+
+An in-app close (an X, the back arrow, a scroll from the map back to the home) updates
+the UI at once and then consumes its own entry with a `history.back()` whose `popstate`
+the hook ignores. A push asked for while that step is still travelling waits in a queue
+until it lands. Every entry carries a session id from the page load that wrote it: after a
+reload the hook replaces the current entry with a fresh base, and Back steps over entries
+from the earlier load instead of reopening anything. Forward navigation is not supported,
+and a forward step is undone.
+
+The hook also sets `history.scrollRestoration` to `manual` while it is mounted. The
+document's scroll is the morph, and with the browser's default every step back restored
+the scroll position saved in the entry it landed on: closing the search screen to plan a
+trip put the page back at the top, cancelled the smooth scroll to the map and left the
+app on the home.
+
+To add a layer, add its name to the `Layer` type, close it in the `onBack` callback in
+`App.tsx`, and add one `useNavLayer(nav, "<layer>", isOpen)` line next to the others. The
+order of those lines is the order of the stack when several layers open in one render.
+
+#### Results sheet
+
+`ResultsSheet` rests at three detents, and their numbers live in `src/lib/sheetDetents.ts`.
+Peek is `PEEK_PX` (132px) plus the bottom inset, half is half the window height, and full
+is the whole of the map stage's `main`, just under the filter bar. A new search opens at
+half and navigation drops the sheet to peek. Full pushes the `sheet-full` layer, so Back
+brings it down to half, and "Hide map" in the map tools toggles between full and half on
+this layout. A release faster than `FLICK_PX_PER_S` (500px/s) moves one detent in its
+direction; a slower one snaps to the nearest detent.
+
+Touch goes through native listeners because of the hand-off. Below full every drag moves
+the sheet. At full the content scrolls, and gives the drag back to the sheet only when it
+is at `scrollTop` 0 and the finger moves down. The handle, and the content below full, are
+`touch-action: none`, and Chrome delivers the moves of such a touch with `cancelable`
+false because nothing can scroll under them. The sheet takes those moves anyway. Only in
+the content at full does an uncancellable move mean the browser is scrolling, and there
+the sheet keeps out.
+
+The sheet reports its visible height when it settles (`onSettle`, never per frame), and
+`App` passes it as `bottomInset` to `MapView`, which pads `fitBounds` and lifts its chip
+column by it, and to `PlaceInfoCard`. A phone on its side has no sheet, since one would
+not fit in 390px of height: the results column and the map stay side by side
+(`sheetLayout` is `isPhone && !landscapePhone`).
+
+#### The phone in jsdom
+
+jsdom answers false to every media query, so the unit suite renders the desktop layout
+unless a test asks for a phone. `src/test/phone.ts` holds the helpers. `phoneViewport()`
+makes the width query match, which is a portrait phone, and `phoneViewport({ landscape:
+true })` makes the short-screen queries match instead. `stubHeights` gives the hero and
+the pill real heights, and `morphTo(progress)` parks the morph. Call the function
+`phoneViewport` returns after each test, or the next one inherits a phone.
+
+jsdom drops a Back pressed in the same task as one of the app's own history steps,
+because its `pushState` cancels the traversal still pending. Tests let those steps land
+first (`settle()` in `src/App.nav.test.tsx`). Chrome applies that same-task Back as well,
+and it leaves the app; no finger and no hardware button can produce it, and
+`browser-tests/specs/phone-nav.checks.mjs` covers the Back that a person can press.
 
 ### What the manifest covers
 
