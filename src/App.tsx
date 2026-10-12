@@ -1615,11 +1615,13 @@ export default function App() {
         </>
       )}
 
-      {/* On a phone the badge sits above the tab bar, and over its top edge. */}
+      {/* On a phone the badge sits above the tab bar, and over its top edge, while the
+          bar is on screen. With the bar gone (the map stage, navigation) it drops back to
+          the corner, or it would float over the sheet's advice. */}
       {!isLive() && (
         <div
           className={`pointer-events-none fixed ${
-            isPhone
+            isPhone && !tabBarHidden
               ? "bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-[1850]"
               : "bottom-[calc(0.75rem+env(safe-area-inset-bottom))]"
           } left-[calc(0.75rem+env(safe-area-inset-left))] rounded-full bg-brand px-3 py-1 text-xs text-white`}
