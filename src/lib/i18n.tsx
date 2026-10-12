@@ -332,6 +332,15 @@ const STRINGS = {
   expandResults: { en: "Expand results", nl: "Expand results" },
   collapseResults: { en: "Collapse results", nl: "Collapse results" },
   resultsSheetLabel: { en: "Trip results", nl: "Trip results" },
+  // The phone results sheet's summary header (SheetSummary), while a plan is on its way
+  // and when one fails. The error line stands in for whatever the backend said: a raw
+  // "routing upstream unavailable" tells a rider nothing they can act on.
+  planningTrip: { en: "Planning your trip…", nl: "Planning your trip…" },
+  routesUnavailable: {
+    en: "Routes are unavailable right now. Try again in a moment.",
+    nl: "Routes are unavailable right now. Try again in a moment.",
+  },
+  tryAgain: { en: "Try again", nl: "Try again" },
 } as const;
 
 export type StringKey = keyof typeof STRINGS;

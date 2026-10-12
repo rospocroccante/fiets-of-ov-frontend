@@ -94,3 +94,11 @@ test("the navigation shell's strings exist and fill their placeholders", () => {
   // Unvetted Dutch stays English, never improvised.
   expect(translate("nl", "tabProfile")).toBe("Profile");
 });
+
+test("the phone sheet's summary strings are English in both languages until the Dutch is vetted", () => {
+  for (const lang of ["en", "nl"] as const) {
+    expect(translate(lang, "planningTrip")).toBe("Planning your trip…");
+    expect(translate(lang, "routesUnavailable")).toBe("Routes are unavailable right now. Try again in a moment.");
+    expect(translate(lang, "tryAgain")).toBe("Try again");
+  }
+});

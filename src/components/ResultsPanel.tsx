@@ -38,23 +38,20 @@ function useNow(periodMs: number): number {
   return now;
 }
 
-// `place` is the banner's place in the panel's arrival sequence: first over the
-// options, after the last of them on a phone, where it reads under them.
-function WeatherBanner({ view, place }: { view: PlanView; place: number }) {
+// The weather's verdict on the trip: a tag, and the rain figure beside it when there is
+// one. The advice banner leads with it, and the phone sheet's summary header carries it
+// alone, so both say the same thing in the same words.
+//
+// The tag carries the state. Rain is the one that has to be seen, so it is a solid fill in
+// both themes: amber with dark type by day, and at night geel with navy type, the signage
+// pairing (10.92:1). Dry and unknown are quieter tags in their own hues, and at night they
+// sit one step up the ramp on `raised`, where accent-soft and muted keep pinned floors.
+// Nothing here is translucent accent: accent-deep behind text and geel/NN rims both
+// composited to olive on the navy page.
+export function WeatherVerdict({ view, className = "" }: { view: PlanView; className?: string }) {
   const { t } = useI18n();
-  const { initial, animate } = useMotionPreset(staggered(overlay, place));
   const wet = view.rainExpected === true;
   const unknown = view.rainExpected === null;
-  // No box: a tag, the rain figure beside it, and the advice as a sentence under both.
-  // The rain card this replaces sat in a column already holding the strip box and the
-  // option cards, which made the results a box of boxes.
-  //
-  // The tag carries the state. Rain is the one that has to be seen, so it is a solid
-  // fill in both themes: amber with dark type by day, and at night geel with navy type,
-  // the signage pairing (10.92:1). Dry and unknown are quieter tags in their own hues,
-  // and at night they sit one step up the ramp on `raised`, where accent-soft and muted
-  // keep pinned floors. Nothing here is translucent accent: accent-deep behind text and
-  // geel/NN rims both composited to olive on the navy page.
   const tagTone = wet
     ? "bg-amber-500 text-amber-950 dark:bg-night-accent dark:text-night-bg"
     : unknown
@@ -62,15 +59,27 @@ function WeatherBanner({ view, place }: { view: PlanView; place: number }) {
       : "bg-emerald-100 text-emerald-800 dark:bg-night-raised dark:text-night-accent-soft";
   const tag = wet ? t("rainExpected") : unknown ? t("forecastUnavailable") : t("dry");
   return (
+    <div data-fov="weather-verdict" className={`flex flex-wrap items-center gap-x-2 gap-y-1 ${className}`}>
+      <span className={`rounded-md px-1.5 py-0.5 text-xs font-bold ${tagTone}`}>{tag}</span>
+      {view.maxRain != null && view.maxRain > 0 && (
+        <span className="text-xs font-medium text-slate-600 dark:text-night-muted">
+          {t("upToMmH", { x: view.maxRain })}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// `place` is the banner's place in the panel's arrival sequence: first over the
+// options, after the last of them on a phone, where it reads under them.
+function WeatherBanner({ view, place }: { view: PlanView; place: number }) {
+  const { initial, animate } = useMotionPreset(staggered(overlay, place));
+  // No box: the verdict, and the advice as a sentence under it. The rain card this
+  // replaces sat in a column already holding the strip box and the option cards, which
+  // made the results a box of boxes.
+  return (
     <motion.div data-fov="weather-banner" className="px-3 py-2" initial={initial} animate={animate}>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className={`rounded-md px-1.5 py-0.5 text-xs font-bold ${tagTone}`}>{tag}</span>
-        {view.maxRain != null && view.maxRain > 0 && (
-          <span className="text-xs font-medium text-slate-600 dark:text-night-muted">
-            {t("upToMmH", { x: view.maxRain })}
-          </span>
-        )}
-      </div>
+      <WeatherVerdict view={view} />
       <p className="mt-1.5 text-sm font-medium text-slate-900 dark:text-night-text">{view.reason}</p>
     </motion.div>
   );
