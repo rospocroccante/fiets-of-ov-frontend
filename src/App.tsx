@@ -19,6 +19,7 @@ import { CARD_ACCENTS, PRIMARY_GRADIENT, TEXT_GRADIENT } from "./lib/gradients";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
 import { ResultsSheet } from "./components/ResultsSheet";
 import { SheetSummary } from "./components/SheetSummary";
+import { RadarButton } from "./components/RadarButton";
 import { SavedScreen } from "./components/SavedScreen";
 import { TAB_BAR_COMPACT_PX, TAB_BAR_PX, TabBar } from "./components/TabBar";
 import { TabScreen } from "./components/TabScreen";
@@ -185,9 +186,10 @@ export default function App() {
   const [armed, setArmed] = useState<Armed>(null);
   const [hideMap, setHideMap] = useState(false);
   const [selectedMode, setSelectedMode] = useState<Mode | null>(null);
-  // Weather overlay state lives here (not in MapView) so its toggles can sit in the
-  // filter bar alongside Filters, a sibling of the map.
+  // Weather overlay state lives here (not in MapView) so its toggles can sit outside the
+  // map: the filter bar's segment on a wide screen, a round button on a phone's map.
   const [radar, setRadar] = useState(false);
+  const toggleRadar = () => setRadar((r) => !r);
   const [wLayers, setWLayers] = useState<WeatherLayersState>({ rain: true, wind: true });
   // Turn-by-turn mode: drives the live-location watch, the wake lock, the maneuver
   // overlay and the follow camera. The whole nav chain derives from this one flag.
@@ -903,7 +905,7 @@ export default function App() {
       armed={armed}
       onArm={armPick}
       radar={radar}
-      onToggleRadar={() => setRadar((r) => !r)}
+      onToggleRadar={toggleRadar}
       kinds={kinds}
       onToggleKind={(m) => setKinds((s) => ({ ...s, [m]: !s[m] }))}
       phone={isPhone}
@@ -984,8 +986,23 @@ export default function App() {
           bottomInset={sheetShown ? sheetInset : 0}
           topInset={sheetLayout ? topInset : 0}
           zoomControl={!sheetLayout}
+          radarButton={isPhone}
         />
       </Suspense>
+      )}
+      {/* The phone's radar: a round button in the map's top-right corner, the place Google
+          Maps keeps its layers button, 12px under the chips on a portrait phone and under
+          the chip row's in-flow bar on its side. The map's readout starts under it. It
+          steps away when the map does: a full sheet covers the map, and on a phone on its
+          side the navigation banner spans the top of this pane, where the button would sit
+          on the banner's Exit. A wide screen keeps the filter bar's segment instead. */}
+      {isPhone && (
+        <RadarButton
+          on={radar}
+          onToggle={toggleRadar}
+          top={12 + (sheetLayout ? topInset : 0)}
+          hidden={(sheetShown && detent === "full") || (landscapePhone && navigating)}
+        />
       )}
       {/* The banner and the place card arrive and leave (overlay in
           lib/motion); each keeps one key, so new content in an open one is an

@@ -66,6 +66,7 @@ import { decodePolyline } from "../lib/polyline";
 import { Basemap } from "./Basemap";
 import { RadarOverlay, RadarReadout } from "./RainRadar";
 import type { WeatherLayersState } from "./RainRadar";
+import { RADAR_BUTTON_CLEAR } from "./RadarButton";
 import { WindVelocityLayer } from "./WeatherLive";
 
 type LatLon = { lat: number; lon: number };
@@ -658,6 +659,7 @@ export function MapView({
   bottomInset = 0,
   topInset = 0,
   zoomControl = true,
+  radarButton = false,
 }: {
   origin: LatLon | null;
   destination: LatLon | null;
@@ -694,6 +696,9 @@ export function MapView({
   // Leaflet's + and - buttons. Off on a portrait phone, which zooms by pinch; the reset
   // then leaves the zoom column for the bottom-right one.
   zoomControl?: boolean;
+  // A phone's radar button (RadarButton, which App floats over this map) holds the
+  // top-right corner, 12px under topInset: the readout starts under it instead.
+  radarButton?: boolean;
 }) {
   const { t } = useI18n();
   const legs = route?.legs ?? [];
@@ -1042,7 +1047,7 @@ export function MapView({
         )}
       {showWeather && (
         <RadarReadout
-          topInset={topInset}
+          offset={topInset + (radarButton ? RADAR_BUTTON_CLEAR : 0)}
           layers={wLayers}
           onLayerToggle={onLayerToggle}
           rainError={wLayers.rain && rain.error}

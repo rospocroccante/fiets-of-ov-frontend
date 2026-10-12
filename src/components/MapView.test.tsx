@@ -526,6 +526,30 @@ test("what the map pins to its top moves down by topInset", () => {
   expect(wrap.style.getPropertyValue("--fov-map-top")).toBe("116px");
 });
 
+test("with the phone's radar button in the top-right corner, the readout starts under it", () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ host: "https://tc.test", radar: { past: [], nowcast: [] } }),
+    })),
+  );
+  // Portrait: the button is 12px under the chrome and 48px tall, so the readout's column
+  // starts 8px under the button: 116 + 12 + 48 + 8.
+  const { unmount } = renderMap(
+    <MapView origin={null} destination={null} stops={[]} route={null} radar topInset={116} radarButton />,
+  );
+  const readout = screen.getByText("light").closest(".z-\\[1000\\]") as HTMLElement;
+  expect(readout).toHaveClass("right-3");
+  expect(readout.style.top).toBe("184px");
+  unmount();
+
+  // A phone on its side has no floating chrome over the map: 12 + 48 + 8.
+  renderMap(<MapView origin={null} destination={null} stops={[]} route={null} radar radarButton />);
+  const side = screen.getByText("light").closest(".z-\\[1000\\]") as HTMLElement;
+  expect(side.style.top).toBe("68px");
+});
+
 test("with no topInset the top of the map is exactly as before", () => {
   vi.stubGlobal(
     "fetch",

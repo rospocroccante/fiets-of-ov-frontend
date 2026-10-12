@@ -102,8 +102,6 @@ export function FilterBar({
         hideMapDisabled={hideMapDisabled}
         armed={armed}
         onArm={onArm}
-        radar={radar}
-        onToggleRadar={onToggleRadar}
         kinds={kinds}
         onToggleKind={onToggleKind}
         floating={floating}
@@ -188,6 +186,10 @@ export function FilterBar({
 // measure 232px in English and 214px in Dutch against 275px of scroller at 390 and 245px
 // at 360, so on both of those nothing is off screen at all.
 //
+// The radar was one of those tools until it left the menu altogether: on a phone it is a
+// round button on the map (RadarButton, placed by App), seen without opening anything.
+// The `radar` props are the desktop bar's, where it is still a segment.
+//
 // At 320 they do not fit (205px of scroller in English, 199 in Dutch), and that is the
 // case the scroller is still `overflow-x: auto` for — along with anything else the
 // measurements do not cover, a narrower device or a larger text size. When it happens
@@ -203,8 +205,6 @@ function PhoneFilterBar({
   hideMapDisabled,
   armed,
   onArm,
-  radar,
-  onToggleRadar,
   kinds,
   onToggleKind,
   floating,
@@ -216,8 +216,6 @@ function PhoneFilterBar({
   hideMapDisabled: boolean;
   armed: Armed;
   onArm: (which: "start" | "end") => void;
-  radar: boolean;
-  onToggleRadar: () => void;
   kinds: KindFilter;
   onToggleKind: (m: Mode) => void;
   floating: boolean;
@@ -387,9 +385,9 @@ function PhoneFilterBar({
               the 288px map pane on a 320px phone, and with the panel 163px tall inside
               a 256px map that came to 53.1% of the map behind the menu — over this
               file's own <=50% standard, at the one width the scenario did not visit.
-              Content width instead: 186px in English, 215px in Dutch (the longest row
-              is "Radar" beside "Verberg kaart"), which is 41.1% and 47.5% there and
-              less on every wider phone. `max-content` also cannot wrap, so the panel
+              Content width instead: 186px in English, 215px in Dutch, measured while
+              the radar was still a row here beside "Verberg kaart", which is 41.1% and
+              47.5% there and less on every wider phone. `max-content` also cannot wrap, so the panel
               can never buy width back by growing a row taller. The cap keeps the old
               240px as the ceiling and keeps the box on screen whatever a future string
               does — and if one ever pushes past it, the row wraps, the panel grows and
@@ -430,21 +428,11 @@ function PhoneFilterBar({
                 <div className="my-3 h-px bg-gray-100 dark:bg-night-border" />
               </>
             )}
-            {/* Radar and Hide map leave the panel open: both change something behind it,
-                and the flip of the chip is the confirmation. Arming Start or End is the
+            {/* Hide map leaves the panel open: it changes something behind it, and the
+                flip of the label is the confirmation. Arming Start or End is the
                 opposite — the next tap belongs to the map, so the panel gets out of the
                 way first. */}
             <div className="flex flex-wrap gap-2">
-              {!hideMap && (
-                <button
-                  type="button"
-                  aria-pressed={radar}
-                  onClick={onToggleRadar}
-                  className={chip(radar)}
-                >
-                  {t("radar")}
-                </button>
-              )}
               <button
                 type="button"
                 onClick={onToggleMap}

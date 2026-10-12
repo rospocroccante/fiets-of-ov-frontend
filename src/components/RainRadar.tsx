@@ -74,15 +74,16 @@ export function RadarReadout({
   onLayerToggle,
   rainError,
   windError,
-  topInset = 0,
+  offset = 0,
 }: {
   layers: WeatherLayersState;
   onLayerToggle?: (layer: keyof WeatherLayersState) => void;
   rainError: boolean;
   windError: boolean;
-  // The map's topInset (MapView): on a portrait phone the readout starts under the
-  // floating chrome rather than under the map's own edge, which is under the pill there.
-  topInset?: number;
+  // How far down the map the readout's column moves, in px, before its own 12px margin:
+  // the floating chrome on a portrait phone (MapView's topInset), whose map edge is under
+  // the pill, and on a phone the radar button, which holds the corner above it.
+  offset?: number;
 }) {
   const { t, lang } = useI18n();
   const frameTime = useRadarFrame();
@@ -99,7 +100,7 @@ export function RadarReadout({
   return (
     <div
       className="absolute right-3 top-3 z-[1000] flex flex-col items-end gap-1.5"
-      style={topInset > 0 ? { top: 12 + topInset } : undefined}
+      style={offset > 0 ? { top: 12 + offset } : undefined}
     >
       {onLayerToggle && (
         <div className="flex items-center gap-1 rounded-full bg-white/90 p-1 shadow dark:bg-night-surface/90">

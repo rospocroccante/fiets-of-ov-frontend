@@ -112,9 +112,21 @@ test("the phone bar keeps the mode filters and folds the map's tools behind one 
   expect(more).toHaveAttribute("aria-expanded", "false");
   fireEvent.click(more);
   expect(more).toHaveAttribute("aria-expanded", "true");
-  for (const name of [/^start$/i, /^end$/i, "Radar", /hide map/i]) {
+  for (const name of [/^start$/i, /^end$/i, /hide map/i]) {
     expect(screen.getByRole("button", { name })).toBeInTheDocument();
   }
+  // The radar is not one of them: on a phone it is a round button on the map itself
+  // (RadarButton, placed by App), where it is seen without opening anything.
+  expect(screen.queryByRole("button", { name: "Radar" })).toBeNull();
+});
+
+test("the phone's map tools hold no radar, whether it is on or off", () => {
+  renderPhoneBar({ radar: true });
+  fireEvent.click(screen.getByRole("button", { name: /map options/i }));
+  const panel = document.querySelector('[data-fov="filter-panel"]') as HTMLElement;
+  expect(panel).not.toBeNull();
+  expect(panel.textContent).not.toMatch(/radar/i);
+  expect(screen.queryByRole("button", { name: "Radar" })).toBeNull();
 });
 
 test("the folded tools still act on the map, and arming an endpoint closes the panel", () => {
@@ -122,34 +134,32 @@ test("the folded tools still act on the map, and arming an endpoint closes the p
   const toggles: string[] = [];
   renderPhoneBar({
     onArm: (w) => armed.push(w),
-    onToggleRadar: () => toggles.push("radar"),
     onToggleMap: () => toggles.push("map"),
   });
   fireEvent.click(screen.getByRole("button", { name: /map options/i }));
 
-  // Radar and Hide map change something behind the panel, so it stays open and the flip
-  // is visible.
-  fireEvent.click(screen.getByRole("button", { name: "Radar" }));
+  // Hide map changes something behind the panel, so it stays open and the flip is
+  // visible.
   fireEvent.click(screen.getByRole("button", { name: /hide map/i }));
-  expect(toggles).toEqual(["radar", "map"]);
+  expect(toggles).toEqual(["map"]);
   expect(screen.getByRole("button", { name: /^end$/i })).toBeInTheDocument();
 
   // Arming an endpoint is the opposite: the next tap belongs to the map, so the panel
   // gets out of the way and hands focus back to the control that opened it.
   fireEvent.click(screen.getByRole("button", { name: /^start$/i }));
   expect(armed).toEqual(["start"]);
-  expect(screen.queryByRole("button", { name: "Radar" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /^end$/i })).toBeNull();
   expect(screen.getByRole("button", { name: /map options/i })).toHaveFocus();
 });
 
 test("Escape closes the map tools and hands focus back", () => {
   renderPhoneBar();
   fireEvent.click(screen.getByRole("button", { name: /map options/i }));
-  expect(screen.getByRole("button", { name: "Radar" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /hide map/i })).toBeInTheDocument();
 
   fireEvent.keyDown(window, { key: "Escape" });
 
-  expect(screen.queryByRole("button", { name: "Radar" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /hide map/i })).toBeNull();
   expect(screen.getByRole("button", { name: /map options/i })).toHaveFocus();
 });
 
@@ -166,7 +176,7 @@ test("the phone bar's controls are all 44px targets, panel included", () => {
   const more = screen.getByRole("button", { name: /map options/i });
   expect(more).toHaveClass("min-h-[44px]", "min-w-[44px]");
   fireEvent.click(more);
-  for (const name of ["Bike", "Transit", "Bike + OV", /^start$/i, /^end$/i, "Radar", /hide map/i]) {
+  for (const name of ["Bike", "Transit", "Bike + OV", /^start$/i, /^end$/i, /hide map/i]) {
     expect(screen.getByRole("button", { name })).toHaveClass("min-h-[44px]");
   }
 });
