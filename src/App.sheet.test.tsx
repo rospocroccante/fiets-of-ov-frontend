@@ -116,6 +116,27 @@ test("Start in the summary starts navigation", async () => {
   expect(sheet()).toHaveAttribute("data-detent", "peek");
 });
 
+// The route a ride navigates is the chosen option's. A tap that chose another one mid-ride
+// would swap the route under the rider, rebuilt from the itinerary's origin rather than
+// from where they are.
+test("while a ride is on, nothing in the summary can change the trip it navigates", async () => {
+  renderApp();
+  await planVondelpark();
+  fireEvent.click(within(summary()).getByRole("button", { name: "Start navigation" }));
+  expect(screen.getByRole("button", { name: /exit navigation/i })).toBeInTheDocument();
+  expect(screen.getByText(/~24 min/)).toBeInTheDocument();
+
+  // The other option's minutes, which choose it at any other time, leave with the Start:
+  // the banner's Exit is the one control while riding.
+  expect(within(summary()).queryByRole("button", { name: "Public transport, 29 min" })).toBeNull();
+  expect(within(summary()).queryAllByRole("button")).toHaveLength(0);
+  // Every part of the summary, pressed: the option and the route being ridden stay.
+  for (const el of summary().querySelectorAll("*")) fireEvent.click(el);
+  expect(within(summary()).getByText("By bike")).toHaveAttribute("data-fov", "summary-title");
+  expect(screen.getByText(/~24 min/)).toBeInTheDocument();
+  expect(screen.queryByText(/~29 min/)).toBeNull();
+});
+
 test("the other option's minutes choose it, as a tap on its row would", async () => {
   renderApp();
   await planVondelpark();

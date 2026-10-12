@@ -1115,6 +1115,75 @@ export const scenarios = [
     },
   })),
 
+  // While a ride is on, the summary changes nothing about the trip. The other option's
+  // minutes used to stay live under the banner: one tap chose that option, and the ride
+  // swapped to its route, rebuilt from the itinerary's start rather than from the rider.
+  {
+    name: "390x844 while navigating, a tap where the other option's minutes were leaves the ride's route alone",
+    async run(ctx) {
+      const { checks } = ctx;
+      const page = await bootPhone(ctx, { width: 390, height: 844 });
+      try {
+        await planCollapsed(page);
+        const ALT = `
+          const b = document.querySelector('[data-fov="summary-alt"]');
+          if (!b) return null;
+          const r = window.__fov.rect(b);
+          return { x: Math.round(r.x + r.w / 2), y: Math.round(r.y + r.h / 2), label: b.getAttribute("aria-label") };
+        `;
+        const alt = await page.eval(ALT);
+        if (!alt) throw new Error("no other option in the collapsed summary");
+        await tapOn(page, '[data-fov="summary-start"]', "the summary's Start");
+        await page.waitFor(`document.querySelector('[aria-label="Exit navigation"]')`, { label: "the navigation banner" });
+        await sheetAt(page, "peek");
+        await sleep(400);
+        // Where the minutes are under the banner, if they are there at all (without the
+        // Start beside them they had moved to the row's start), then where they were before
+        // Start. In that order: a tap on the summary away from a button opens the sheet.
+        const riding = await page.eval(ALT);
+        const points = [...(riding ? [{ ...riding, when: "under the banner" }] : []), { ...alt, when: "before Start" }];
+        // The ride as the screen states it: the banner's ETA, the summary's option and the
+        // option the content has selected.
+        const READ_RIDE = `
+          const banner = document.querySelector('[aria-label="Exit navigation"]').closest(".rounded-card");
+          const eta = (banner.innerText.match(/~(\\d+) min/) || [])[1];
+          const title = document.querySelector('[data-fov="summary-title"]');
+          const chosen = document.querySelector('[data-fov="option"][data-selected="true"] [data-fov="option-title"]');
+          return { eta: eta == null ? null : Number(eta), title: title ? title.textContent.trim() : null,
+                   chosen: chosen ? chosen.textContent.trim() : null, banner: banner.innerText.replace(/\\s+/g, " ") };
+        `;
+        const before = await page.eval(READ_RIDE);
+        for (const p of points) {
+          const hit = await page.eval(`
+            const el = document.elementFromPoint(${p.x}, ${p.y});
+            const chooser = el && el.closest('[data-fov="summary-alt"], [data-fov="option"], [data-fov="sheet-summary"] button');
+            const box = el && el.closest("[data-fov]");
+            return { chooses: !!chooser, desc: el ? el.tagName + (box ? " in [" + box.getAttribute("data-fov") + "]" : "") : "nothing" };
+          `);
+          checks.ok(
+            `a finger where "${p.label}" was ${p.when} reaches nothing that chooses an option`,
+            !hit.chooses,
+            `elementFromPoint(${p.x}, ${p.y}) = ${hit.desc}`,
+          );
+          await page.tap(p.x, p.y);
+          await sleep(800);
+          const after = await page.eval(READ_RIDE);
+          checks.ok(`after a tap there the ride is still on`, after.eta != null, after.banner);
+          checks.equal("and the summary still names the option being ridden", after.title, before.title);
+          checks.equal("which is still the chosen option", after.chosen, before.chosen);
+          checks.atMost(
+            "and the banner's ETA has not jumped to another route",
+            after.eta ?? Infinity,
+            before.eta,
+            `banner before "${before.banner}", after "${after.banner}"`,
+          );
+        }
+      } finally {
+        await page.close();
+      }
+    },
+  },
+
   ...[
     { width: 390, height: 844 },
     { width: 360, height: 800 },

@@ -14,6 +14,11 @@ import { WeatherVerdict, type PanelState } from "./ResultsPanel";
 // another: Start navigates the chosen route, so a header about any other option would
 // start a trip it does not name.
 //
+// While a ride is on it is that ride's summary and nothing more: no Start, no other
+// option, no Try again; the banner's Exit ends the ride. The route being ridden is the
+// chosen option's, so a tap that chose another one mid-ride swapped the route under the
+// rider, rebuilt from the itinerary's start rather than from where they were.
+//
 // Idle has no sheet at all, so it renders nothing. Loading and error are this header
 // alone, and the sheet hugs it.
 
@@ -32,6 +37,7 @@ export function SheetSummary({
   state,
   onStartNav,
   onRetry,
+  navigating = false,
 }: {
   state: PanelState;
   // The results panel's Start: navigation for the chosen option. Absent when there is no
@@ -39,6 +45,8 @@ export function SheetSummary({
   onStartNav?: () => void;
   // Runs the same search again.
   onRetry: () => void;
+  // A ride is on: the header shows the trip and offers nothing that would change it.
+  navigating?: boolean;
 }) {
   const { t } = useI18n();
   if (state.status === "idle") return null;
@@ -64,11 +72,13 @@ export function SheetSummary({
     return (
       <div data-fov="sheet-summary" className={BOX}>
         <p className="text-[15px] font-medium text-slate-900 dark:text-night-text">{t("routesUnavailable")}</p>
-        <div className="mt-3 flex">
-          <button type="button" data-fov="summary-retry" onClick={onRetry} className={PRIMARY}>
-            {t("tryAgain")}
-          </button>
-        </div>
+        {!navigating && (
+          <div className="mt-3 flex">
+            <button type="button" data-fov="summary-retry" onClick={onRetry} className={PRIMARY}>
+              {t("tryAgain")}
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -83,7 +93,9 @@ export function SheetSummary({
     );
   }
   // The best-ranked option that is not the chosen one: the backend sends them ranked.
-  const other = view.options.find((o) => o.mode !== chosen.mode);
+  // Neither it nor the Start is offered during a ride.
+  const other = navigating ? undefined : view.options.find((o) => o.mode !== chosen.mode);
+  const start = navigating ? undefined : onStartNav;
   const fill = modeColor(BADGE_LEG[chosen.mode]);
   return (
     <div data-fov="sheet-summary" className={BOX}>
@@ -119,14 +131,14 @@ export function SheetSummary({
           <WeatherVerdict view={view} className="mt-1" />
         </div>
       </div>
-      {(onStartNav || other) && (
+      {(start || other) && (
         <div className="mt-3 flex gap-2">
-          {onStartNav && (
+          {start && (
             <button
               type="button"
               data-fov="summary-start"
               aria-label={t("startNavigation")}
-              onClick={onStartNav}
+              onClick={start}
               className={`${PRIMARY} flex-1`}
             >
               {t("start")}

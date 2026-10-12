@@ -1192,12 +1192,14 @@ export default function App() {
                       onDetent={setDetent}
                       onSettle={setSheetInset}
                       header={
-                        // No Start while a ride is on: the banner's Exit is the control
-                        // then. Try again is a new submit of the same trip.
+                        // While a ride is on the summary offers nothing that would change
+                        // the trip (SheetSummary), and the banner's Exit ends the ride.
+                        // Try again is a new submit of the same trip.
                         <SheetSummary
                           state={panel}
-                          onStartNav={navigating ? undefined : startNav}
+                          onStartNav={startNav}
                           onRetry={submitted}
+                          navigating={navigating}
                         />
                       }
                     >

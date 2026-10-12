@@ -332,8 +332,14 @@ option (the recommended one until the rider picks another) with its mode, title,
 and Best tag, the weather verdict, a Start, and the other option's minutes as a 44px
 button that selects it. The verdict is `WeatherVerdict` from `ResultsPanel.tsx`, the tag
 and rain figure the advice banner leads with. The summary follows the chosen option
-because Start navigates the chosen route. While a plan is on its way the header reads
-"Planning your trip…" over a placeholder row that pulses only where motion is allowed.
+because Start navigates the chosen route. While a ride is on (`navigating`), the summary
+states the trip and has no button at all: no Start, no other option and no Try again.
+The other option's minutes used to stay live under the banner, and one tap chose that
+option and swapped the route being ridden for its own, rebuilt from the itinerary's
+start rather than from the rider's position. Without the button row the collapsed sheet
+is that much shorter during a ride. The option rows in the content, at half and full,
+are not locked. While a plan is on its way the header reads "Planning your trip…" over
+a placeholder row that pulses only where motion is allowed.
 When a plan fails it reads "Routes are unavailable right now. Try again in a moment."
 with a Try again that bumps the submit nonce, so the same trip is fetched again. The
 backend's message stays out of the sheet; the desktop results column still prints it.

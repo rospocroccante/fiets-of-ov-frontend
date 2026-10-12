@@ -45,6 +45,25 @@ test("Start starts navigation, as the results panel's Start does", () => {
   expect(onStartNav).toHaveBeenCalledTimes(1);
 });
 
+test("while a ride is on it states the trip and offers nothing that would change it", () => {
+  const onSelect = vi.fn();
+  render(
+    <SheetSummary state={ready("Vondelpark", "bike", onSelect)} onStartNav={() => {}} onRetry={() => {}} navigating />,
+  );
+  const s = summary();
+  expect(within(s).getByText("By bike")).toHaveAttribute("data-fov", "summary-title");
+  expect(within(s).getByText("24 min")).toBeInTheDocument();
+  expect(within(s).getByText("Dry")).toBeInTheDocument();
+  expect(within(s).queryAllByRole("button")).toHaveLength(0);
+  expect(s.querySelector('[data-fov="summary-alt"]')).toBeNull();
+  // A failed replan ends the ride (App); until it has, there is no Try again either.
+  const { container } = render(
+    <SheetSummary state={{ status: "error", message: "x" }} onRetry={() => {}} navigating />,
+  );
+  expect(within(container).queryAllByRole("button")).toHaveLength(0);
+  expect(onSelect).not.toHaveBeenCalled();
+});
+
 test("with no route to navigate there is no Start", () => {
   render(<SheetSummary state={ready("Vondelpark", "bike")} onRetry={() => {}} />);
   expect(within(summary()).queryByRole("button", { name: "Start navigation" })).toBeNull();
