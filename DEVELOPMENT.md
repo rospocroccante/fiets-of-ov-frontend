@@ -483,6 +483,11 @@ the column runs from 16 to 284px and the map pane from 300 to 568px, both from 1
 map, and the column scrolls. Like the md row, the map pane keeps half the width beside
 the 16px gap, so it runs 16px into the right padding: below md that padding is 16px, and
 the map reaches the screen's edge.
+In that column the chosen option's departure line shares its 44px row with the Start, so
+"Step by step" sits under the departure instead of beside it, and the departure is never
+truncated (it wraps if it has to). Beside both, at 568x320, it had about 40px and read
+"Leave...". It now has 134px there, 184px at 667x375 and 264px at 844x390, in English
+and Dutch.
 Portrait phones, tablets and desktops keep the stack below md and the row from md up.
 
 In the browser suite the plan lands collapsed, so a scenario that measures the options

@@ -240,6 +240,17 @@ describe("the phone tier", () => {
     fireEvent.click(start);
     expect(onStartNav).toHaveBeenCalledTimes(1);
   });
+
+  // Beside that Start the departure line is short of room: at 568x320 it truncated to
+  // "Leave...". With a Start there "Step by step" goes under the departure, which is never
+  // cut. Without one (the portrait sheet) the line keeps its single row.
+  test("beside the Start the departure is never cut, with the steps' label under it", () => {
+    panel(() => {});
+    const departure = document.querySelector('[data-fov="departure"]') as HTMLElement;
+    expect(departure.className).not.toMatch(/\b(truncate|whitespace-nowrap)\b/);
+    expect(departure.parentElement).toHaveClass("flex-col");
+    expect(departure.nextElementSibling).toHaveTextContent("Step by step");
+  });
 });
 
 // The containers. The results column used to be a box of boxes: a bordered rain card,

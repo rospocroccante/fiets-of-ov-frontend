@@ -387,20 +387,36 @@ function SelectedDetails({
               has to be on screen anyway, and a chevron beside it is what says the steps
               are under it. */}
           <details className="disclosure group/steps" data-fov="option-steps">
+            {/* Beside the Start the line is short of room: at 568x320 the departure
+                had about 40px and read "Leave...". There "Step by step" goes under the
+                departure, which gets the line's whole width and wraps rather than lose a
+                word; the two lines still fit the 44px row. Without a Start (the
+                portrait sheet) both stay on one line. */}
             <summary
               data-fov="steps-toggle"
               className="flex min-h-[44px] cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden"
             >
               <Chevron />
-              <span
-                data-fov="departure"
-                className="min-w-0 flex-1 truncate text-sm font-medium text-gray-600 dark:text-night-muted"
-              >
-                {departure}
-              </span>
-              <span className="shrink-0 text-xs font-semibold text-brand dark:text-night-accent">
-                {t("stepByStep")}
-              </span>
+              {start ? (
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span data-fov="departure" className="text-sm font-medium text-gray-600 dark:text-night-muted">
+                    {departure}
+                  </span>
+                  <span className="text-xs font-semibold text-brand dark:text-night-accent">{t("stepByStep")}</span>
+                </span>
+              ) : (
+                <>
+                  <span
+                    data-fov="departure"
+                    className="min-w-0 flex-1 truncate text-sm font-medium text-gray-600 dark:text-night-muted"
+                  >
+                    {departure}
+                  </span>
+                  <span className="shrink-0 text-xs font-semibold text-brand dark:text-night-accent">
+                    {t("stepByStep")}
+                  </span>
+                </>
+              )}
             </summary>
             {/* The summary above already names the steps; a second identical heading
                 inside would be read out twice and drawn twice. */}
