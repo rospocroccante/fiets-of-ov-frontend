@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { EndpointField } from "./EndpointField";
 import { UseMyLocationButton } from "./UseMyLocationButton";
 import type { HistoryEntry } from "./PlaceInput";
-import { CARD_ACCENTS, PRIMARY_GRADIENT } from "../lib/gradients";
+import { PRIMARY_GRADIENT } from "../lib/gradients";
 import { useI18n } from "../lib/i18n";
 import { sheet, useLeaving, useMotionPreset } from "../lib/motion";
 import type { Place } from "../api/types";
@@ -280,9 +280,8 @@ export function MobileSearchSheet({
         className="min-h-0 flex-1 overflow-y-auto px-3 pb-6"
       >
         {/* The trip as a vertical route: origin dot, a connector that fades from the
-            position red to the transit blue, chequered flag at the end. Same three
-            marks the popular-trip cards use on the home, turned on their side — this
-            screen is the same journey, drawn large. */}
+            position red to the transit blue (`ams.red` and `ams.gvb`), chequered flag
+            at the end. */}
         <div className="relative flex items-stretch gap-1.5 rounded-card border border-gray-200 bg-white p-1.5 shadow-sm dark:border-night-border dark:bg-night-surface">
           {/* The two marks sit on the centre line of their own field: a 44px row puts
               that at 22px, so the dot (10px) starts at 17 and the flag (18px) ends 13
@@ -292,16 +291,8 @@ export function MobileSearchSheet({
             aria-hidden="true"
             className="flex w-5 shrink-0 flex-col items-center justify-between pb-[13px] pt-[17px]"
           >
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: CARD_ACCENTS[0] }}
-            />
-            <span
-              className="w-0.5 flex-1 rounded-full"
-              style={{
-                backgroundImage: `linear-gradient(to bottom, ${CARD_ACCENTS[0]}, ${CARD_ACCENTS[1]})`,
-              }}
-            />
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-ams-red" />
+            <span className="w-0.5 flex-1 rounded-full bg-gradient-to-b from-ams-red to-ams-gvb" />
             <span className="material-symbols-rounded shrink-0 text-[18px] leading-none text-slate-400 dark:text-night-subtle">
               sports_score
             </span>

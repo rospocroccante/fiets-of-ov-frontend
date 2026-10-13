@@ -8,7 +8,6 @@ import {
 } from "./__mocks__/react-leaflet";
 import { whenMapMounted } from "./test/mapReady";
 import { glassClasses } from "./test/glass";
-import { CARD_ACCENTS } from "./lib/gradients";
 import { waitForExit } from "./test/exit";
 
 function renderApp() {
@@ -46,37 +45,50 @@ test("the headline's second line is a solid brand colour, with no gradient", () 
   expect(line.className).not.toMatch(/gradient|bg-clip-text|text-transparent|from-|to-/);
 });
 
-// Each popular trip is a metro line: a track in the trip's own line colour between two
-// stations, from named on the left and to on the right. No card, no ring, no hover
-// lift, and none of the dot, fading rule and chequered flag the cards were decorated
-// with. Geometry and hit-testing are measured in browser-tests/.
-test("the popular trips are drawn as metro lines, one line colour each, with no card", () => {
+// Each popular trip is one suggestion row, in the style of a maps app's suggestion list:
+// a neutral pin in a neutral circle, the destination over "from {origin}", a chevron.
+// One colour for every row. They were metro lines, four tracks in red, blue, green and
+// yellow with ringed stations, and the owner found the colours clashed. Geometry and
+// hit-testing are measured in browser-tests/.
+test("the popular trips are plain suggestion rows with no colour of their own", () => {
   const { container } = renderApp();
   const trips = [...container.querySelectorAll<HTMLElement>('[data-fov="popular-trip"]')];
   expect(trips).toHaveLength(4);
   const [first] = trips;
   expect(first.tagName).toBe("BUTTON");
+  // The accessible name is the trip, as before the redesign.
   expect(first).toHaveAccessibleName("Amsterdam Centraal → Vondelpark");
-  // The two ends, from on the left and to on the right, each truncating in its half.
-  const from = within(first).getByText("Amsterdam Centraal");
+  // The destination first, in the primary text, and the origin under it.
   const to = within(first).getByText("Vondelpark");
-  expect(from.parentElement).toBe(to.parentElement);
-  expect(from.parentElement).toHaveClass("grid-cols-2", "font-semibold");
-  expect(from).toHaveClass("truncate");
-  expect(to).toHaveClass("truncate", "text-right");
-  // The track is the only colour, and it is the trip's own.
-  trips.forEach((trip, i) => {
-    const track = trip.querySelector<HTMLElement>('[aria-hidden="true"] [style]');
-    expect(track).toHaveStyle({ backgroundColor: CARD_ACCENTS[i] });
-  });
-  expect(screen.queryByText("sports_score")).not.toBeInTheDocument();
+  const from = within(first).getByText("from Amsterdam Centraal");
+  expect(to.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(to).toHaveClass("truncate", "font-semibold", "text-[15px]", "text-slate-900", "dark:text-night-text");
+  expect(from).toHaveClass("truncate", "text-[13px]", "text-slate-800", "dark:text-night-muted");
+  // The same neutral circle and the same glyph on every row, and a chevron at the end.
+  const glyphs = trips.map((trip) => trip.querySelector('[data-fov="row-glyph"]'));
+  expect(glyphs[0]!.querySelector("svg")).toHaveAttribute("data-glyph", "place");
+  for (const g of glyphs) {
+    expect(g).toHaveAttribute("aria-hidden", "true");
+    expect(g).toHaveClass("h-10", "w-10", "rounded-full", "bg-slate-100", "dark:bg-night-raised");
+    expect(g!.innerHTML).toBe(glyphs[0]!.innerHTML);
+  }
   for (const trip of trips) {
+    const chevron = trip.querySelector('[data-fov="row-chevron"]');
+    expect(chevron).not.toBeNull();
+    expect(chevron).toHaveAttribute("aria-hidden", "true");
+    expect(trip.lastElementChild).toBe(chevron);
+    // At least 56px tall, and nothing paints a colour per trip, a card or a shadow.
+    expect(trip).toHaveClass("min-h-16");
+    expect(trip.querySelectorAll("[style]")).toHaveLength(0);
     expect(glassClasses(trip)).toEqual([]);
     expect([...trip.classList].filter((c) => /^(bg-|border|shadow|ring)/.test(c))).toEqual([]);
   }
-  // One column on a phone, two from `sm` up: four would not fit two names per line.
-  expect(first.parentElement).toHaveClass("grid-cols-1", "sm:grid-cols-2");
-  expect(first.parentElement!.className).not.toMatch(/lg:grid-cols-4/);
+  expect(screen.queryByText("sports_score")).not.toBeInTheDocument();
+  // A list, one column on a phone and two from `sm` up, each row on a hairline of its own.
+  const list = first.closest("ul")!;
+  expect(list).toHaveClass("grid-cols-1", "sm:grid-cols-2");
+  expect(list.children).toHaveLength(4);
+  for (const item of list.children) expect(item).toHaveClass("after:h-px", "after:bg-slate-200", "dark:after:bg-night-border");
 });
 
 test("map region and pickers are present in the DOM at rest (no search yet)", () => {

@@ -483,6 +483,75 @@ export const scenarios = [
     },
   },
 
+  // The home's popular and recent trips are suggestion rows (TripRow): a 40px circle,
+  // the destination over "from {origin}", a chevron, a hairline under every row but the
+  // last. One column on a phone, two from `sm` up, where a row's hairline has to line up
+  // with its neighbour's. Each row is one target across its whole width.
+  ...[
+    { width: 390, height: 844, touch: true, columns: 1 },
+    { width: 1280, height: 900, touch: false, columns: 2 },
+  ].map(({ width, height, touch, columns }) => ({
+    name: `${width}x${height} the home's trip rows are full-width targets on hairlines, ${columns} column${columns > 1 ? "s" : ""}`,
+    async run(ctx) {
+      const { checks } = ctx;
+      const page = await ctx.openPhone({ width, height, seed: SEED, touch });
+      try {
+        await page.goto(ctx.url);
+        await page.waitFor(`document.querySelector('[data-fov="popular-trip"]')`, { label: "the home's popular trips" });
+        await page.eval(PROBE);
+        const READ_LIST = (sel) => `
+          const F = window.__fov;
+          const first = document.querySelector('${HOME} ${sel}');
+          const list = first.closest("ul");
+          return [...list.children].map((li) => {
+            const b = li.querySelector("button");
+            F.reveal(b);
+            const r = F.rect(b), v = F.visible(b);
+            const glyph = F.rect(b.querySelector('[data-fov="row-glyph"]'));
+            const text = F.rect(b.querySelector('[data-fov="row-glyph"] + span'));
+            const chevron = F.rect(b.querySelector('[data-fov="row-chevron"]'));
+            const after = getComputedStyle(li, "::after");
+            const y = Math.round((v.top + v.bottom) / 2);
+            const reach = [r.left + 4, r.left + r.w / 2, chevron.left + chevron.w / 2].map((x) => {
+              const at = document.elementFromPoint(Math.round(x), y);
+              return { x: Math.round(x), inside: !!at && b.contains(at), hit: at ? at.tagName : "nothing" };
+            });
+            return { name: b.getAttribute("aria-label"), row: r, li: F.rect(li), glyph, text, chevron, reach,
+                     line: after.display !== "none" ? parseFloat(after.height) : 0,
+                     lineLeft: parseFloat(after.left) };
+          });
+        `;
+        for (const [what, sel] of [["popular", '[data-fov="popular-trip"]'], ["recent", 'button[aria-label$=" ago"]']]) {
+          const rows = await page.eval(READ_LIST(sel));
+          checks.equal(`${what}: the list has its rows`, rows.length, what === "popular" ? 4 : 3);
+          const lefts = [...new Set(rows.map((r) => Math.round(r.li.left)))];
+          checks.equal(`${what}: the rows stand in ${columns} column${columns > 1 ? "s" : ""}`, lefts.length, columns, `left edges ${lefts.join(", ")}`);
+          rows.forEach((r, i) => {
+            const at = `${what} "${r.name}"`;
+            checks.atLeast(`${at} is at least 56px tall`, r.row.h, 56, `${r.row.w}x${r.row.h}`);
+            checks.near(`${at} runs 8px past its column on both sides`, r.row.w, r.li.w + 16, 0.5, `row ${r.row.left}..${r.row.right}, column ${r.li.left}..${r.li.right}`);
+            checks.equal(`${at}: the circle is 40px`, `${r.glyph.w}x${r.glyph.h}`, "40x40");
+            checks.near(`${at}: the text starts 16px past the circle`, r.text.left - r.glyph.right, 16, 0.5);
+            checks.near(`${at}: the chevron ends 8px in from the row's end`, r.row.right - r.chevron.right, 8, 0.5);
+            for (const p of r.reach) checks.ok(`${at}: a touch at x ${p.x} reaches the row`, p.inside, `hit ${p.hit}`);
+            // A hairline under every row but those of the last line.
+            const lastLine = i >= rows.length - (rows.length % columns || columns);
+            checks.equal(`${at} ${lastLine ? "has no hairline (last line)" : "sits on a 1px hairline"}`, r.line, lastLine ? 0 : 1);
+            if (!lastLine) checks.near(`${at}: its hairline starts at the text`, r.li.left + r.lineLeft, r.text.left, 0.5);
+          });
+          if (columns === 2) {
+            for (let i = 0; i + 1 < rows.length; i += 2) {
+              checks.near(`${what}: "${rows[i].name}" and "${rows[i + 1].name}" share a line`, rows[i].row.top, rows[i + 1].row.top, 0.5);
+              checks.near(`${what}: and one height`, rows[i].row.h, rows[i + 1].row.h, 0.5);
+            }
+          }
+        }
+      } finally {
+        await page.close();
+      }
+    },
+  })),
+
   {
     name: "390x844 Saved covers the screen and Back returns to Plan",
     async run(ctx) {

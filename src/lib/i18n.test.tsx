@@ -107,6 +107,11 @@ test("the phone sheet's summary strings have their vetted Dutch", () => {
   expect(translate("nl", "tryAgain")).toBe("Opnieuw proberen");
 });
 
+test("a popular or recent trip names its origin with a parameterized from line", () => {
+  expect(translate("en", "fromX", { x: "Zuid" })).toBe("from Zuid");
+  expect(translate("nl", "fromX", { x: "Zuid" })).toBe("vanaf Zuid");
+});
+
 // Every string added for the phone shell had English in both languages until the
 // owner vetted the Dutch. None of them may fall back to the English line now.
 test("no phone-shell string is still English in Dutch", () => {

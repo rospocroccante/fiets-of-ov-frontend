@@ -7,7 +7,7 @@ import { FilterBar } from "./components/FilterBar";
 import type { KindFilter } from "./components/FilterBar";
 import { HeaderMenu } from "./components/HeaderMenu";
 import { HomeAurora } from "./components/HomeAurora";
-import { HomeShortcuts } from "./components/HomeShortcuts";
+import { HomeShortcuts, TripList, TripRow } from "./components/HomeShortcuts";
 import { AdviceAttribution } from "./components/Attribution";
 import { PrivacyNotice } from "./components/PrivacyNotice";
 import { ProfileScreen } from "./components/ProfileScreen";
@@ -15,7 +15,7 @@ import { NavigationOverlay } from "./components/NavigationOverlay";
 import { PlaceInfoCard } from "./components/PlaceInfoCard";
 import type { PlaceInfo } from "./components/PlaceInfoCard";
 import { WeatherStrip } from "./components/WeatherStrip";
-import { CARD_ACCENTS, PRIMARY_GRADIENT } from "./lib/gradients";
+import { PRIMARY_GRADIENT } from "./lib/gradients";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
 import { ResultsSheet } from "./components/ResultsSheet";
 import { SheetSummary } from "./components/SheetSummary";
@@ -1412,47 +1412,25 @@ export default function App() {
           >
           <section className="mx-auto mt-6 w-full max-w-4xl px-6 text-left sm:mt-[7.5rem]">
             <h2 className="mb-2 text-xl font-semibold text-slate-900 dark:text-night-text">{t("popularTrips")}</h2>
-            {/* Two columns from `sm` up, never four: each line carries both of its names
-                side by side, and a quarter of max-w-4xl cannot hold "Amsterdam Zuid" and
-                "Amsterdamse Poort" on one line. */}
-            <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
-              {POPULAR.map((trip, i) => {
-                // Each trip is a metro line: a track in the trip's own line colour
-                // between two stations, its two ends named under it. The colour is the
-                // line's identity, the way 50 to 53 are Amsterdam's metro lines, and
-                // it is the only colour in the row. No card: these were four frosted
-                // cards with a ring, a shadow and a hover lift, decorated with a dot, a
-                // fading rule and a chequered flag that said nothing about the trip.
-                const accent = CARD_ACCENTS[i % CARD_ACCENTS.length];
-                return (
-                  <button
-                    key={`${trip.from}-${trip.to}`}
-                    data-fov="popular-trip"
-                    onClick={() => pickPopular(trip)}
-                    aria-label={`${trip.from} → ${trip.to}`}
-                    className="flex min-h-[44px] flex-col rounded-card px-1 py-3 text-left transition-colors hover:bg-slate-900/5 dark:hover:bg-night-hover/60"
-                  >
-                    {/* 4px track, 14px stations filled with the page colour and ringed
-                        in the text colour. The stations are centred on the track's
-                        ends, so the track is inset by half a station. */}
-                    <span aria-hidden="true" className="relative mx-[7px] block h-3.5 self-stretch">
-                      <span
-                        className="absolute inset-x-0 top-[5px] h-1 rounded-full"
-                        style={{ backgroundColor: accent }}
-                      />
-                      <span className="absolute -left-[7px] top-0 h-3.5 w-3.5 rounded-full border-[3px] border-slate-900 bg-white dark:border-night-text dark:bg-night-bg" />
-                      <span className="absolute -right-[7px] top-0 h-3.5 w-3.5 rounded-full border-[3px] border-slate-900 bg-white dark:border-night-text dark:bg-night-bg" />
-                    </span>
-                    {/* From under the first station, to under the second, each one
-                        truncating within its own half. */}
-                    <span className="mt-1.5 grid w-full grid-cols-2 gap-3 text-[15px] font-semibold leading-5 text-slate-900 dark:text-night-text">
-                      <span className="truncate">{trip.from}</span>
-                      <span className="truncate text-right">{trip.to}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            {/* Suggestion rows, one colour for all four (TripRow in HomeShortcuts). They
+                were metro lines, four tracks in red, blue, green and yellow between
+                ringed stations, and the colours clashed. Two columns from `sm` up: the
+                rows are one height each, so the hairlines line up across the columns,
+                and one column of max-w-4xl would leave each chevron 700px from its
+                text. */}
+            <TripList columns>
+              {POPULAR.map((trip) => (
+                <TripRow
+                  key={`${trip.from}-${trip.to}`}
+                  fov="popular-trip"
+                  glyph="place"
+                  to={trip.to}
+                  from={trip.from}
+                  label={`${trip.from} → ${trip.to}`}
+                  onClick={() => pickPopular(trip)}
+                />
+              ))}
+            </TripList>
           </section>
           <HomeShortcuts
             saved={savedPlaces}

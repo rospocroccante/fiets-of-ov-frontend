@@ -4,7 +4,7 @@ import type { RecentTrip } from "../hooks/useRecentTrips";
 import type { SavedPlace } from "../hooks/useSavedPlaces";
 import { useConfirmTap } from "../hooks/useConfirmTap";
 import { useI18n } from "../lib/i18n";
-import { RecentTripRow } from "./HomeShortcuts";
+import { RecentTripRow, ROW_DIVIDER, ROW_GLYPH_CIRCLE, TripList } from "./HomeShortcuts";
 import { Snackbar } from "./Snackbar";
 
 // Swiping a row left this far reveals its Delete button.
@@ -78,7 +78,7 @@ export function SavedScreen({
           <h2 id="saved-places-heading" className="mb-1 text-[17px] font-semibold text-slate-900 dark:text-night-text">
             {t("savedPlacesHeading")}
           </h2>
-          <ul className="divide-y divide-slate-100 dark:divide-night-border">
+          <ul>
             {places.map((p) => (
               <PlaceRow key={p.id} place={p} editing={editing} onPick={() => onPickPlace(p)} onDelete={() => remove(p)} />
             ))}
@@ -96,13 +96,16 @@ export function SavedScreen({
               {clear.armed ? t("tapAgainToClear") : t("clearAll")}
             </button>
           </div>
-          <ul>
+          <TripList>
             {recents.map((trip) => (
-              <li key={`${trip.fromQuery}-${trip.toQuery}`}>
-                <RecentTripRow trip={trip} now={now} onPick={() => onPickRecent(trip)} />
-              </li>
+              <RecentTripRow
+                key={`${trip.fromQuery}-${trip.toQuery}`}
+                trip={trip}
+                now={now}
+                onPick={() => onPickRecent(trip)}
+              />
             ))}
-          </ul>
+          </TripList>
         </section>
       )}
 
@@ -140,7 +143,9 @@ function PlaceRow({
   // A swipe that ends over the row must not also count as a tap on it.
   const dragged = useRef(false);
   return (
-    <li className="relative overflow-hidden">
+    // The recent rows' hairline and geometry, so the two sections' text starts on one
+    // line (TripRow in HomeShortcuts).
+    <li className={`${ROW_DIVIDER} overflow-hidden`}>
       <button
         type="button"
         tabIndex={open ? 0 : -1}
@@ -172,19 +177,20 @@ function PlaceRow({
             if (open) setOpen(false);
             else onPick();
           }}
-          className="flex min-h-[56px] min-w-0 flex-1 items-center gap-3 py-2 text-left"
+          className="flex min-h-16 min-w-0 flex-1 items-center gap-4 py-3 text-left"
         >
-          <span
-            aria-hidden="true"
-            className="material-symbols-rounded text-[20px] leading-none text-amber-500"
-            style={{ fontVariationSettings: "'FILL' 1" }}
-          >
-            star
+          <span aria-hidden="true" data-fov="row-glyph" className={ROW_GLYPH_CIRCLE}>
+            <span
+              className="material-symbols-rounded text-[20px] leading-none text-amber-500"
+              style={{ fontVariationSettings: "'FILL' 1" }}
+            >
+              star
+            </span>
           </span>
           <span className="min-w-0">
-            <span className="block truncate text-[15px] font-semibold text-slate-900 dark:text-night-text">{place.name}</span>
+            <span className="block truncate text-[15px] font-semibold leading-5 text-slate-900 dark:text-night-text">{place.name}</span>
             {place.label && place.label !== place.name && (
-              <span className="block truncate text-[13px] text-slate-600 dark:text-night-subtle">{place.label}</span>
+              <span className="block truncate text-[13px] leading-[18px] text-slate-800 dark:text-night-muted">{place.label}</span>
             )}
           </span>
         </button>

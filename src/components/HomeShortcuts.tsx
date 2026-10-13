@@ -1,7 +1,10 @@
+import { Children } from "react";
+import type { ReactNode } from "react";
 import type { RecentTrip } from "../hooks/useRecentTrips";
 import type { SavedPlace } from "../hooks/useSavedPlaces";
 import { useI18n } from "../lib/i18n";
 import type { Translator } from "../lib/i18n";
+import { ChevronRight, RowGlyph } from "./icons/RowIcons";
 
 function timeAgo(at: number, now: number, t: Translator): string {
   const min = Math.max(1, Math.round((now - at) / 60000));
@@ -11,45 +14,119 @@ function timeAgo(at: number, now: number, t: Translator): string {
   return t("daysAgo", { n: Math.round(h / 24) });
 }
 
-// One recent trip as a short grey metro line (see the comment in HomeShortcuts). Shared
-// with the Saved tab, so a recent trip looks the same wherever it is listed.
-export function RecentTripRow({ trip, now, onPick }: { trip: RecentTrip; now: number; onPick: () => void }) {
+// A row's hairline, drawn by its list item: 1px, from the text's left edge (56px, past
+// the circle and its gap) to the right end, and none under the last item. TripList puts
+// it on every row; the Saved tab's place rows, which are rows of their own, use it too.
+export const ROW_DIVIDER =
+  "relative after:pointer-events-none after:absolute after:bottom-0 after:left-14 after:right-0 after:h-px after:bg-slate-200 dark:after:bg-night-border last:after:hidden";
+
+// The neutral circle a row leads with: 40px, slate-100 by day and night.raised at night.
+export const ROW_GLYPH_CIRCLE =
+  "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-night-raised";
+
+// One trip as a suggestion row, the way a maps app lists suggestions: a neutral glyph in
+// a neutral 40px circle, the destination over "from {origin}", an optional time-ago and
+// a chevron. The popular trips (App) and the recent ones (here and on the Saved tab) are
+// all this row, in one colour. No card and no shadow; TripList draws the hairlines.
+//
+// The text sits straight on the aurora, and by day the aurora is darker than it looks.
+// Sampled at 390x844 with the foreground hidden, every 0.5s over 64s of drift, the
+// darkest pixel under the rows' text column anywhere in the home's scroller is luminance
+// 0.382. Against that slate-600 measures 3.12:1 and slate-700 4.26:1, so the origin and
+// the time-ago take slate-800 (6.02:1); size and weight keep them a step below the
+// destination (slate-900, 7.35:1). The chevron is not text but should still be seen: in
+// slate-400 it fell to 1.06:1, slate-600 holds 3.57:1 under its column. At night the
+// brightest pixel under the text is luminance 0.055, where night.muted measures 6.12:1,
+// and under the chevron 0.040, where night.faint measures 3.49:1.
+//
+// The accessible name is the trip, "{from} → {to}", as it was before the rows were
+// redrawn. A recent trip adds its time-ago, as its name always had: the same trip can be
+// both popular and recent, and the two buttons should not answer to one name.
+export function TripRow({
+  to,
+  from,
+  glyph,
+  label,
+  meta,
+  fov,
+  onClick,
+}: {
+  to: string;
+  from: string;
+  glyph: "place" | "recent";
+  label: string;
+  meta?: string;
+  fov?: string;
+  onClick: () => void;
+}) {
   const { t } = useI18n();
   return (
     <button
-      onClick={onPick}
-      className="flex min-h-[44px] w-full flex-col justify-center rounded-card px-1 py-2 text-left transition-colors hover:bg-slate-900/5 dark:hover:bg-night-hover/60"
+      type="button"
+      data-fov={fov}
+      onClick={onClick}
+      aria-label={label}
+      className="-mx-2 flex min-h-16 w-[calc(100%+1rem)] items-center gap-4 rounded-card px-2 py-3 text-left transition-colors hover:bg-slate-900/5 dark:hover:bg-night-hover/60"
     >
-      {/* The line: a 2px track between two 10px stations, all in the
-          tertiary grey, the track a step fainter than its stations.
-          Centred stations hang 5px past each end of the track, which is
-          why it is inset by that much. */}
-      <span aria-hidden="true" className="relative mx-[5px] block h-2.5">
-        <span className="absolute inset-x-0 top-1 h-0.5 rounded-full bg-slate-500/60 dark:bg-night-subtle/60" />
-        <span className="absolute -left-[5px] top-0 h-2.5 w-2.5 rounded-full border-2 border-slate-500 bg-white dark:border-night-subtle dark:bg-night-bg" />
-        <span className="absolute -right-[5px] top-0 h-2.5 w-2.5 rounded-full border-2 border-slate-500 bg-white dark:border-night-subtle dark:bg-night-bg" />
+      <span
+        aria-hidden="true"
+        data-fov="row-glyph"
+        className={`${ROW_GLYPH_CIRCLE} text-slate-600 dark:text-night-muted`}
+      >
+        <RowGlyph kind={glyph} className="h-5 w-5" />
       </span>
-      <span className="mt-1 grid w-full grid-cols-2 gap-3 text-[13px] font-medium text-slate-800 dark:text-night-muted">
-        <span className="truncate">{trip.fromLabel}</span>
-        <span className="flex min-w-0 items-baseline justify-end gap-1.5">
-          <span className="truncate">{trip.toLabel}</span>
-          <span className="shrink-0 text-xs font-normal text-slate-800 dark:text-night-subtle">
-            {timeAgo(trip.at, now, t)}
-          </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[15px] font-semibold leading-5 text-slate-900 dark:text-night-text">{to}</span>
+        <span className="block truncate text-[13px] leading-[18px] text-slate-800 dark:text-night-muted">
+          {t("fromX", { x: from })}
         </span>
       </span>
+      {meta && (
+        <span className="shrink-0 text-[13px] text-slate-800 dark:text-night-muted">
+          {meta}
+        </span>
+      )}
+      <ChevronRight fov="row-chevron" className="-ml-1 h-5 w-5 shrink-0 text-slate-600 dark:text-night-faint" />
     </button>
+  );
+}
+
+// The rows' list. A hairline under each row, inset to the text, and none under the last
+// row. With two columns the last row holds the last two items when their number is
+// even, and the last item alone when it is odd.
+export function TripList({ columns = false, children }: { columns?: boolean; children: ReactNode }) {
+  return (
+    <ul className={`grid grid-cols-1 ${columns ? "gap-x-8 sm:grid-cols-2" : ""}`}>
+      {Children.map(children, (row) => (
+        <li className={columns ? `${ROW_DIVIDER} sm:[&:nth-last-child(2):nth-child(odd)]:after:hidden` : ROW_DIVIDER}>{row}</li>
+      ))}
+    </ul>
+  );
+}
+
+// One recent trip. Shared with the Saved tab, so a recent trip looks the same wherever
+// it is listed.
+export function RecentTripRow({ trip, now, onPick }: { trip: RecentTrip; now: number; onPick: () => void }) {
+  const { t } = useI18n();
+  const ago = timeAgo(trip.at, now, t);
+  return (
+    <TripRow
+      glyph="recent"
+      to={trip.toLabel}
+      from={trip.fromLabel}
+      label={`${trip.fromLabel} → ${trip.toLabel}, ${ago}`}
+      meta={ago}
+      onClick={onPick}
+    />
   );
 }
 
 // Maps-style shortcuts on the home: saved places as chips, recent searches as rows.
 // Renders nothing until the user has history, so a first visit stays pristine.
 //
-// Drawn in the popular trips' own language, one size down. A recent trip is a short
-// grey line between two stations with its two ends named under it: the same metro map,
-// greyed like a line already travelled. No panel round it: the frosted card with an
-// uppercase "RECENT" label held one row most of the time and was a box drawn for the
-// sake of a box.
+// A recent trip is the popular trips' row with a clock in its circle. No panel round
+// the list: the frosted card with an uppercase "RECENT" label held one row most of the
+// time and was a box drawn for the sake of a box.
 export function HomeShortcuts({
   saved,
   recents,
@@ -107,24 +184,17 @@ export function HomeShortcuts({
               {t("clear")}
             </button>
           </div>
-          {/* The popular trips' grid, so a recent line is as long as a popular one.
-
-              The text sits straight on the aurora now, with no frosted panel to lift
-              it, and by day the aurora is darker than it looks: sampled with the
-              foreground hidden over a full drift cycle, it reaches luminance 0.40
-              under these rows on a phone. Against that slate-500 measured 2.0:1,
-              slate-600 3.2:1 and slate-700 4.4:1, so the names and the time-ago take
-              slate-800 (6.2:1) and Clear, which sits over a lighter band, slate-700
-              (5.4:1). Size and weight keep them a step below the popular trips. At
-              night the ramp's muted and subtle steps clear 5.1:1 or better on the
-              brightest lamp glow, so the night side keeps them. */}
-          <ul className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+          {/* The popular trips' list, so a recent row lines up with a popular one. */}
+          <TripList columns>
             {recents.slice(0, 3).map((trip) => (
-              <li key={`${trip.fromQuery}-${trip.toQuery}`}>
-                <RecentTripRow trip={trip} now={now} onPick={() => onPickRecent(trip)} />
-              </li>
+              <RecentTripRow
+                key={`${trip.fromQuery}-${trip.toQuery}`}
+                trip={trip}
+                now={now}
+                onPick={() => onPickRecent(trip)}
+              />
             ))}
-          </ul>
+          </TripList>
         </div>
       )}
       {onSeeAll && (

@@ -205,6 +205,38 @@ Chrome's compositor counted its transparent layers as over the results sheet: a 
 the sheet in the bands where the home has layers arrived uncancellable, and a full sheet
 could not be pulled down from its content there.
 
+### The home's trip rows
+
+The popular and recent trips on the home, and the recent trips on the Saved tab, are one
+row (`TripRow` in `HomeShortcuts.tsx`), drawn like a maps app's suggestion list. A 40px
+neutral circle (`slate-100`, `night.raised` at night) holds a pin for a popular trip and a
+clock for a recent one, then the destination in 15px semibold over "from {origin}" in
+13px, a recent trip's time-ago, and a chevron. Rows are 64px tall. Every row sits on a
+1px hairline inset to its text, except those on the list's last line (`TripList`,
+`ROW_DIVIDER`). Nothing is coloured per trip: the popular trips used to be metro lines
+in red, blue, green and yellow, and the colours clashed. The Saved tab's place rows take
+the same circle (with the amber star), height and hairline, so the text of both
+sections starts on one line.
+
+From `sm` up the home lists the rows in two columns. Each row is one height, so the
+hairlines line up across the columns; a single column 848px wide would leave each
+chevron about 700px from its text and double the list's height.
+
+A popular trip's accessible name is unchanged: origin, arrow, destination. A recent
+trip's adds its time-ago after a comma, so a trip that is both popular and recent does
+not put two buttons with one name on the screen.
+
+**The row colours were picked by measuring the aurora under them.** At 390x844, with the
+foreground hidden and every animation paused and seeked in 0.5s steps over 64s, the
+darkest pixel under the rows' text column, anywhere in the home's scroller, is luminance
+0.382 by day. There slate-600 measures 3.12:1 and slate-700 4.26:1, so the origin line
+and the time-ago are slate-800 (6.02:1) and the destination slate-900 (7.35:1). The
+chevron fell to 1.06:1 in slate-400; slate-600 holds 3.57:1 under its own column. At
+night the brightest pixel under the text is 0.055, where `night.text` measures 9.25:1
+and `night.muted` 6.12:1, and `night.faint` holds 3.49:1 under the chevron.
+`HomeShortcuts.test.tsx` pins these steps, and the browser suite's "trip rows" scenario
+measures the rows at 390x844 and 1280x900.
+
 ### The phone shell: tabs, Back and the results sheet
 
 On a phone (`isPhone` in `App.tsx`) the app has a tab bar with three tabs, Plan, Saved and

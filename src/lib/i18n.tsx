@@ -16,6 +16,8 @@ const STRINGS = {
   },
   popularTrips: { en: "Popular trips", nl: "Populaire ritten" },
   toX: { en: "to {x}", nl: "naar {x}" },
+  // The second line of a popular or recent trip's row, under its destination.
+  fromX: { en: "from {x}", nl: "vanaf {x}" },
   from: { en: "From", nl: "Van" },
   to: { en: "To", nl: "Naar" },
   now: { en: "Now", nl: "Nu" },

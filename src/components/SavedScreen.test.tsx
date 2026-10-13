@@ -33,6 +33,37 @@ test("lists places and recent trips under their headings", () => {
   expect(screen.getByRole("button", { name: /NDSM/ })).toBeInTheDocument();
 });
 
+// A recent trip looks the same here as on the home: the same row, one column, each on
+// a hairline of its own.
+test("a recent trip is the home's suggestion row", () => {
+  renderSaved();
+  const row = screen.getByRole("button", { name: "De Pijp → NDSM, 1m ago" });
+  expect(within(row).getByText("from De Pijp")).toBeInTheDocument();
+  expect(row.querySelector('[data-fov="row-glyph"] svg')).toHaveAttribute("data-glyph", "clock");
+  expect(row.querySelector('[data-fov="row-chevron"]')).not.toBeNull();
+  const list = row.closest("ul")!;
+  expect(list).toHaveClass("grid-cols-1");
+  expect(list).not.toHaveClass("sm:grid-cols-2");
+  expect(row.closest("li")).toHaveClass("after:h-px", "after:bg-slate-200", "dark:after:bg-night-border");
+});
+
+// The places above use the same geometry, so the two sections' text starts on one line:
+// the star sits in the recent rows' 40px circle, with the same gap, height, secondary
+// colour and inset hairline.
+test("a saved place lines up with the recent rows under it", () => {
+  renderSaved();
+  const place = screen.getByRole("button", { name: /Artis/ });
+  const glyph = place.querySelector('[data-fov="row-glyph"]');
+  expect(glyph).toHaveAttribute("aria-hidden", "true");
+  expect(glyph).toHaveClass("h-10", "w-10", "rounded-full", "bg-slate-100", "dark:bg-night-raised");
+  expect(glyph).toHaveTextContent("star");
+  expect(place).toHaveClass("min-h-16", "gap-4");
+  expect(within(place).getByText("Plantage Kerklaan")).toHaveClass("text-[13px]", "text-slate-800", "dark:text-night-muted");
+  const item = place.closest("li")!;
+  expect(item).toHaveClass("after:h-px", "after:left-14", "after:bg-slate-200", "dark:after:bg-night-border");
+  expect(item.parentElement!.className).not.toMatch(/divide-/);
+});
+
 test("tapping a place or a trip hands it to the host", () => {
   const p = renderSaved();
   fireEvent.click(screen.getByRole("button", { name: /Artis/ }));

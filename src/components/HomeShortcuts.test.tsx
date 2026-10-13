@@ -54,18 +54,23 @@ test("the recents meta text carries the readable colour steps on both themes", (
   expect(header).toHaveClass("text-slate-900", "dark:text-night-text");
   expect(header).not.toHaveClass("uppercase");
   expect(header).not.toHaveClass("tracking-wide");
-  // The recents sit straight on the aurora now, with no frosted panel under them, and
-  // by day it darkens to luminance 0.40 under these rows: slate-500 measured 2.0:1
-  // there and slate-700 4.4:1. These pins keep each line on the step that clears AA
-  // against the darkest frame, so a copy-paste of the old greys fails here.
+  // The recents sit straight on the aurora, with no frosted panel under them, and by
+  // day it darkens to luminance 0.38 under the rows' text: slate-600 measured 3.1:1
+  // there and slate-700 4.3:1. These pins keep each line on the step that clears AA
+  // against the darkest frame, so a copy-paste of the lighter greys fails here.
   const clear = screen.getByRole("button", { name: /clear/i });
   expect(clear).toHaveClass("text-slate-700", "hover:text-slate-900", "dark:text-night-subtle", "dark:hover:text-night-text");
-  expect(screen.getByText("10m ago")).toHaveClass("text-slate-800", "dark:text-night-subtle");
+  expect(screen.getByText("10m ago")).toHaveClass("text-slate-800", "dark:text-night-muted");
+  expect(screen.getByText("from Zuid")).toHaveClass("text-slate-800", "dark:text-night-muted");
+  // The chevron is no text, but it holds the 3:1 a visible mark needs: slate-400 fell
+  // to 1.1:1 on the darkest frame.
+  const chevron = document.querySelector('[data-fov="row-chevron"]');
+  expect(chevron).toHaveClass("text-slate-600", "dark:text-night-faint");
 });
 
-// Each recent trip is a small grey metro line with its two ends named under it: from
-// on the left, to on the right, the time-ago after the destination.
-test("a recent trip is drawn as a line with its ends named either side", () => {
+// A recent trip is the popular trips' row with a clock in the circle: the destination
+// over "from {origin}", the time-ago at the trailing end before the chevron.
+test("a recent trip is a suggestion row: clock, destination over origin, time-ago before the chevron", () => {
   render(
     <HomeShortcuts
       saved={[]}
@@ -76,21 +81,25 @@ test("a recent trip is drawn as a line with its ends named either side", () => {
       now={10 * 60000}
     />,
   );
-  const row = screen.getByRole("button", { name: /zuid.*ndsm/i });
-  const from = within(row).getByText("Zuid");
+  // Named like a popular trip, with the time-ago after it.
+  const row = screen.getByRole("button", { name: "Zuid → NDSM, 10m ago" });
   const to = within(row).getByText("NDSM");
+  const from = within(row).getByText("from Zuid");
   const ago = within(row).getByText("10m ago");
-  expect(from.compareDocumentPosition(to) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(to.compareDocumentPosition(ago) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  // Each name truncates within its own half, in 13px medium muted text.
-  const names = from.parentElement!;
-  expect(names).toHaveClass("grid-cols-2", "text-[13px]", "font-medium", "text-slate-800", "dark:text-night-muted");
-  expect(names).toContainElement(to);
-  for (const name of [from, to]) expect(name).toHaveClass("truncate");
-  // The line itself is decoration and carries no text.
-  const line = row.querySelector('[aria-hidden="true"]');
-  expect(line).not.toBeNull();
-  expect(line!.textContent).toBe("");
+  const chevron = row.querySelector('[data-fov="row-chevron"]')!;
+  expect(to.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(from.compareDocumentPosition(ago) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(ago.compareDocumentPosition(chevron) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(to).toHaveClass("truncate", "font-semibold", "text-slate-900", "dark:text-night-text");
+  expect(ago).toHaveClass("shrink-0");
+  // The same neutral circle as a popular trip, holding a clock.
+  const glyph = row.querySelector('[data-fov="row-glyph"]')!;
+  expect(glyph).toHaveAttribute("aria-hidden", "true");
+  expect(glyph).toHaveClass("h-10", "w-10", "rounded-full", "bg-slate-100", "dark:bg-night-raised");
+  expect(glyph.querySelector("svg")).toHaveAttribute("data-glyph", "clock");
+  expect(row).toHaveClass("min-h-16");
+  // One column on a phone, two from `sm` up, as the popular trips are.
+  expect(row.closest("ul")).toHaveClass("grid-cols-1", "sm:grid-cols-2");
 });
 
 test("no history renders as glass: chips are solid and recents sit on no panel", () => {
