@@ -614,6 +614,23 @@ test("the zoom buttons and the reset under them stay where they are by default",
   expect(reset.parentElement).toHaveClass("absolute", "left-3");
 });
 
+// On a phone on its side the map can be 268px wide (568x320), and the "Zoom in to see bars
+// and places" chip, right-aligned and 204px across, reached back over the reset under the
+// zoom column. With the zoom column there, the bottom-right column stops 8px short of it
+// and its chips wrap. Without it the column keeps the map's width.
+test("the bottom-right column stops short of the zoom column, and only when there is one", () => {
+  const props = { origin: { lat: 52.379, lon: 4.9 }, destination: { lat: 52.358, lon: 4.868 }, stops: [], route };
+  const foot = (root: HTMLElement) =>
+    [...root.querySelectorAll<HTMLElement>("div.right-3")].find((d) => d.style.bottom !== "") as HTMLElement;
+
+  const withZoom = renderMap(<MapView {...props} />);
+  expect(foot(withZoom.container).style.maxWidth).toBe("calc(100% - 78px)");
+  withZoom.unmount();
+
+  const pinch = renderMap(<MapView {...props} zoomControl={false} topInset={116} bottomInset={300} />);
+  expect(foot(pinch.container).style.maxWidth).toBe("");
+});
+
 // The map's right edge (lib/mapEdge.ts) is decided from layout: the map's height and the
 // boxes of the readout, the place chips and the reset, with a ResizeObserver for what
 // changes between renders. While navigating, MapView re-renders on every GPS fix, and

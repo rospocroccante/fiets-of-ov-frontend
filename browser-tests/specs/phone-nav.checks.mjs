@@ -1586,11 +1586,124 @@ export const scenarios = [
     },
   },
 
+  // A phone on its side narrower than md stacked the panes: at 568x320 (an iPhone SE) the
+  // map was a 32dvh strip, 102px, over the results column. The zoom column and the reset
+  // under it are about 150px tall, so the reset ran out of the map and Leaflet's overflow
+  // cut it off. Every phone on its side now has the row 844x390 has: the results on the
+  // left, the map on the right, each as tall as the space under the filter bar.
+  ...[
+    { width: 568, height: 320 },
+    { width: 667, height: 375 },
+    { width: 844, height: 390 },
+  ].map(({ width, height }) => ({
+    name: `${width}x${height} on its side the results and the map sit side by side, the zoom column whole on the map`,
+    async run(ctx) {
+      const { checks } = ctx;
+      const at = `${width}x${height}`;
+      const page = await bootPhone(ctx, { width, height });
+      try {
+        await tapHomeRow(page, "Zuidplein");
+        await page.waitFor(`document.querySelectorAll('${OPTION}').length >= 3`, { label: "three travel options" });
+        await page.waitFor(`Math.round(window.scrollY) === innerHeight`, { label: "the morph to reach the map stage" });
+        await page.waitFor(`document.querySelector('.leaflet-control-zoom-in') && document.querySelector('${RADAR}')`, {
+          label: "the map's controls",
+        });
+        await sleep(900);
+        const m = await page.eval(`
+          const F = window.__fov;
+          const q = (s) => document.querySelector(s);
+          const col = q('${COLUMN}');
+          const map = q('${MAP}');
+          const pane = map.closest("section");
+          const header = q("header");
+          const wordmark = [...header.querySelectorAll("button")].find((b) => b.textContent.includes("Fiets of OV"));
+          const control = (el, name) => {
+            const r = F.rect(el), v = F.visible(el);
+            const x = Math.round(r.x + r.w / 2), y = Math.round(r.y + r.h / 2);
+            const hit = document.elementFromPoint(x, y);
+            return { name, ...r, visibleH: v.h, visibleW: v.w, x, y, reaches: !!hit && (hit === el || el.contains(hit)),
+                     hit: hit ? hit.tagName + (hit.closest("[data-fov]") ? "[" + hit.closest("[data-fov]").getAttribute("data-fov") + "]" : "") : "nothing" };
+          };
+          return {
+            sheet: !!q('${SHEET}'),
+            col: col ? { ...F.rect(col), scrollHeight: col.scrollHeight, clientHeight: col.clientHeight } : null,
+            map: F.rect(map), pane: F.rect(pane),
+            header: F.rect(header), pill: F.rect(q('[data-fov="search-pill"]')), wordmark: F.rect(wordmark),
+            bar: F.rect(q('[data-fov="filter-bar"]')),
+            controls: [
+              control(q(".leaflet-control-zoom-in"), "Zoom in"),
+              control(q(".leaflet-control-zoom-out"), "Zoom out"),
+              control(q('[data-fov="map-reset-view"]'), "Reset view"),
+            ],
+            radar: control(q('${RADAR}'), "Radar"),
+            iw: innerWidth, ih: innerHeight,
+          };
+        `);
+        checks.ok(`${at}: no results sheet`, !m.sheet, m.sheet ? "a sheet is mounted" : "none");
+        checks.ok(`${at}: there is a results column`, m.col != null, "no results column");
+        if (!m.col) return;
+        const c = m.col, p = m.pane;
+        checks.atMost(`${at}: the results column is on the left of the map`, c.right, p.left + 0.5,
+          `column ${c.left}..${c.right}, map pane ${p.left}..${p.right}`);
+        checks.near(`${at}: they start at the same height`, p.top, c.top, 1, `column top ${c.top}, map pane top ${p.top}`);
+        checks.near(`${at}: and are as tall as each other`, p.h, c.h, 1, `column ${c.h}px, map pane ${p.h}px`);
+        checks.atLeast(`${at}: the map pane takes at least 40% of the width`, p.w / m.iw, 0.4, `${p.w}px of ${m.iw}`);
+        checks.atLeast(`${at}: the map is taller than the zoom column and the reset`, m.map.h,
+          m.controls[2].bottom - m.map.top + 10, `map ${m.map.h}px, the reset ends ${(m.controls[2].bottom - m.map.top).toFixed(2)}px into it`);
+        checks.atMost(`${at}: both end on the screen`, Math.max(c.right, p.right), m.iw, `column ends ${c.right}, map pane ends ${p.right}`);
+        checks.atMost(`${at}: and above its foot`, Math.max(c.bottom, p.bottom), m.ih, `column ends ${c.bottom}, map pane ends ${p.bottom}`);
+
+        for (const k of m.controls) {
+          checks.ok(
+            `${at}: "${k.name}" is whole inside the map`,
+            k.left >= m.map.left - 0.5 && k.right <= m.map.right + 0.5 && k.top >= m.map.top - 0.5 && k.bottom <= m.map.bottom + 0.5,
+            `${span(k)} in a map of ${span(m.map)}`,
+          );
+          checks.near(`${at}: and nothing clips it`, k.visibleH, k.h, 0.5, `${k.visibleH} of ${k.h}px visible`);
+          checks.atLeast(`${at}: "${k.name}" is 44px tall`, k.h, 44, `${k.w}x${k.h}`);
+          checks.ok(`${at}: a touch at the centre of "${k.name}" reaches it`, k.reaches, `elementFromPoint(${k.x}, ${k.y}) = ${k.hit}`);
+        }
+        checks.ok(`${at}: the radar button takes a touch`, m.radar.reaches, `elementFromPoint(${m.radar.x}, ${m.radar.y}) = ${m.radar.hit}`);
+        checks.near(`${at}: 12px in from the map's right edge`, m.radar.right, m.map.right - 12, 1,
+          `button ends ${m.radar.right}, map ends ${m.map.right}`);
+
+        // The pill shares the header bar on a phone on its side. Nothing under the header
+        // may run into it, and it may not run into the wordmark or off the screen.
+        checks.atMost(`${at}: the pill stays inside the header`, m.pill.bottom, m.header.bottom,
+          `pill ${m.pill.top}..${m.pill.bottom}, header ends ${m.header.bottom}`);
+        checks.atLeast(`${at}: the pill clears the wordmark`, m.pill.left - m.wordmark.right, 4,
+          `wordmark ends ${m.wordmark.right}, pill starts ${m.pill.left}`);
+        checks.atMost(`${at}: and ends on the screen`, m.pill.right, m.iw, `pill ends ${m.pill.right}`);
+        for (const [name, r] of [["the filter bar", m.bar], ["the results column", c], ["the map pane", p], ["the radar button", m.radar],
+          ...m.controls.map((k) => [`"${k.name}"`, k])]) {
+          checks.ok(`${at}: ${name} clears the pill`, !overlaps(m.pill, r), `pill ${span(m.pill)}, ${name} ${span(r)}`);
+        }
+
+        // The column holds three options, the banner and the credits, more than its
+        // height: a drag up inside it scrolls it.
+        checks.atLeast(`${at}: the results run past the column`, c.scrollHeight - c.clientHeight, 1,
+          `scrollHeight ${c.scrollHeight}, clientHeight ${c.clientHeight}`);
+        const x = Math.round(c.left + c.w / 2);
+        const y = Math.round(c.top + c.h * 0.75);
+        const start = await page.eval(`return window.__fov.hit(${x}, ${y}, '${COLUMN}');`);
+        checks.ok(`${at}: a touch in the column lands in it`, start.inside, `elementFromPoint(${x}, ${y}) = ${start.desc}`);
+        await page.swipe(x, y, Math.round(c.top + c.h * 0.25));
+        await sleep(400);
+        const scrolled = await page.eval(`return document.querySelector('${COLUMN}').scrollTop;`);
+        checks.atLeast(`${at}: and a drag up scrolls the column`, scrolled, 1, `scrollTop ${scrolled}`);
+      } finally {
+        await page.close();
+      }
+    },
+  })),
+
   // The rain radar on a phone is a round button on the map, in the corner Google Maps keeps
   // its layers button in: the right side, just under the chips. Before, it was a row in
   // the chip row's Map menu, two taps away and out of sight until the menu was open.
   ...[
     { width: 390, height: 844 },
+    { width: 568, height: 320 },
+    { width: 667, height: 375 },
     { width: 844, height: 390 },
   ].map(({ width, height }) => ({
     name: `${width}x${height} the radar is a round button on the map, clear of what is around it`,
@@ -1752,6 +1865,8 @@ export const scenarios = [
     { width: 320, height: 568 },
     { width: 360, height: 800 },
     { width: 390, height: 844 },
+    { width: 568, height: 320 },
+    { width: 667, height: 375 },
     { width: 844, height: 390 },
   ].map(({ width, height }) => ({
     name: `${width}x${height} with the radar on, the map's right edge keeps every control clear and in reach`,

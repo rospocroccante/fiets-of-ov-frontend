@@ -155,7 +155,8 @@ every interactive control and real `Input.dispatchTouchEvent` gestures.
 
 **Viewports checked:** 390×844 (iPhone 12–15) and 360×800 (the common small Android) in
 portrait, plus 844×390 landscape, each on home, mid-morph, the full map stage, on the
-tabs and the results sheet, and with the autocomplete open. The header menu, which a
+tabs and the results sheet, and with the autocomplete open. The landscape map stage is
+also checked at 568×320 (an iPhone SE on its side) and 667×375. The header menu, which a
 phone no longer has, is checked at 768×1024 and on an 844×390 window with a mouse.
 
 ### Rules that are easy to break by accident
@@ -432,6 +433,19 @@ pads `fitBounds` and lifts its chip column by it, and to `PlaceInfoCard`. A phon
 side has no sheet, since one would not fit in 390px of height: the results column and the
 map stay side by side (`sheetLayout` is `isPhone && !landscapePhone`).
 
+That holds at every width. The map stage stacks its panes below md, a 32dvh map over the
+results column, and a phone on its side narrower than 768px used to get that stack: at
+568x320 the map was 102px tall, the zoom column and the reset under it reached 158px into
+it, and Leaflet's overflow cut the reset off. `App` now gives `landscapePhone` the row
+itself, with the same classes 844x390 gets from md up: results on the left at half the
+width, the map on the right, both as tall as the space under the filter bar. At 568x320
+the column runs from 16 to 284px and the map pane from 300 to 568px, both from 120 to
+312px down. The + and - are at 132 to 220px and the reset at 234 to 278px, all inside the
+map, and the column scrolls. Like the md row, the map pane keeps half the width beside
+the 16px gap, so it runs 16px into the right padding: below md that padding is 16px, and
+the map reaches the screen's edge.
+Portrait phones, tablets and desktops keep the stack below md and the row from md up.
+
 In the browser suite the plan lands collapsed, so a scenario that measures the options
 opens the sheet to half first with `openSheetToHalf` from `browser-tests/lib/sheet.mjs`,
 a touch on the handle followed by a wait for the spring to stop. A scenario that names
@@ -455,8 +469,8 @@ button. It used to be a row in the chip row's Map menu, two taps away and out of
 until the menu was open; that menu now holds Start, End and Hide map. The button is 48px,
 12px in from the map's right edge and 12px under the top of the map's free area:
 `topInset + 12` on a portrait phone (128 to 176px down at 390x844, 20px under the chips),
-12px into the map pane on a phone on its side (132 to 180px at 844x390, 18px under the
-in-flow chip row). Off, it has the reset button's white surface and shadow. On, it is a
+12px into the map pane on a phone on its side (132 to 180px at 844x390, 667x375 and
+568x320, 18px under the in-flow chip row). Off, it has the reset button's white surface and shadow. On, it is a
 filled disc, `brand` by day and `night.accent` at night, with the icon in white or
 `night.bg`. Its accessible name is the existing `radar` string, and the icon, a cloud with
 rain, is inline SVG because the icon font is a frozen subset.
@@ -483,6 +497,13 @@ laid out but `position: absolute` and `visibility: hidden`, so it takes no space
 and no focus and can still be measured for when the sheet comes down. At 320x568 with the
 sheet at half the edge is the button (128 to 176px), the two toggles (184 to 216px) and the
 reset (224 to 272px). At peek, and at half on 360x800 and 390x844, everything is drawn.
+
+Beside a zoom column (a phone on its side and every wider screen) the bottom-right column
+also stops 8px short of that column, at `calc(100% - 78px)` (`ZOOM_COLUMN_CLEAR` in
+`MapView`), and a chip too wide for the rest wraps onto two lines inside its 44px. At
+568x320 the map is 268px wide, and the "Zoom in to see bars and places" chip, 204px and
+right-aligned, ran over the reset under the + and -. Capped, it is 190px wide and ends
+10px clear of it. A wider map leaves room for every chip, so nothing moves there.
 
 A plan that expects rain during the trip turns the radar on, on every layout. The test is
 `PlanView.rainExpected === true`, the field the summary's weather tag reads; the backend's

@@ -752,7 +752,7 @@ export default function App() {
   // exactly the arrangement the app already uses from `lg` up.
   const landscapePhone = isPhone && shortChrome;
   // Portrait phone: the results live in a sheet over a full-screen map. A phone on its
-  // side is wider than md and keeps the side-by-side panes.
+  // side keeps the side-by-side panes at any width, below md as well (see the map stage).
   const sheetLayout = isPhone && !landscapePhone;
   // Navigation takes the top of a portrait phone's map for its banner: the floating
   // pill, chips and back button step aside, and nothing up there but the banner's Exit
@@ -1192,8 +1192,11 @@ export default function App() {
             <div className="px-4 md:px-6">{filterBar}</div>
           )}
           {/* Below md the two panes stack, map first (Maps-style: map on top, results
-              scrolling under it); from md up they sit side by side, results left. On a
-              portrait phone the map fills the stage and the results are a sheet over it. */}
+              scrolling under it); from md up they sit side by side, results left. A phone
+              on its side has them side by side at any width: stacked at 568x320, an iPhone
+              SE on its side, the map was a 102px strip, the zoom column and the reset under
+              it took 158px of it, and Leaflet's overflow cut the reset off. On a portrait
+              phone the map fills the stage and the results are a sheet over it. */}
           {/* tabIndex -1 so the skip link can put focus here; without it the browser
               scrolls to the anchor but focus stays where it was and the next Tab
               starts again from the top. */}
@@ -1204,12 +1207,12 @@ export default function App() {
             className={
               sheetLayout
                 ? "relative min-h-0 flex-1 overflow-hidden focus:outline-none"
-                : `flex min-h-0 flex-1 flex-col gap-3 px-4 focus:outline-none md:flex-row md:gap-4 md:px-6 ${
+                : `flex min-h-0 flex-1 px-4 focus:outline-none md:px-6 ${
                   // 24px of floor is a portrait margin. On a phone turned sideways it is the
                   // last 16px between the advice and two thirds of the screen.
                   landscapePhone
-                    ? "pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
-                    : "pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+                    ? "flex-row gap-4 pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
+                    : "flex-col gap-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:flex-row md:gap-4 md:pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
                 }`
             }
           >
@@ -1254,8 +1257,10 @@ export default function App() {
               <>
                 <section
                   data-fov="results-column"
-                  className={`order-2 min-h-0 flex-1 overflow-y-auto md:order-1 md:flex-none ${
-                    hideMap ? "md:w-full" : "md:w-1/2"
+                  className={`min-h-0 overflow-y-auto ${
+                    landscapePhone
+                      ? `order-1 flex-none ${hideMap ? "w-full" : "w-1/2"}`
+                      : `order-2 flex-1 md:order-1 md:flex-none ${hideMap ? "md:w-full" : "md:w-1/2"}`
                   }`}
                 >
                   {resultsBody}
@@ -1268,9 +1273,13 @@ export default function App() {
                     and the map is still bigger than the whole column used to be. From `md`
                     up the two panes are side by side and this height does not apply at all.
                     "Hide map" in the filter bar remains the way to give the column the
-                    whole screen. */}
+                    whole screen. A phone on its side never stacks, so it never gets the 32dvh. */}
                 {!hideMap && (
-                  <section className="relative order-1 h-[32dvh] shrink-0 md:order-2 md:h-auto md:w-1/2">
+                  <section
+                    className={`relative shrink-0 ${
+                      landscapePhone ? "order-2 w-1/2" : "order-1 h-[32dvh] md:order-2 md:h-auto md:w-1/2"
+                    }`}
+                  >
                     {mapPane}
                   </section>
                 )}

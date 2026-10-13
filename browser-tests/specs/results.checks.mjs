@@ -501,7 +501,8 @@ export const scenarios = [
   },
 
   // The results column's Start, at every size the column is the layout: a phone on its
-  // side (844x390, and 568x320, where the column is the strip under the map), a portrait
+  // side (844x390, and 568x320, narrower than md, where the column used to be the strip
+  // under the map and is now the left half beside it, as at 844x390), a portrait
   // tablet and a desktop. On a phone on its side the button used to sit inside the
   // folded steps. Chrome still lays a closed <details> out, so the button had a box, 40px
   // of it below the chosen option's own, but nothing was painted there and a finger at

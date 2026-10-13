@@ -781,6 +781,53 @@ test("a phone on its side keeps its header bar, its filter bar in flow and its z
   }
 });
 
+// The map stage's two panes, beside the map pane's own section.
+function panes() {
+  const main = document.getElementById("fov-map-main") as HTMLElement;
+  const column = main.querySelector('[data-fov="results-column"]') as HTMLElement;
+  const map = [...main.querySelectorAll(":scope > section")].find((s) => s !== column) as HTMLElement;
+  return { main, column, map };
+}
+
+// An iPhone SE on its side is 568x320, under md. The panes used to stack there, a 32dvh
+// map (102px) over the results, so the zoom column and the reset did not fit the map.
+// A phone on its side puts them side by side at any width, the way 844x390 always had
+// them from md up.
+test("a phone on its side lays the results and the map side by side whatever its width", async () => {
+  const restore = phoneViewport({ landscape: true });
+  const size = { w: window.innerWidth, h: window.innerHeight };
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 568 });
+  Object.defineProperty(window, "innerHeight", { configurable: true, value: 320 });
+  try {
+    renderApp();
+    await morphTo(1);
+    const { main, column, map } = panes();
+    expect(main).toHaveClass("flex-row");
+    expect(main).not.toHaveClass("flex-col");
+    expect(column).toHaveClass("order-1", "flex-none", "w-1/2");
+    expect(column).not.toHaveClass("order-2", "flex-1");
+    expect(map).toHaveClass("order-2", "w-1/2");
+    expect(map).not.toHaveClass("order-1", "h-[32dvh]");
+  } finally {
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: size.w });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: size.h });
+    restore();
+  }
+});
+
+// Tablets and desktops keep the stack below md and the row from md up, unchanged.
+test("on a wider screen the panes stack below md and sit side by side from md, as before", async () => {
+  renderApp();
+  await morphTo(1);
+  const { main, column, map } = panes();
+  expect(main).toHaveClass("flex-col", "md:flex-row");
+  expect(main).not.toHaveClass("flex-row");
+  expect(column).toHaveClass("order-2", "flex-1", "md:order-1", "md:flex-none", "md:w-1/2");
+  expect(map).toHaveClass("order-1", "h-[32dvh]", "md:order-2", "md:h-auto", "md:w-1/2");
+  Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+});
+
 test("the desktop header keeps its wordmark and gains no back arrow", () => {
   // No phoneViewport(): a header with room for a wordmark, a menu and a search pill
   // does not need a second way home in front of them.

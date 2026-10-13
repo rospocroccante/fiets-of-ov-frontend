@@ -79,6 +79,12 @@ const POSITION = "#DA291C";
 const STOP = "#0D4A73";
 const FLAG = "#0B2147";
 
+// How much of the map's width the bottom-right column leaves to the zoom column: Leaflet's
+// 10px corner margin and its 48px bar (44px buttons in a 2px border), 8px of air, and the
+// column's own 12px in from the right edge. The reset under the + and - is a bar of the
+// same width, so the number holds for the whole zoom column.
+const ZOOM_COLUMN_CLEAR = 10 + 48 + 8 + 12;
+
 // A leg's drawable path: its real geometry when present, else a straight line endpoints.
 // Ferries are always drawn dock-to-dock: OTP's shape follows the line's full stop
 // pattern (F7 calls at Distelweg between Pontsteiger and NDSM), which on the map reads
@@ -1034,13 +1040,18 @@ export function MapView({
           error chip straight on top of the zoom-in chip. Stacked, each takes its own
           line. Lifted by the inset, so a results sheet does not cover them. It shares
           the right edge with the radar's readout above it, and its chips give way when
-          the two do not fit (edge, above). */}
+          the two do not fit (edge, above). Beside a zoom column it stops 8px short of
+          it, and a chip too wide for the rest wraps: on a phone on its side the map can
+          be 268px wide, and the zoom-in chip's left end ran over the reset. */}
       {interactive &&
         clipUnderChrome(
           topInset,
           <div
             className={`absolute right-3 z-[1000] flex flex-col items-end gap-2 ${topInset > 0 ? "pointer-events-auto" : ""}`.trim()}
-            style={{ bottom: 12 + bottomInset }}
+            style={{
+              bottom: 12 + bottomInset,
+              ...(zoomControl ? { maxWidth: `calc(100% - ${ZOOM_COLUMN_CLEAR}px)` } : null),
+            }}
           >
             {/* The place chips, which give way when the edge is short of room (edge). */}
             {placesShown && (
