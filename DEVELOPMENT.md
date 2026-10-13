@@ -208,14 +208,18 @@ could not be pulled down from its content there.
 ### The home's trip rows
 
 The popular and recent trips on the home, and the recent trips on the Saved tab, are one
-row (`TripRow` in `HomeShortcuts.tsx`), drawn like a maps app's suggestion list. A 40px
-neutral circle (`slate-100`, `night.raised` at night) holds a pin for a popular trip and a
-clock for a recent one, then the destination in 15px semibold over "from {origin}" in
-13px, a recent trip's time-ago, and a chevron. Rows are 64px tall. Every row sits on a
-1px hairline inset to its text, except the last row of each column (`TripList`,
-`ROW_DIVIDER`). Nothing is coloured per trip: the popular trips used to be metro lines
-in red, blue, green and yellow, and the colours clashed. The Saved tab's place rows take
-the same circle (with the amber star), height and hairline, so the text of both
+row (`TripRow` in `HomeShortcuts.tsx`), drawn like a maps app's suggestion list. It
+leads with a 40px orb (`TripOrb`, styled by `.trip-orb` in `index.css`): a blurred conic
+field of blue, violet, pink, orange and yellow that turns every 9s, breathes and sends
+out a ring of light on a 4.8s beat, and stands still under reduced motion. The
+destination seeds it, so a trip keeps the same colours and starting point wherever it is
+listed and the rows of a list never pulse in step. Then the destination in 15px semibold
+over "from {origin}" in 13px, a recent trip's time-ago, and a chevron. Rows are 64px
+tall. Every row sits on a 1px hairline inset to its text, except the last row of each
+column (`TripList`, `ROW_DIVIDER`). The popular trips used to be metro lines in red,
+blue, green and yellow, and then a grey pin in a grey circle; the owner found the first
+garish and the second lifeless. The Saved tab's place rows take the same orb, height and
+hairline, so the text of both
 sections starts on one line.
 
 From `sm` up the home lists the rows in two columns. Each row is one height, so the

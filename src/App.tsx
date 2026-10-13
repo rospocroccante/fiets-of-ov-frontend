@@ -1505,7 +1505,6 @@ export default function App() {
                 <TripRow
                   key={`${trip.from}-${trip.to}`}
                   fov="popular-trip"
-                  glyph="place"
                   to={trip.to}
                   from={trip.from}
                   label={`${trip.from} → ${trip.to}`}

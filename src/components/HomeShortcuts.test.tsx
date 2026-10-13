@@ -92,11 +92,10 @@ test("a recent trip is a suggestion row: clock, destination over origin, time-ag
   expect(ago.compareDocumentPosition(chevron) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(to).toHaveClass("truncate", "font-semibold", "text-slate-900", "dark:text-night-text");
   expect(ago).toHaveClass("shrink-0");
-  // The same neutral circle as a popular trip, holding a clock.
+  // The same orb a popular trip leads with.
   const glyph = row.querySelector('[data-fov="row-glyph"]')!;
   expect(glyph).toHaveAttribute("aria-hidden", "true");
-  expect(glyph).toHaveClass("h-10", "w-10", "rounded-full", "bg-slate-100", "dark:bg-night-raised");
-  expect(glyph.querySelector("svg")).toHaveAttribute("data-glyph", "clock");
+  expect(glyph).toHaveClass("trip-orb");
   expect(row).toHaveClass("min-h-16");
   // One column on a phone, two from `sm` up, as the popular trips are.
   expect(row.closest("ul")).toHaveClass("grid-cols-1", "sm:grid-cols-2");

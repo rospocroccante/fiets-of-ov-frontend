@@ -4,7 +4,8 @@ import type { RecentTrip } from "../hooks/useRecentTrips";
 import type { SavedPlace } from "../hooks/useSavedPlaces";
 import { useConfirmTap } from "../hooks/useConfirmTap";
 import { useI18n } from "../lib/i18n";
-import { RecentTripRow, ROW_DIVIDER, ROW_GLYPH_CIRCLE, TripList } from "./HomeShortcuts";
+import { RecentTripRow, ROW_DIVIDER, TripList } from "./HomeShortcuts";
+import { TripOrb } from "./TripOrb";
 import { Snackbar } from "./Snackbar";
 
 // Swiping a row left this far reveals its Delete button.
@@ -179,14 +180,7 @@ function PlaceRow({
           }}
           className="flex min-h-16 min-w-0 flex-1 items-center gap-4 py-3 text-left"
         >
-          <span aria-hidden="true" data-fov="row-glyph" className={ROW_GLYPH_CIRCLE}>
-            <span
-              className="material-symbols-rounded text-[20px] leading-none text-amber-500"
-              style={{ fontVariationSettings: "'FILL' 1" }}
-            >
-              star
-            </span>
-          </span>
+          <TripOrb seed={place.name} />
           <span className="min-w-0">
             <span className="block truncate text-[15px] font-semibold leading-5 text-slate-900 dark:text-night-text">{place.name}</span>
             {place.label && place.label !== place.name && (

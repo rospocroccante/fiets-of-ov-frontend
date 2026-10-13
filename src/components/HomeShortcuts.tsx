@@ -4,7 +4,8 @@ import type { RecentTrip } from "../hooks/useRecentTrips";
 import type { SavedPlace } from "../hooks/useSavedPlaces";
 import { useI18n } from "../lib/i18n";
 import type { Translator } from "../lib/i18n";
-import { ChevronRight, RowGlyph } from "./icons/RowIcons";
+import { ChevronRight } from "./icons/RowIcons";
+import { TripOrb } from "./TripOrb";
 
 function timeAgo(at: number, now: number, t: Translator): string {
   const min = Math.max(1, Math.round((now - at) / 60000));
@@ -20,14 +21,10 @@ function timeAgo(at: number, now: number, t: Translator): string {
 export const ROW_DIVIDER =
   "relative after:pointer-events-none after:absolute after:bottom-0 after:left-14 after:right-0 after:h-px after:bg-slate-200 dark:after:bg-night-border last:after:hidden";
 
-// The neutral circle a row leads with: 40px, slate-100 by day and night.raised at night.
-export const ROW_GLYPH_CIRCLE =
-  "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-night-raised";
-
-// One trip as a suggestion row, the way a maps app lists suggestions: a neutral glyph in
-// a neutral 40px circle, the destination over "from {origin}", an optional time-ago and
-// a chevron. The popular trips (App) and the recent ones (here and on the Saved tab) are
-// all this row, in one colour. No card and no shadow; TripList draws the hairlines.
+// One trip as a suggestion row: the trip's orb (TripOrb, its colours seeded by the
+// destination), the destination over "from {origin}", an optional time-ago and a
+// chevron. The popular trips (App) and the recent ones (here and on the Saved tab) are
+// all this row. No card and no shadow; TripList draws the hairlines.
 //
 // The text sits straight on the aurora, and by day the aurora is darker than it looks.
 // Sampled at 390x844 with the foreground hidden, every 0.5s over 64s of drift, the
@@ -45,7 +42,6 @@ export const ROW_GLYPH_CIRCLE =
 export function TripRow({
   to,
   from,
-  glyph,
   label,
   meta,
   fov,
@@ -53,7 +49,6 @@ export function TripRow({
 }: {
   to: string;
   from: string;
-  glyph: "place" | "recent";
   label: string;
   meta?: string;
   fov?: string;
@@ -68,13 +63,7 @@ export function TripRow({
       aria-label={label}
       className="-mx-2 flex min-h-16 w-[calc(100%+1rem)] items-center gap-4 rounded-card px-2 py-3 text-left transition-colors hover:bg-slate-900/5 dark:hover:bg-night-hover/60"
     >
-      <span
-        aria-hidden="true"
-        data-fov="row-glyph"
-        className={`${ROW_GLYPH_CIRCLE} text-slate-600 dark:text-night-muted`}
-      >
-        <RowGlyph kind={glyph} className="h-5 w-5" />
-      </span>
+      <TripOrb seed={to} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[15px] font-semibold leading-5 text-slate-900 dark:text-night-text">{to}</span>
         <span className="block truncate text-[13px] leading-[18px] text-slate-800 dark:text-night-muted">
@@ -112,7 +101,6 @@ export function RecentTripRow({ trip, now, onPick }: { trip: RecentTrip; now: nu
   const ago = timeAgo(trip.at, now, t);
   return (
     <TripRow
-      glyph="recent"
       to={trip.toLabel}
       from={trip.fromLabel}
       label={`${trip.fromLabel} → ${trip.toLabel}, ${ago}`}
