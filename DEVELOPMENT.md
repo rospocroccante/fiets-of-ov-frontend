@@ -209,16 +209,18 @@ could not be pulled down from its content there.
 
 The popular and recent trips on the home, and the recent trips on the Saved tab, are one
 row (`TripRow` in `HomeShortcuts.tsx`), drawn like a maps app's suggestion list. It
-leads with a 40px orb (`TripOrb`, styled by `.trip-orb` in `index.css`): a blurred conic
-field of blue, violet, pink, orange and yellow that turns every 9s, breathes and sends
-out a ring of light on a 4.8s beat, and stands still under reduced motion. The
-destination seeds it, so a trip keeps the same colours and starting point wherever it is
-listed and the rows of a list never pulse in step. Then the destination in 15px semibold
+leads with a glow (`TripOrb`, styled by `.trip-orb` in `index.css`) in the manner of
+Fresha's logo: one colour, solid at the centre and fading to transparent, so no edge or
+circle shows. A wider halo of the same colour breathes on a 4.8s beat and the core swells
+with it; under reduced motion it stands still. The destination picks the colour (violet,
+blue, pink, coral, teal or purple) and the starting point of the breath, so a trip looks
+the same wherever it is listed and the rows of a list never pulse in step. Then the destination in 15px semibold
 over "from {origin}" in 13px, a recent trip's time-ago, and a chevron. Rows are 64px
 tall. Every row sits on a 1px hairline inset to its text, except the last row of each
 column (`TripList`, `ROW_DIVIDER`). The popular trips used to be metro lines in red,
-blue, green and yellow, and then a grey pin in a grey circle; the owner found the first
-garish and the second lifeless. The Saved tab's place rows take the same orb, height and
+blue, green and yellow, then a grey pin in a grey circle, then a glossy multicolour
+sphere; the owner found them garish, lifeless and off-brief. The Saved tab's place rows
+take the same glow, height and
 hairline, so the text of both
 sections starts on one line.
 
