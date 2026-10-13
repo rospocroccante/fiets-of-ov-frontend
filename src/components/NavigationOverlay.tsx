@@ -1,8 +1,11 @@
+import { motion } from "framer-motion";
 import { useI18n } from "../lib/i18n";
+import { overlay, useLeaving, useMotionPreset } from "../lib/motion";
 import type { NavManeuver } from "../lib/routeProgress";
 
 // Maneuver banner shown over the map while navigating: next-turn glyph + distance,
-// street line, exit button, and a slim remaining-distance/ETA sub-row.
+// street line, exit button, and a slim remaining-distance/ETA sub-row. App mounts it
+// inside AnimatePresence: it rises into place and drops away, inert while it does.
 
 // OTP relative directions plus the synthetic BOARD/ALIGHT/ARRIVE from routeProgress;
 // anything unmapped reads as "keep going" rather than crashing the banner.
@@ -36,19 +39,28 @@ export function NavigationOverlay({
   remaining,
   etaMinutes,
   onExit,
+  fullBleed = false,
 }: {
   next: NavManeuver | null;
   toNext: number; // meters to the next maneuver
   remaining: number; // meters to the destination
   etaMinutes: number;
   onExit: () => void;
+  // The map runs under the status bar (a portrait phone), so the banner keeps 8px under
+  // the top inset instead of 12px under the map's edge.
+  fullBleed?: boolean;
 }) {
   const { t } = useI18n();
   // next === null only past the final ARRIVE maneuver: the trip is done.
   const arrived = next === null;
   const glyph = arrived ? "sports_score" : (GLYPH[next.direction] ?? "straight");
+  const motionProps = useMotionPreset(overlay);
+  const [, leavingProps] = useLeaving();
   return (
-    <div className="absolute left-3 right-3 top-3 z-[1000] rounded-card border border-slate-100 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-white/10 dark:bg-night-raised/95">
+    <motion.div
+      {...motionProps}
+      {...leavingProps}
+      className={`absolute left-3 right-3 ${fullBleed ? "top-[calc(0.5rem+env(safe-area-inset-top))]" : "top-3"} z-[1000] rounded-card border border-slate-100 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-night-rim/20 dark:bg-night-raised/95`}>
       <div className="flex items-center gap-3">
         <span
           aria-hidden="true"
@@ -75,11 +87,11 @@ export function NavigationOverlay({
           </span>
         </button>
       </div>
-      <div className="mt-2 flex items-center gap-1.5 border-t border-slate-100 pt-2 text-xs text-slate-500 dark:border-white/10 dark:text-night-subtle">
+      <div className="mt-2 flex items-center gap-1.5 border-t border-slate-100 pt-2 text-xs text-slate-500 dark:border-night-rim/20 dark:text-night-subtle">
         <span>{formatM(remaining)}</span>
         <span aria-hidden="true">·</span>
         <span>~{etaMinutes} min</span>
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -26,3 +26,18 @@ test("corrupted storage falls back to empty", () => {
   const { result } = renderHook(() => useSavedPlaces());
   expect(result.current.places).toEqual([]);
 });
+
+test("restore puts a removed place back where it was", () => {
+  let t = 1000;
+  const { result } = renderHook(() => useSavedPlaces(() => t++));
+  act(() => result.current.toggle({ name: "A", lat: 52.1, lon: 4.1 }));
+  act(() => result.current.toggle({ name: "B", lat: 52.2, lon: 4.2 }));
+  act(() => result.current.toggle({ name: "C", lat: 52.3, lon: 4.3 }));
+  const b = result.current.places.find((p) => p.name === "B")!;
+  act(() => result.current.toggle(b));
+  expect(result.current.places.map((p) => p.name)).toEqual(["C", "A"]);
+  act(() => result.current.restore(b));
+  expect(result.current.places.map((p) => p.name)).toEqual(["C", "B", "A"]);
+  act(() => result.current.restore(b));
+  expect(result.current.places).toHaveLength(3);
+});

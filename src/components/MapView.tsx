@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Circle,
@@ -61,10 +61,13 @@ import { useRainRadar } from "../hooks/useRainRadar";
 import { useWindField } from "../hooks/useWindField";
 import { useI18n } from "../lib/i18n";
 import { modeColor } from "../lib/modeColors";
+import { DURATION_MS, EASE_CSS, prefersReducedMotion } from "../lib/motion";
 import { decodePolyline } from "../lib/polyline";
+import { EDGE_ALL, fitEdge, OUT_OF_ROOM, sameFit, type EdgeFit } from "../lib/mapEdge";
 import { Basemap } from "./Basemap";
 import { RadarOverlay, RadarReadout } from "./RainRadar";
 import type { WeatherLayersState } from "./RainRadar";
+import { RADAR_BUTTON_CLEAR } from "./RadarButton";
 import { WindVelocityLayer } from "./WeatherLive";
 
 type LatLon = { lat: number; lon: number };
@@ -75,6 +78,12 @@ const AMS: [number, number] = [52.3728, 4.8936];
 const POSITION = "#DA291C";
 const STOP = "#0D4A73";
 const FLAG = "#0B2147";
+
+// How much of the map's width the bottom-right column leaves to the zoom column: Leaflet's
+// 10px corner margin and its 48px bar (44px buttons in a 2px border), 8px of air, and the
+// column's own 12px in from the right edge. The reset under the + and - is a bar of the
+// same width, so the number holds for the whole zoom column.
+const ZOOM_COLUMN_CLEAR = 10 + 48 + 8 + 12;
 
 // A leg's drawable path: its real geometry when present, else a straight line endpoints.
 // Ferries are always drawn dock-to-dock: OTP's shape follows the line's full stop
@@ -339,20 +348,36 @@ function boundsCenter(coords: [number, number][]): [number, number] {
   return [(minLat + maxLat) / 2, (minLon + maxLon) / 2];
 }
 
+//
+// Under reduced motion the camera does not glide at all: it is put where it is going
+// in one step. Asked at the moment of moving, so a change of the setting counts.
+//
+// `bottomInset` is the part of the map a results sheet covers on a phone, in px, and
+// `topInset` the part the floating chrome covers at the top. The fit pads each edge by
+// that much more, so the route lands in the part still on screen.
 function applyDefaultView(
   map: L.Map,
   coords: [number, number][],
   fallback: LatLon | null,
   empty: "keep" | "city",
+  bottomInset = 0,
+  topInset = 0,
 ) {
+  const instant = prefersReducedMotion();
   if (coords.length >= 2) {
-    if (typeof map.flyToBounds === "function") {
+    const padding = {
+      paddingTopLeft: [50, 50 + topInset] as [number, number],
+      paddingBottomRight: [50, 50 + bottomInset] as [number, number],
+    };
+    if (instant && typeof map.fitBounds === "function") {
+      map.fitBounds(coords as LatLngBoundsExpression, { ...padding, animate: false });
+    } else if (typeof map.flyToBounds === "function") {
       map.flyToBounds(coords as LatLngBoundsExpression, {
-        padding: [50, 50],
+        ...padding,
         ...flyOpts(map, boundsCenter(coords)),
       });
     } else if (typeof map.fitBounds === "function") {
-      map.fitBounds(coords as LatLngBoundsExpression, { padding: [50, 50] });
+      map.fitBounds(coords as LatLngBoundsExpression, padding);
     }
     return;
   }
@@ -363,7 +388,8 @@ function applyDefaultView(
       : null;
   if (!target) return;
   const zoom = fallback ? 14 : 13;
-  if (typeof map.flyTo === "function") map.flyTo(target, zoom, flyOpts(map, target));
+  if (instant && typeof map.setView === "function") map.setView(target, zoom, { animate: false });
+  else if (typeof map.flyTo === "function") map.flyTo(target, zoom, flyOpts(map, target));
   else if (typeof map.setView === "function") map.setView(target, zoom);
 }
 
@@ -371,22 +397,53 @@ function FitRoute({
   coords,
   fallback,
   active,
+  bottomInset,
+  topInset,
 }: {
   coords: [number, number][];
   fallback: LatLon | null;
   active: boolean;
+  bottomInset: number;
+  topInset: number;
 }) {
   const map = useMap();
   useEffect(() => {
     // Navigation owns the camera: a refit on every replan would snap it off the fix.
     if (!active) return;
-    applyDefaultView(map, coords, fallback, "keep");
-  }, [map, coords, fallback, active]);
+    // The insets are dependencies so a sheet settling at a new height refits once.
+    applyDefaultView(map, coords, fallback, "keep", bottomInset, topInset);
+  }, [map, coords, fallback, active, bottomInset, topInset]);
+  return null;
+}
+
+// Leaflet's + and - are built with the map, and react-leaflet freezes the option there.
+// MapContainer still gets it, so a map built without them never shows them for a frame,
+// and this adds or removes them on the map itself when the answer changes later.
+// Re-added, Leaflet appends the control to its corner, under anything already there, so
+// it is moved back to the head of the column.
+function ZoomButtons({ show }: { show: boolean }) {
+  const map = useMap() as L.Map;
+  useEffect(() => {
+    if (!show) {
+      map.zoomControl?.remove();
+      return;
+    }
+    if (!map.zoomControl) {
+      if (typeof L.control?.zoom !== "function") return;
+      map.zoomControl = L.control.zoom();
+    }
+    const box = map.zoomControl.getContainer();
+    if (box?.parentNode) return;
+    map.zoomControl.addTo(map);
+    const added = map.zoomControl.getContainer();
+    added?.parentNode?.insertBefore(added, added.parentNode.firstChild);
+  }, [map, show]);
   return null;
 }
 
 // Keeps the camera on the live fix: one hard setView to street zoom on activation,
-// then panTo per fix so the user's own zoom tweaks survive while riding.
+// then panTo per fix so the user's own zoom tweaks survive while riding. Both glide by
+// default and jump under reduced motion.
 function FollowCamera({ target, active }: { target: LatLon | null; active: boolean }) {
   const map = useMap();
   const started = useRef(false);
@@ -397,15 +454,97 @@ function FollowCamera({ target, active }: { target: LatLon | null; active: boole
       started.current = false;
       return;
     }
+    const move = prefersReducedMotion() ? { animate: false } : undefined;
     if (!started.current) {
       started.current = true;
-      map.setView([lat, lon], 17);
+      map.setView([lat, lon], 17, move);
       return;
     }
     // Guarded: the test mock's map may not implement panTo.
-    if (typeof map.panTo === "function") map.panTo([lat, lon]);
+    if (typeof map.panTo === "function") map.panTo([lat, lon], move);
   }, [map, active, lat, lon]);
   return null;
+}
+
+// A new route arrives as if drawn with a pen: each solid line grows from its start to
+// its end over `draw`. The dash pattern that does it is put on the SVG path Leaflet
+// rendered and taken off again when the line is complete, so the line at rest is
+// exactly the one Leaflet drew. pathLength="1" measures the dashes in fractions of the
+// line rather than in pixels, which keeps the draw right when the camera's own glide
+// changes the zoom (and so the path) halfway through. The gap is twice the line, so no
+// second dash can start at its far end and put a round cap there.
+//
+// A line with a dash pattern of its own (a walk) cannot be drawn this way without
+// losing that pattern, so it fades in over `base`; so does every line when the map
+// renders to a canvas, where there is no path element to style. Returns the cleanup,
+// which puts the line back at rest at once.
+export function revealRouteLine(layer: L.Path): () => void {
+  const el = layer.getElement();
+  if (!(el instanceof SVGElement)) return fadeOnCanvas(layer);
+  const draw = !layer.options.dashArray;
+  const prop = draw ? "stroke-dashoffset" : "opacity";
+  const ms = draw ? DURATION_MS.draw : DURATION_MS.base;
+  if (draw) {
+    el.setAttribute("pathLength", "1");
+    el.style.setProperty("stroke-dasharray", "1 2");
+  }
+  el.style.setProperty(prop, draw ? "1" : "0");
+  // Commit the hidden start before the transition goes on, or the browser has no
+  // starting value to transition from and the line simply appears.
+  el.getBoundingClientRect();
+  el.style.setProperty("transition", `${prop} ${ms}ms ${EASE_CSS.enter}`);
+  el.style.setProperty(prop, draw ? "0" : "1");
+  const rest = () => {
+    el.removeAttribute("pathLength");
+    for (const p of ["stroke-dasharray", prop, "transition"]) el.style.removeProperty(p);
+  };
+  const timer = window.setTimeout(rest, ms);
+  return () => {
+    window.clearTimeout(timer);
+    rest();
+  };
+}
+
+// The canvas renderer paints every layer into one bitmap, so the fade goes through
+// Leaflet's own style, one frame at a time.
+function fadeOnCanvas(layer: L.Path): () => void {
+  const opacity = layer.options.opacity ?? 1;
+  const start = performance.now();
+  let frame = 0;
+  const step = (now: number) => {
+    const t = Math.min(1, (now - start) / DURATION_MS.base);
+    layer.setStyle({ opacity: opacity * t });
+    if (t < 1) frame = requestAnimationFrame(step);
+  };
+  step(start);
+  return () => {
+    cancelAnimationFrame(frame);
+    layer.setStyle({ opacity });
+  };
+}
+
+// One line of the route (a leg, or the casing under it) that draws itself in whenever
+// `drawKey` changes. The key is the whole route's geometry, so a new trip or another
+// option draws every line again, and a re-render or a reselection of the option on
+// screen draws nothing. Reduced motion: no draw and no fade. The effect runs after
+// react-leaflet's own, which have added the layer to the map by then, so the path
+// element exists.
+function RouteLine({
+  positions,
+  pathOptions,
+  drawKey,
+}: {
+  positions: LatLngExpression[];
+  pathOptions: L.PathOptions;
+  drawKey: string;
+}) {
+  const ref = useRef<L.Polyline | null>(null);
+  useEffect(() => {
+    const layer = ref.current;
+    if (!layer || prefersReducedMotion()) return;
+    return revealRouteLine(layer);
+  }, [drawKey]);
+  return <Polyline ref={ref} positions={positions} pathOptions={pathOptions} />;
 }
 
 // Put a control in Leaflet's own corner when Leaflet built one, and leave it in the
@@ -414,6 +553,20 @@ function FollowCamera({ target, active }: { target: LatLon | null; active: boole
 // exists inside a real Leaflet map is a control those tests cannot click.
 function renderIntoCorner(corner: HTMLElement | null, node: JSX.Element): JSX.Element {
   return corner ? createPortal(node, corner) : node;
+}
+
+// The bottom-right column on a map with floating chrome over its top. A full results
+// sheet lifts the column by its own height, which would carry it up under the search
+// pill; inside this box it is clipped at the chrome's edge instead, the way the column
+// was clipped by the map pane's own top before the map ran under the chrome. The box
+// takes no touches itself. With nothing over the top of the map there is no box at all.
+function clipUnderChrome(topInset: number, node: JSX.Element): JSX.Element {
+  if (topInset <= 0) return node;
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 overflow-hidden" style={{ top: topInset }}>
+      {node}
+    </div>
+  );
 }
 
 function toLatLon(ll: { lat: number; lng: number }): LatLon {
@@ -510,6 +663,10 @@ export function MapView({
   dark = false,
   liveFix = null,
   navigating = false,
+  bottomInset = 0,
+  topInset = 0,
+  zoomControl = true,
+  radarButton = false,
 }: {
   origin: LatLon | null;
   destination: LatLon | null;
@@ -534,6 +691,21 @@ export function MapView({
   // the camera (follow the fix, suppress route refits).
   liveFix?: { lat: number; lon: number; accuracy: number } | null;
   navigating?: boolean;
+  // How much of the map's bottom edge a results sheet covers, in px (the phone's sheet
+  // reports it when it settles). The route fit, the reset and the bottom controls keep
+  // clear of it.
+  bottomInset?: number;
+  // How much of the map's top edge floating chrome covers, in px: on a portrait phone
+  // the map runs to the top of the screen under the back button, the search pill and
+  // the filter chips. The route fit pads by it, and everything this component pins to
+  // the top (Leaflet's corners, the radar readout) moves down by it.
+  topInset?: number;
+  // Leaflet's + and - buttons. Off on a portrait phone, which zooms by pinch; the reset
+  // then leaves the zoom column for the bottom-right one.
+  zoomControl?: boolean;
+  // A phone's radar button (RadarButton, which App floats over this map) holds the
+  // top-right corner, 12px under topInset: the readout starts under it instead.
+  radarButton?: boolean;
 }) {
   const { t } = useI18n();
   const legs = route?.legs ?? [];
@@ -544,6 +716,9 @@ export function MapView({
   // both this and allCoords are tied to route identity.
   const legPaths = useMemo(() => (route?.legs ?? []).map(legCoords), [route]);
   const allCoords = useMemo(() => legPaths.flat(), [legPaths]);
+  // The drawn geometry as one value, for RouteLine: it changes when the line on the map
+  // would, and not when only the route object does.
+  const drawKey = useMemo(() => JSON.stringify(legPaths), [legPaths]);
   const [menu, setMenu] = useState<MenuState | null>(null);
   // Weather layers pause entirely while the map is not interactive (scrolled back to
   // the home view, mid-morph): the map stays mounted at opacity 0 there, and the
@@ -578,8 +753,10 @@ export function MapView({
   // those tests keep exercising it.
   const [zoomCorner, setZoomCorner] = useState<HTMLElement | null>(null);
   useEffect(() => {
-    setZoomCorner(wrapRef.current?.querySelector<HTMLElement>(".leaflet-top.leaflet-left") ?? null);
-  }, [interactive]);
+    setZoomCorner(
+      zoomControl ? (wrapRef.current?.querySelector<HTMLElement>(".leaflet-top.leaflet-left") ?? null) : null,
+    );
+  }, [interactive, zoomControl]);
 
   // The corner sits inside the map container, so a click on the button reaches the map
   // underneath it: it would drop a pin with a pick armed, and a double click would zoom.
@@ -591,6 +768,97 @@ export function MapView({
     L.DomEvent.disableClickPropagation(el);
     L.DomEvent.disableScrollPropagation(el);
   }, [zoomCorner]);
+
+  // The map's right edge: the radar button (App's, on a phone), the readout under it, and
+  // the bottom column's place chips and reset riding the sheet up from the foot. What fits
+  // between the button and the reset is decided in lib/mapEdge.ts from the boxes measured
+  // here; this only measures and applies. Without layout (jsdom, every box 0) everything
+  // is drawn.
+  //
+  // It measures when something the fit is decided from changes, and at no other time.
+  // Some of that changes with a render: the insets, the radar going on or off, what the
+  // readout holds, and whether the place chips and the reset are there (the second effect's
+  // dependencies, which are also what mounts and unmounts the boxes it watches). The rest
+  // changes between renders, and one ResizeObserver, built once, reports it: the map's own
+  // size, the readout's clock, which arrives with the first radar frame and re-renders only
+  // the readout, and the place chips. Navigation re-renders the map on every GPS fix and a
+  // fix changes none of this, so it reads no layout and builds no observer.
+  const readoutRef = useRef<HTMLDivElement | null>(null);
+  const placesRef = useRef<HTMLDivElement | null>(null);
+  const edgeResetRef = useRef<HTMLButtonElement | null>(null);
+  const [edge, setEdge] = useState<EdgeFit>(EDGE_ALL);
+  const readoutOffset = topInset + (radarButton ? RADAR_BUTTON_CLEAR : 0);
+  const edgeInputs = useRef({ readoutOffset, bottomInset, showWeather });
+  edgeInputs.current = { readoutOffset, bottomInset, showWeather };
+  // What the readout and the bottom column are drawn from, as their JSX below reads it.
+  const rainError = wLayers.rain && rain.error;
+  const windError = wLayers.wind && wind.error;
+  const hasToggles = onLayerToggle != null;
+  const placesShown = poisError || poisPartial || (viewport != null && viewport.zoom < POI_MIN_ZOOM);
+  const measureEdge = useCallback(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const height = (el: Element | null | undefined) => (el ? el.getBoundingClientRect().height : 0);
+    const { readoutOffset: offset, bottomInset: inset, showWeather: on } = edgeInputs.current;
+    const mapH = wrap.clientHeight;
+    const readout = readoutRef.current;
+    const reset = edgeResetRef.current;
+    const next =
+      mapH > 0
+        ? fitEdge({
+            top: 12 + offset,
+            foot: mapH - 12 - inset - height(reset),
+            readout: on,
+            toggles: height(readout?.querySelector('[data-fov="readout-toggles"]')),
+            extras: height(readout?.querySelector('[data-fov="readout-extras"]')),
+            places: height(placesRef.current),
+            reset: reset != null,
+          })
+        : EDGE_ALL;
+    setEdge((prev) => (sameFit(prev, next) ? prev : next));
+  }, []);
+  const edgeObserver = useRef<ResizeObserver | null>(null);
+  useLayoutEffect(() => {
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measureEdge);
+    edgeObserver.current = ro;
+    return () => {
+      ro.disconnect();
+      edgeObserver.current = null;
+    };
+  }, [measureEdge]);
+  // topInset is here for itself as well as for the readout: it decides whether the bottom
+  // column is wrapped in clipUnderChrome, so a change across 0 mounts new place chips.
+  useLayoutEffect(() => {
+    measureEdge();
+    const ro = edgeObserver.current;
+    if (!ro) return;
+    const watched = [wrapRef.current, readoutRef.current?.querySelector('[data-fov="readout-extras"]'), placesRef.current];
+    const boxes = watched.filter((el): el is Element => el != null);
+    for (const el of boxes) ro.observe(el);
+    return () => {
+      for (const el of boxes) ro.unobserve(el);
+    };
+  }, [
+    measureEdge,
+    interactive,
+    topInset,
+    readoutOffset,
+    bottomInset,
+    showWeather,
+    wLayers.rain,
+    wLayers.wind,
+    rainError,
+    windError,
+    hasToggles,
+    placesShown,
+    zoomControl,
+  ]);
+
+  const resetView = () => {
+    const m = mapRef.current;
+    if (m) applyDefaultView(m, allCoords, origin ?? destination, "city", bottomInset, topInset);
+  };
 
   const handleMenu = (m: MenuState) => {
     if (m.x < 0) setMenu(null);
@@ -630,11 +898,18 @@ export function MapView({
     // MapContainer's className is frozen at mount, so it cannot carry a toggling class.
     // It is also the positioning context for every absolute chip below, and the box the
     // context menu is clamped against.
-    <div ref={wrapRef} className={`relative h-full w-full ${picking ? "map-picking" : ""}`}>
+    // --fov-map-top is how topInset reaches Leaflet's own corners, which Leaflet builds
+    // and React never renders: index.css moves .leaflet-top down by it.
+    <div
+      ref={wrapRef}
+      className={`relative h-full w-full ${picking ? "map-picking" : ""}`}
+      style={topInset > 0 ? ({ "--fov-map-top": `${topInset}px` } as React.CSSProperties) : undefined}
+    >
       <MapContainer
         ref={mapRef}
         center={AMS}
         zoom={13}
+        zoomControl={zoomControl}
         // Leaflet takes its zoom ceiling from the tile layers on the map, and the basemap
         // is no longer one: a GL layer is an L.Layer, not a grid, so getMaxZoom() answers
         // Infinity and the + button never stops. 19 is where the vector tiles stop adding
@@ -648,6 +923,7 @@ export function MapView({
         attributionControl={false}
       >
         <MapInteraction interactive={interactive} />
+        <ZoomButtons show={zoomControl} />
         <ViewportTracker onChange={setViewport} />
         {/* OpenFreeMap vector tiles: bright by day, the dark style at night. The layer
             is MapLibre GL inside this Leaflet map, so both themes are real styles and
@@ -656,7 +932,13 @@ export function MapView({
         {showWeather && wLayers.rain && <RadarOverlay frames={rain.frames} />}
         {showWeather && wLayers.wind && <WindVelocityLayer data={wind.data} />}
         <MapEvents onPick={onPick} onContextMenu={handleMenu} />
-        <FitRoute coords={allCoords} fallback={origin ?? destination} active={!navigating} />
+        <FitRoute
+          coords={allCoords}
+          fallback={origin ?? destination}
+          active={!navigating}
+          bottomInset={bottomInset}
+          topInset={topInset}
+        />
         <FollowCamera target={liveFix} active={navigating} />
 
       {/* White casing under the route for contrast on the light basemap. */}
@@ -664,8 +946,9 @@ export function MapView({
         const coords = legPaths[i];
         if (coords.length < 2) return null;
         return (
-          <Polyline
+          <RouteLine
             key={`case-${i}`}
+            drawKey={drawKey}
             positions={coords as LatLngExpression[]}
             pathOptions={{ color: "#ffffff", weight: 9, opacity: 0.9, lineCap: "round" }}
           />
@@ -678,8 +961,9 @@ export function MapView({
         const coords = legPaths[i];
         if (coords.length < 2) return null;
         return (
-          <Polyline
+          <RouteLine
             key={`leg-${i}`}
+            drawKey={drawKey}
             positions={coords as LatLngExpression[]}
             pathOptions={{
               color: modeColor(leg.mode),
@@ -754,47 +1038,88 @@ export function MapView({
           siblings both pinned to bottom-3 right-3, which was fine only because nobody
           had hit the state where both are true: a dead Overpass at city zoom drew the
           error chip straight on top of the zoom-in chip. Stacked, each takes its own
-          line. */}
-      {interactive && (
-        <div className="absolute bottom-3 right-3 z-[1000] flex flex-col items-end gap-2">
-          {/* A dead POI feed must say so, or an Overpass outage reads as "no places". The
-              amber variant is the half-dead case: part of the view loaded, so the labels
-              on screen are real but incomplete, worth a softer warning than
-              "unavailable". */}
-          {(poisError || poisPartial) && (
-            <span
-              className={`rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold shadow dark:bg-night-surface/90 ${
-                poisError ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"
-              }`}
-            >
-              {poisError ? t("placesUnavailable") : t("placesPartial")}
-            </span>
-          )}
-          {/* Discoverability: the POI layer only exists at street zoom — say so, and let
-              the chip do the zooming (guarded: the test mock's map has no setZoom). */}
-          {viewport != null && viewport.zoom < POI_MIN_ZOOM && (
-            <button
-              type="button"
-              onClick={() => {
-                const m = mapRef.current;
-                if (m && typeof m.setZoom === "function") m.setZoom(POI_MIN_ZOOM);
-              }}
-              // px-3, not wider: the chip is already ~200px across on a phone and it sits
-              // on top of the map pane, so every extra pixel is one more place where a
-              // pan gesture starts on a button instead of on the map.
-              className="inline-flex min-h-[44px] items-center rounded-full bg-white/90 px-3 text-xs font-medium text-slate-600 shadow transition hover:bg-white dark:bg-night-surface/90 dark:text-night-text dark:hover:bg-night-hover"
-            >
-              {t("zoomInForPlaces")}
-            </button>
-          )}
-        </div>
-      )}
+          line. Lifted by the inset, so a results sheet does not cover them. It shares
+          the right edge with the radar's readout above it, and its chips give way when
+          the two do not fit (edge, above). Beside a zoom column it stops 8px short of
+          it, and a chip too wide for the rest wraps: on a phone on its side the map can
+          be 268px wide, and the zoom-in chip's left end ran over the reset. */}
+      {interactive &&
+        clipUnderChrome(
+          topInset,
+          <div
+            className={`absolute right-3 z-[1000] flex flex-col items-end gap-2 ${topInset > 0 ? "pointer-events-auto" : ""}`.trim()}
+            style={{
+              bottom: 12 + bottomInset,
+              ...(zoomControl ? { maxWidth: `calc(100% - ${ZOOM_COLUMN_CLEAR}px)` } : null),
+            }}
+          >
+            {/* The place chips, which give way when the edge is short of room (edge). */}
+            {placesShown && (
+              <div
+                ref={placesRef}
+                data-fov="map-places"
+                className="flex flex-col items-end gap-2"
+                style={edge.places ? undefined : OUT_OF_ROOM}
+              >
+                {/* A dead POI feed must say so, or an Overpass outage reads as "no places". The
+                    amber variant is the half-dead case: part of the view loaded, so the labels
+                    on screen are real but incomplete, worth a softer warning than
+                    "unavailable". */}
+                {(poisError || poisPartial) && (
+                  <span
+                    className={`rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold shadow dark:bg-night-surface/90 ${
+                      poisError ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"
+                    }`}
+                  >
+                    {poisError ? t("placesUnavailable") : t("placesPartial")}
+                  </span>
+                )}
+                {/* Discoverability: the POI layer only exists at street zoom — say so, and let
+                    the chip do the zooming (guarded: the test mock's map has no setZoom). */}
+                {viewport != null && viewport.zoom < POI_MIN_ZOOM && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const m = mapRef.current;
+                      if (m && typeof m.setZoom === "function") m.setZoom(POI_MIN_ZOOM);
+                    }}
+                    // px-3, not wider: the chip is already ~200px across on a phone and it sits
+                    // on top of the map pane, so every extra pixel is one more place where a
+                    // pan gesture starts on a button instead of on the map.
+                    className="inline-flex min-h-[44px] items-center rounded-full bg-white/90 px-3 text-xs font-medium text-slate-600 shadow transition hover:bg-white dark:bg-night-surface/90 dark:text-night-text dark:hover:bg-night-hover"
+                  >
+                    {t("zoomInForPlaces")}
+                  </button>
+                )}
+              </div>
+            )}
+            {/* Without the zoom column the way back to the trip joins this one, at its
+                foot, as a round floating button like the rest of the map's chrome on a
+                portrait phone. */}
+            {!zoomControl && (
+              <button
+                ref={edgeResetRef}
+                type="button"
+                data-fov="map-reset-view"
+                aria-label={t("resetView")}
+                title={t("resetView")}
+                onClick={resetView}
+                className="flex h-12 w-12 items-center justify-center rounded-full border border-transparent bg-white text-slate-800 shadow-md transition hover:bg-slate-50 dark:border-night-rim/30 dark:bg-night-raised dark:text-night-text dark:hover:bg-night-hover"
+              >
+                <span aria-hidden="true" className="material-symbols-rounded text-[22px] leading-none">
+                  near_me
+                </span>
+              </button>
+            )}
+          </div>,
+        )}
       {/* Panning and zooming a map is easy to do and hard to undo: once the route is off
           screen there is no gesture that brings it back, only a hunt. This is the way
           back, and it is the same view the app picked when the plan arrived. It belongs
           under the + and the -, where it is a third button in the same column rather
           than a stray control in another corner. */}
       {interactive &&
+        zoomControl &&
         renderIntoCorner(
           zoomCorner,
           // leaflet-bar leaflet-control, the same pair Leaflet's zoom control carries.
@@ -806,17 +1131,17 @@ export function MapView({
           // and the two line up because they are the same box rather than because a
           // number here says so. A round pill sat 2px left of the + and the -, which is
           // Leaflet's 2px bar border, and there is no good number to write for that.
-          <div className={zoomCorner ? "leaflet-bar leaflet-control" : "absolute bottom-3 left-3 z-[1000]"}>
+          <div
+            className={zoomCorner ? "leaflet-bar leaflet-control" : "absolute left-3 z-[1000]"}
+            style={zoomCorner ? undefined : { bottom: 12 + bottomInset }}
+          >
             <button
               ref={resetRef}
               type="button"
               data-fov="map-reset-view"
               aria-label={t("resetView")}
               title={t("resetView")}
-              onClick={() => {
-                const m = mapRef.current;
-                if (m) applyDefaultView(m, allCoords, origin ?? destination, "city");
-              }}
+              onClick={resetView}
               // The colours are the ones index.css already gives .leaflet-bar a, written
               // out because those rules select the <a> Leaflet builds and this is a real
               // button. h-11/w-11 is the 44px that same file sets for touch devices.
@@ -833,17 +1158,20 @@ export function MapView({
         )}
       {showWeather && (
         <RadarReadout
+          rootRef={readoutRef}
+          offset={readoutOffset}
+          fit={edge.toggles ? (edge.extras ? "whole" : "toggles") : "none"}
           layers={wLayers}
           onLayerToggle={onLayerToggle}
-          rainError={wLayers.rain && rain.error}
-          windError={wLayers.wind && wind.error}
+          rainError={rainError}
+          windError={windError}
         />
       )}
 
       {menu && (
         <div
           ref={menuRef}
-          className="absolute z-[1000] overflow-hidden rounded-lg border border-slate-200 bg-white text-sm shadow-lg dark:border-white/10 dark:bg-night-raised"
+          className="absolute z-[1000] overflow-hidden rounded-lg border border-slate-200 bg-white text-sm shadow-lg dark:border-night-rim/20 dark:bg-night-raised"
           style={{ left: menuPos?.left ?? menu.x, top: menuPos?.top ?? menu.y }}
         >
           <button
@@ -868,7 +1196,7 @@ export function MapView({
           </button>
           <button
             type="button"
-            className="flex min-h-[44px] w-full items-center border-t border-slate-100 px-4 text-left hover:bg-slate-100 dark:border-white/10 dark:hover:bg-night-hover"
+            className="flex min-h-[44px] w-full items-center border-t border-slate-100 px-4 text-left hover:bg-slate-100 dark:border-night-rim/20 dark:hover:bg-night-hover"
             onClick={() => {
               onWhatsHere?.({ lat: menu.lat, lon: menu.lon });
               setMenu(null);

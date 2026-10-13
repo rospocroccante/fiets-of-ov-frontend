@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import {
@@ -7,6 +7,8 @@ import {
   __fireMarkerDragEnd,
 } from "./__mocks__/react-leaflet";
 import { whenMapMounted } from "./test/mapReady";
+import { glassClasses } from "./test/glass";
+import { waitForExit } from "./test/exit";
 
 function renderApp() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -30,6 +32,63 @@ test("home content is present at rest: headline and Popular trips", () => {
   // assert DOM presence, not visibility).
   expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
   expect(screen.getByText(/popular trips/i)).toBeInTheDocument();
+});
+
+// The slogan's second line is one solid colour: the brand navy by day, NS geel at
+// night. It was a sky-into-navy gradient clipped to the text; the colour stays in the
+// aurora behind it.
+test("the headline's second line is a solid brand colour, with no gradient", () => {
+  renderApp();
+  const line = screen.getByText("Let the weather decide.");
+  expect(line.closest("h1")).toBe(screen.getByRole("heading", { level: 1 }));
+  expect(line).toHaveClass("text-brand", "dark:text-night-accent");
+  expect(line.className).not.toMatch(/gradient|bg-clip-text|text-transparent|from-|to-/);
+});
+
+// Each popular trip is one suggestion row, in the style of a maps app's suggestion list:
+// a neutral pin in a neutral circle, the destination over "from {origin}", a chevron.
+// One colour for every row. They were metro lines, four tracks in red, blue, green and
+// yellow with ringed stations, and the owner found the colours clashed. Geometry and
+// hit-testing are measured in browser-tests/.
+test("the popular trips are suggestion rows led by their own orb", () => {
+  const { container } = renderApp();
+  const trips = [...container.querySelectorAll<HTMLElement>('[data-fov="popular-trip"]')];
+  expect(trips).toHaveLength(4);
+  const [first] = trips;
+  expect(first.tagName).toBe("BUTTON");
+  // The accessible name is the trip, as before the redesign.
+  expect(first).toHaveAccessibleName("Amsterdam Centraal → Vondelpark");
+  // The destination first, in the primary text, and the origin under it.
+  const to = within(first).getByText("Vondelpark");
+  const from = within(first).getByText("from Amsterdam Centraal");
+  expect(to.compareDocumentPosition(from) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(to).toHaveClass("truncate", "font-semibold", "text-[15px]", "text-slate-900", "dark:text-night-text");
+  expect(from).toHaveClass("truncate", "text-[13px]", "text-slate-800", "dark:text-night-muted");
+  // Every row leads with its trip's orb, and a chevron at the end.
+  const glyphs = trips.map((trip) => trip.querySelector('[data-fov="row-glyph"]'));
+  for (const g of glyphs) {
+    expect(g).toHaveAttribute("aria-hidden", "true");
+    expect(g).toHaveClass("trip-orb");
+    expect(g!.innerHTML).toBe(glyphs[0]!.innerHTML);
+  }
+  for (const trip of trips) {
+    const chevron = trip.querySelector('[data-fov="row-chevron"]');
+    expect(chevron).not.toBeNull();
+    expect(chevron).toHaveAttribute("aria-hidden", "true");
+    expect(trip.lastElementChild).toBe(chevron);
+    // At least 56px tall, no card and no shadow. The only thing styled per trip is the
+    // orb, whose colours and phase the destination seeds.
+    expect(trip).toHaveClass("min-h-16");
+    expect([...trip.querySelectorAll("[style]")].every((el) => el.classList.contains("trip-orb"))).toBe(true);
+    expect(glassClasses(trip)).toEqual([]);
+    expect([...trip.classList].filter((c) => /^(bg-|border|shadow|ring)/.test(c))).toEqual([]);
+  }
+  expect(screen.queryByText("sports_score")).not.toBeInTheDocument();
+  // A list, one column on a phone and two from `sm` up, each row on a hairline of its own.
+  const list = first.closest("ul")!;
+  expect(list).toHaveClass("grid-cols-1", "sm:grid-cols-2");
+  expect(list.children).toHaveLength(4);
+  for (const item of list.children) expect(item).toHaveClass("after:h-px", "after:bg-slate-200", "dark:after:bg-night-border");
 });
 
 test("map region and pickers are present in the DOM at rest (no search yet)", () => {
@@ -159,6 +218,39 @@ test("mode filter chips hide options for real: Transit off removes the transit c
   expect(screen.getByText(/1 routes in area/i)).toBeInTheDocument();
 });
 
+// The results arrive in sequence once per search (ResultsPanel keys its rows on it).
+// What App owes the panel is a search identity that changes with a new plan and with
+// nothing else. Choosing an option re-renders the same rows, and so does a filter chip
+// for the rows it leaves alone; a row that re-mounted would arrive all over again.
+test("the option rows arrive once per search, not again when another is chosen", async () => {
+  renderApp();
+  startTrip();
+  await screen.findByText("Public transport");
+  const rows = () => [...document.querySelectorAll<HTMLElement>('[data-fov="option"]')];
+  const first = rows();
+  expect(first.length).toBeGreaterThan(1);
+
+  // The same elements, not equal ones: toEqual would compare DOM nodes by structure.
+  const same = (a: HTMLElement[], b: HTMLElement[]) => a.length === b.length && a.every((r, i) => r === b[i]);
+
+  // Bike is the recommendation for this trip, so it starts chosen; choose the other.
+  expect(rows()[0]).toHaveAttribute("data-selected", "true");
+  fireEvent.click(screen.getByRole("heading", { name: "Public transport" }));
+  expect(rows()[1]).toHaveAttribute("data-selected", "true");
+  expect(same(rows(), first)).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Transit" }));
+  fireEvent.click(screen.getByRole("button", { name: "Transit" }));
+  expect(rows().filter((r) => first.includes(r))).toHaveLength(first.length - 1);
+
+  // The same route searched again is a new plan, with new departures: new rows.
+  fireEvent.click(screen.getByRole("button", { name: /search/i }));
+  await waitFor(() => expect(rows().some((r) => first.includes(r))).toBe(false));
+  const skeleton = document.querySelector('[data-fov="results-skeleton"]');
+  await screen.findByText("Public transport");
+  expect(rows().length).toBe(first.length);
+  if (skeleton) await waitForExit(skeleton);
+});
+
 test("menu clears recent searches", async () => {
   renderApp();
   startTrip();
@@ -167,8 +259,11 @@ test("menu clears recent searches", async () => {
     if (trips.length === 0) throw new Error("not recorded yet");
   });
   fireEvent.click(screen.getByRole("button", { name: /menu/i }));
-  fireEvent.click(screen.getByRole("button", { name: /clear recent searches/i }));
+  const row = screen.getByRole("button", { name: /clear recent searches/i });
+  fireEvent.click(row);
   expect(JSON.parse(window.localStorage.getItem("fov.recentTrips.v1") ?? "[]")).toEqual([]);
+  // The row closes the menu.
+  await waitForExit(row);
 });
 
 test("Start begins navigation with the overlay up, recents untouched; Exit ends it", async () => {
@@ -192,8 +287,10 @@ test("Start begins navigation with the overlay up, recents untouched; Exit ends 
   // Starting navigation must not touch the persisted recents.
   expect(window.localStorage.getItem("fov.recentTrips.v1")).toBe(recentsBefore);
 
-  fireEvent.click(screen.getByRole("button", { name: /exit navigation/i }));
+  const exit = screen.getByRole("button", { name: /exit navigation/i });
+  fireEvent.click(exit);
   expect(screen.queryByRole("button", { name: /exit navigation/i })).toBeNull();
+  await waitForExit(exit);
 });
 
 test("Search keeps coordinates for endpoints set via the map (no free-text downgrade)", async () => {

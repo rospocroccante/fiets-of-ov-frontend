@@ -34,18 +34,22 @@ const BLUE_BLOBS: Blob[] = [
   { color: "#F18700", size: "22rem", opacity: 0.5, anim: "aurora-b", duration: "16s", delay: "-14s", pos: { top: "58%", left: "12%" } },
 ];
 
-// Dark theme: white mist only — whites and the palest brand blue drifting on
-// the near-black backdrop. The geel stays out of the backdrop and on the details,
-// so the page never drifts towards grey or gold. Opacities sit ~30% under the old
-// navy-era values: the same mist reads brighter on night.bg L 7% than it did on
-// L 18%, and the v2 ramp wants the ground calm so the accent and water carry.
+// Dark theme: the night carries colour. Teal and cobalt are the water (the two top
+// blobs), a cyan glint sits mid-page, and the warm three are lamplight on the canals:
+// an amber and an orange glow low on the page and one faint NS geel, the only place
+// geel enters the backdrop. The v3 aurora was white mist only, which on navy reads
+// as grey fog and was one of the three reasons that palette looked sad (see the
+// `night` note in tailwind.config.js). The owner picked these values on the rendered
+// page: the blues at 0.38-0.40 make the field, and the warm glows at 0.12-0.24 stay
+// points of light, so the geel details in the foreground are still the strongest
+// warm colour on screen.
 const NIGHT_BLOBS: Blob[] = [
-  { color: "#FFFFFF", size: "40rem", opacity: 0.14, anim: "aurora-a", duration: "12s", delay: "0s", pos: { top: "-10rem", left: "-10rem" } },
-  { color: "#E7F0F7", size: "34rem", opacity: 0.18, anim: "aurora-b", duration: "14.5s", delay: "-6s", pos: { top: "-6rem", right: "-8rem" } },
-  { color: "#F8FAFC", size: "36rem", opacity: 0.14, anim: "aurora-c", duration: "15.5s", delay: "-3s", pos: { bottom: "-10rem", right: "2rem" } },
-  { color: "#E7F0F7", size: "28rem", opacity: 0.16, anim: "aurora-b", duration: "13s", delay: "-9s", pos: { bottom: "-8rem", left: "0rem" } },
-  { color: "#FFFFFF", size: "30rem", opacity: 0.13, anim: "aurora-a", duration: "13.5s", delay: "-11s", pos: { top: "26%", left: "30%" } },
-  { color: "#F8FAFC", size: "26rem", opacity: 0.14, anim: "aurora-c", duration: "11s", delay: "-5s", pos: { top: "38%", right: "22%" } },
+  { color: "#0E7490", size: "40rem", opacity: 0.4, anim: "aurora-a", duration: "12s", delay: "0s", pos: { top: "-10rem", left: "-10rem" } },
+  { color: "#1D4ED8", size: "34rem", opacity: 0.38, anim: "aurora-b", duration: "14.5s", delay: "-6s", pos: { top: "-6rem", right: "-8rem" } },
+  { color: "#F59E0B", size: "36rem", opacity: 0.24, anim: "aurora-c", duration: "15.5s", delay: "-3s", pos: { bottom: "-10rem", right: "2rem" } },
+  { color: "#FB923C", size: "28rem", opacity: 0.16, anim: "aurora-b", duration: "13s", delay: "-9s", pos: { bottom: "-8rem", left: "0rem" } },
+  { color: "#22D3EE", size: "30rem", opacity: 0.16, anim: "aurora-a", duration: "13.5s", delay: "-11s", pos: { top: "26%", left: "30%" } },
+  { color: "#FFC917", size: "26rem", opacity: 0.12, anim: "aurora-c", duration: "11s", delay: "-5s", pos: { top: "38%", right: "22%" } },
 ];
 
 // This lives OUTSIDE the home stage — App mounts it in its own layer between the map

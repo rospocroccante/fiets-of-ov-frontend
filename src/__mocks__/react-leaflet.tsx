@@ -4,6 +4,7 @@ type MapContainerProps = {
   children?: React.ReactNode;
   className?: string;
   attributionControl?: boolean;
+  zoomControl?: boolean;
   maxZoom?: number;
 };
 
@@ -42,9 +43,41 @@ export function Circle({ children }: { children?: React.ReactNode }) {
   return <span className="leaflet-circle">{children}</span>;
 }
 
-export function Polyline({ children }: { children?: React.ReactNode }) {
-  return <>{children}</>;
+// What the ref of a Polyline gets: the slice of L.Polyline the route draw touches. The
+// element is a real, detached SVG path, so the inline styles MapView puts on it can be
+// read back; a test that wants the canvas case or a dashed leg changes the layer.
+export interface MockPolylineLayer {
+  options: { color?: string; dashArray?: string; opacity?: number };
+  getElement: () => Element | undefined;
+  setStyle: (style: { opacity?: number }) => void;
 }
+
+// Test spy: every Polyline on screen, in render order (the casings, then the legs).
+export const __polylines: MockPolylineLayer[] = [];
+
+export const Polyline = React.forwardRef<
+  MockPolylineLayer,
+  { children?: React.ReactNode; pathOptions?: MockPolylineLayer["options"] }
+>(function Polyline({ children, pathOptions }, ref) {
+  const [layer] = React.useState<MockPolylineLayer>(() => {
+    const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    return {
+      options: { ...pathOptions },
+      getElement: () => el,
+      setStyle(style) {
+        Object.assign(this.options, style);
+      },
+    };
+  });
+  React.useImperativeHandle(ref, () => layer, [layer]);
+  React.useLayoutEffect(() => {
+    __polylines.push(layer);
+    return () => {
+      __polylines.splice(__polylines.indexOf(layer), 1);
+    };
+  }, [layer]);
+  return <>{children}</>;
+});
 
 type MarkerEventHandlers = {
   dragend?: (e: { target: { getLatLng: () => { lat: number; lng: number } } }) => void;
@@ -82,13 +115,29 @@ export const __wheelZoom = { enabled: null as boolean | null };
 // Test spy: counts imperative camera calls (FitRoute vs FollowCamera assertions).
 // Tests should compare before/after deltas taken inside the test; __resetMapMock zeroes
 // them between tests, so an absolute value only means anything within one case.
-export const __mapCalls = { fitBounds: 0, setView: 0, panTo: 0, setZoom: 0, flyTo: 0, flyToBounds: 0 };
+// lastBoundsOptions is the options object of the latest fitBounds or flyToBounds, which
+// is where the padding that keeps a route clear of the results sheet shows up.
+export const __mapCalls = {
+  fitBounds: 0,
+  setView: 0,
+  panTo: 0,
+  setZoom: 0,
+  flyTo: 0,
+  flyToBounds: 0,
+  lastBoundsOptions: undefined as unknown,
+};
+
+// Test spy: whether MapView last showed or removed Leaflet's +/- control. The option on
+// MapContainer only applies when the map is built, so MapView also adds and removes the
+// control on the map itself, and this is where that lands. null: never touched.
+export const __zoomControl = { shown: null as boolean | null };
 
 // A single stable map object, like the real useMap: effects keyed on map identity
 // must not re-fire every render.
 const _map = {
-  fitBounds: () => {
+  fitBounds: (_bounds?: unknown, options?: unknown) => {
     __mapCalls.fitBounds += 1;
+    __mapCalls.lastBoundsOptions = options;
   },
   setView: () => {
     __mapCalls.setView += 1;
@@ -102,8 +151,18 @@ const _map = {
   flyTo: () => {
     __mapCalls.flyTo += 1;
   },
-  flyToBounds: () => {
+  flyToBounds: (_bounds?: unknown, options?: unknown) => {
     __mapCalls.flyToBounds += 1;
+    __mapCalls.lastBoundsOptions = options;
+  },
+  zoomControl: {
+    remove: () => {
+      __zoomControl.shown = false;
+    },
+    addTo: () => {
+      __zoomControl.shown = true;
+    },
+    getContainer: (): HTMLElement | undefined => undefined,
   },
   scrollWheelZoom: {
     enable: () => {
@@ -167,10 +226,13 @@ export function __resetMapMock(): void {
   _handlers = {};
   _markerHandlers.clear();
   __wheelZoom.enabled = null;
+  __zoomControl.shown = null;
   __mapCalls.fitBounds = 0;
   __mapCalls.setView = 0;
   __mapCalls.panTo = 0;
   __mapCalls.setZoom = 0;
   __mapCalls.flyTo = 0;
   __mapCalls.flyToBounds = 0;
+  __mapCalls.lastBoundsOptions = undefined;
+  __polylines.length = 0;
 }

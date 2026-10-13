@@ -14,6 +14,7 @@
 // forming a single block instead of a card above a list.
 
 import { sleep } from "../lib/chrome.mjs";
+import { openSheetToHalf } from "../lib/sheet.mjs";
 import {
   PROBE,
   TRIP_SEED,
@@ -25,6 +26,7 @@ import {
   OPTION_STEPS,
   STEPS_TOGGLE,
   COLUMN,
+  RESULTS,
 } from "../lib/measure.mjs";
 
 const AA = 4.5; // WCAG AA for text below 18px / 14px bold, which is all of this.
@@ -65,6 +67,10 @@ async function bootResults(ctx, { width, height, theme = "light", lang = "en" })
   });
   await sleep(900); // the morph, and the map chunk settling under it
   await page.eval(PROBE);
+  // On a portrait phone the plan lands with the results sheet collapsed on its summary,
+  // the options out of sight under it. Everything this file measures is in those options,
+  // so it opens the sheet to half first, with a touch on the handle.
+  await openSheetToHalf(page);
   return page;
 }
 
@@ -88,15 +94,17 @@ async function openSteps(page) {
   return t;
 }
 
-// Every option row, with the list and the column that hold them.
+// Every option row, with the list and the pane that hold them. On a portrait phone the
+// pane is the results sheet's content, whose box runs past the foot of the screen at half
+// height, so `column.visible` is the part of it a user can see.
 const readRows = `
   const F = window.__fov;
   const list = document.querySelector('${OPTION_LIST}');
-  const column = document.querySelector('${COLUMN}');
+  const column = document.querySelector('${RESULTS}');
   const rows = [...document.querySelectorAll('${OPTION}')].map((li) => {
     const btn = li.querySelector('${OPTION_BUTTON}');
     const details = li.querySelector('${OPTION_DETAILS}');
-    const title = li.querySelector('[data-fov="option-title"]');
+    const title = F.titleOf(li);
     return {
       box: F.rect(li),
       button: F.rect(btn),
@@ -111,7 +119,8 @@ const readRows = `
     rows,
     list: { ...F.rect(list), scrollWidth: list.scrollWidth, clientWidth: list.clientWidth,
             overflowX: getComputedStyle(list).overflowX },
-    column: { ...F.rect(column), clientHeight: column.clientHeight, scrollHeight: column.scrollHeight },
+    column: { ...F.rect(column), clientHeight: column.clientHeight, scrollHeight: column.scrollHeight,
+              visible: F.visible(column) },
     iw: innerWidth, ih: innerHeight,
   };
 `;
@@ -148,7 +157,7 @@ export const scenarios = [
                 // for reasons that have nothing to do with the figures.
                 F.reveal(list);
                 return {
-                  title: li.querySelector('[data-fov="option-title"]').textContent.trim(),
+                  title: F.titleOf(li).textContent.trim(),
                   text: btn.innerText,
                   figures: [...list.querySelectorAll("li")].map((x) => F.shown(x)),
                 };
@@ -210,7 +219,13 @@ export const scenarios = [
     // of the other two — 26.5px at 360x800 — with the chosen option's 372px itinerary
     // sitting between row 1 and row 2, so reaching option 2 cost 416px of scrolling and
     // option 3, 513px. Nothing here scrolls: this is the arrival state.
-    name: "phones when the plan lands the option rows are already on screen",
+    //
+    // On a portrait phone the results land collapsed in a sheet over a full-screen map,
+    // with the summary header standing for them, and the first touch on the sheet opens
+    // it to half (bootResults makes that touch). So "the column" is the sheet's content
+    // at half, and only the part above the foot of the screen counts. The rows are
+    // measured against that visible part, not the content's box, which runs on past it.
+    name: "phones when the results open the option rows are already on screen",
     async run(ctx) {
       const { checks } = ctx;
       // 844x390 is the same question turned sideways. F4 pinned the landscape column's
@@ -230,9 +245,9 @@ export const scenarios = [
         const at = sideways ? `${width}x${height} ${lang}` : `${width}x${height}`;
         const page = await bootResults(ctx, { width, height, lang });
         try {
-          // The forecast arrives on its own schedule and, on portrait, takes room above
-          // the list — so the arrival state is measured once the strip is there rather
-          // than before. Sideways there is no strip to wait for.
+          // The forecast arrives on its own schedule, so the arrival state is measured once
+          // the strip is there rather than before. In the portrait sheet it follows the
+          // list instead of leading it. Sideways there is no strip to wait for.
           if (!sideways) {
             await page.waitFor(`document.querySelector('[data-fov="weather-strip"]')`, {
               label: "the weather strip to settle above the options",
@@ -242,14 +257,15 @@ export const scenarios = [
           await sleep(200);
           const m = await page.eval(`
             const F = window.__fov;
-            const col = document.querySelector('${COLUMN}');
+            const col = document.querySelector('${RESULTS}');
             const list = document.querySelector('${OPTION_LIST}');
-            const c = col.getBoundingClientRect();
+            const box = col.getBoundingClientRect();
+            const c = F.visible(col);
             return {
               strip: !!document.querySelector('[data-fov="weather-strip"]'),
               scrolled: col.scrollTop,
-              col: { top: +c.top.toFixed(2), bottom: +c.bottom.toFixed(2), h: +c.height.toFixed(2) },
-              aboveFirstRow: +(list.getBoundingClientRect().top - c.top + col.scrollTop).toFixed(2),
+              col: { top: c.top, bottom: c.bottom, h: c.h },
+              aboveFirstRow: +(list.getBoundingClientRect().top - box.top + col.scrollTop).toFixed(2),
               rows: [...document.querySelectorAll('${OPTION}')].map((li) => {
                 const r = li.getBoundingClientRect();
                 const visible = Math.max(0, Math.min(r.bottom, c.bottom) - Math.max(r.top, c.top));
@@ -409,11 +425,14 @@ export const scenarios = [
             120,
             `${round(r.box.h)}px (it was 194.5px as a card)`,
           );
+          // The visible part: on a portrait phone the pane is the sheet's content at
+          // half height, and its box runs on past the foot of the screen.
           checks.atMost(
             `an unopened option ${i + 1} takes under half the visible results column`,
-            r.box.h / m.column.h,
+            r.box.h / m.column.visible.h,
             0.5,
-            `${round(r.box.h)}px of a ${round(m.column.h)}px column (${pct(r.box.h / m.column.h)})`,
+            `${round(r.box.h)}px of the ${round(m.column.visible.h)}px of results on screen ` +
+              `(${pct(r.box.h / m.column.visible.h)})`,
           );
         }
         // Every row has to clear a finger as well as fit one.
@@ -475,6 +494,170 @@ export const scenarios = [
           `${round(shown.visible)}px of a ${round(shown.height)}px row inside a column ` +
             `spanning y=${round(shown.colTop)}..${round(shown.colBottom)}`,
         );
+      } finally {
+        await page.close();
+      }
+    },
+  },
+
+  // The results column's Start, at every size the column is the layout: a phone on its
+  // side (844x390, and 568x320, narrower than md, where the column used to be the strip
+  // under the map and is now the left half beside it, as at 844x390), a portrait
+  // tablet and a desktop. On a phone on its side the button used to sit inside the
+  // folded steps. Chrome still lays a closed <details> out, so the button had a box, 40px
+  // of it below the chosen option's own, but nothing was painted there and a finger at
+  // its centre reached the title of the next option. The steps are not opened here: the
+  // Start has to be there when the plan lands.
+  ...[
+    { width: 844, height: 390 },
+    { width: 568, height: 320 },
+    { width: 768, height: 1024 },
+    { width: 1280, height: 900 },
+  ].map(({ width, height }) => ({
+    name: `${width}x${height} the column's Start is inside its option, on top, and a tap on it starts navigation`,
+    async run(ctx) {
+      const { checks } = ctx;
+      const at = `${width}x${height}`;
+      const page = await bootResults(ctx, { width, height });
+      try {
+        const START = `${COLUMN} [aria-label="Start navigation"]`;
+        const found = await page.eval(`
+          const b = document.querySelector('${START}');
+          if (!b) return false;
+          window.__fov.reveal(b);
+          return true;
+        `);
+        checks.ok(`${at}: the results column has a Start`, found, found ? "" : "no Start in the column");
+        if (!found) return;
+        await sleep(200);
+        const m = await page.eval(`
+          const F = window.__fov;
+          const b = document.querySelector('${START}');
+          const box = b.closest('${OPTION_DETAILS}');
+          const steps = box.querySelector('${OPTION_STEPS}');
+          const r = b.getBoundingClientRect();
+          const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
+          const hit = document.elementFromPoint(x, y);
+          const owner = hit && hit.closest("[data-fov]");
+          return { start: F.rect(b), box: F.rect(box), visible: F.visible(b), shown: F.shown(b), x, y,
+                   reaches: !!hit && (hit === b || b.contains(hit)),
+                   hit: hit ? hit.tagName + (owner ? "[" + owner.getAttribute("data-fov") + "]" : "") +
+                     ' "' + (hit.textContent || "").trim().slice(0, 24) + '"' : "nothing",
+                   steps: steps ? (steps.open ? "open" : "folded") : "none" };
+        `);
+        const s = m.start, b = m.box;
+        checks.ok(
+          `${at}: the Start is inside its option's box`,
+          s.top >= b.top - 0.5 && s.bottom <= b.bottom + 0.5 && s.left >= b.left - 0.5 && s.right <= b.right + 0.5,
+          `Start ${s.left}..${s.right} x ${s.top}..${s.bottom}, box ${b.left}..${b.right} x ${b.top}..${b.bottom}, steps ${m.steps}`,
+        );
+        checks.ok(`${at}: the Start is painted`, m.shown.rendered && m.shown.painted, `rendered ${m.shown.rendered}, hit ${m.shown.hit}`);
+        checks.atLeast(`${at}: all 44px of it is in view in the column`, m.visible.h, 44, `${m.visible.h}px of ${s.h} in view`);
+        checks.ok(`${at}: a touch at its centre reaches it`, m.reaches, `elementFromPoint(${m.x}, ${m.y}) = ${m.hit}`);
+
+        await page.tap(m.x, m.y);
+        let started = true;
+        await page
+          .waitFor(`document.querySelector('[aria-label="Exit navigation"]')`, { label: "the navigation banner", timeout: 4000 })
+          .catch(() => {
+            started = false;
+          });
+        checks.ok(`${at}: a tap on it starts navigation`, started, `tap at (${m.x}, ${m.y})`);
+      } finally {
+        await page.close();
+      }
+    },
+  })),
+
+  {
+    // The summary header names the chosen option at every height of the sheet: its title,
+    // its Best tag and its minutes. At half the content under it used to open on that same
+    // line again, as the chosen row's first. That row now starts at its leg bar, and its
+    // figures, departure line and steps are what it adds.
+    name: "390x844 at half the chosen option's title is on the sheet once, in its header, and its steps open",
+    async run(ctx) {
+      const { checks } = ctx;
+      const page = await bootResults(ctx, { width: 390, height: 844 });
+      // Every element on the visible part of the sheet whose text reads `want` and that
+      // holds no smaller element reading the same: drawn, and inside every clip and the
+      // screen. The header's title and minutes are leaves of their own.
+      const readOnce = `
+        const F = window.__fov;
+        const sheet = document.querySelector('[data-fov="results-sheet"]');
+        const head = document.querySelector('[data-fov="sheet-summary"]');
+        const title = document.querySelector('[data-fov="summary-title"]');
+        const minutes = [...head.querySelectorAll("span")].find((s) => /^\\d+ min$/.test(s.textContent.trim()));
+        const drawn = (el) => el.checkVisibility({ contentVisibilityAuto: true, opacityProperty: true, visibilityProperty: true }) &&
+          F.visible(el).h > 0;
+        const reading = (want) => [...sheet.querySelectorAll("*")]
+          .filter((el) => el.textContent.trim() === want &&
+            ![...el.children].some((c) => c.textContent.trim() === want) && drawn(el))
+          .map((el) => ({ fov: (el.closest("[data-fov]") || el).getAttribute("data-fov"), y: Math.round(el.getBoundingClientRect().top) }));
+        const chosen = document.querySelector('${OPTION}[data-selected="true"]');
+        return {
+          detent: sheet.getAttribute("data-detent"),
+          title: title.textContent.trim(), minutes: minutes.textContent.trim(),
+          titles: reading(title.textContent.trim()), minuteLines: reading(minutes.textContent.trim()),
+          bar: F.shown(chosen.querySelector('[data-fov="leg-bar"]')),
+          figures: [...chosen.querySelectorAll('${OPTION_METRICS} li')].map((m) => F.shown(m).painted),
+          departure: F.shown(chosen.querySelector('${OPTION_DETAILS} [data-fov="departure"]')),
+        };
+      `;
+      try {
+        const m = await page.eval(readOnce);
+        checks.equal("the sheet is at half", m.detent, "half");
+        checks.equal(
+          `"${m.title}" is drawn once on the visible sheet`,
+          m.titles.length,
+          1,
+          m.titles.map((t) => `${t.fov} at y ${t.y}`).join(", ") || "nowhere",
+        );
+        checks.ok(
+          "and that once is the summary header",
+          m.titles.length === 1 && m.titles[0].fov === "summary-title",
+          m.titles.map((t) => t.fov).join(", "),
+        );
+        checks.equal(
+          `"${m.minutes}" is drawn once on the visible sheet`,
+          m.minuteLines.length,
+          1,
+          m.minuteLines.map((t) => `${t.fov} at y ${t.y}`).join(", ") || "nowhere",
+        );
+        checks.ok("the chosen option's leg bar is painted in the content", m.bar.painted,
+          `${round(m.bar.w)}x${round(m.bar.h)}, hit ${m.bar.hit}`);
+        checks.equal("so are its four figures", m.figures.filter(Boolean).length, 4, m.figures.join(", "));
+        checks.ok("and its departure line", m.departure.painted, `"${m.departure.text}", hit ${m.departure.hit}`);
+
+        // Touched where it is, not revealed first: scrollIntoView would scroll the sheet's
+        // clipping frame as well and move the header this counts on.
+        const t = await page.eval(`
+          const F = window.__fov;
+          const s = document.querySelector('${OPTION}[data-selected="true"] ${STEPS_TOGGLE}');
+          if (!s) return null;
+          const v = F.visible(s), b = F.rect(s);
+          return { x: Math.round(b.x + b.w / 2), y: Math.round((v.top + v.bottom) / 2), visible: v.h,
+                   hit: F.hit(Math.round(b.x + b.w / 2), Math.round((v.top + v.bottom) / 2), '${STEPS_TOGGLE}') };
+        `);
+        checks.ok("the chosen option's steps toggle is on the half sheet and takes a touch", t != null && t.visible >= 44 && t.hit.inside,
+          t ? `${round(t.visible)}px of it visible, hit ${t.hit.desc}` : "no steps disclosure");
+        if (!t) return;
+        await page.tap(t.x, t.y);
+        await sleep(300);
+        const steps = await page.eval(`
+          const F = window.__fov;
+          const d = document.querySelector('${OPTION}[data-selected="true"] ${OPTION_STEPS}');
+          const itin = d && d.querySelector('[data-fov="itinerary"]');
+          return { open: !!d && d.open, shown: itin ? F.shown(itin) : null };
+        `);
+        checks.ok("a tap on the departure line opens them", steps.open, `open ${steps.open}`);
+        checks.ok(
+          "and the steps are on the screen",
+          steps.shown != null && steps.shown.painted,
+          steps.shown ? `${round(steps.shown.w)}x${round(steps.shown.h)}, hit ${steps.shown.hit}` : "no itinerary",
+        );
+        const after = await page.eval(readOnce);
+        checks.equal(`with the steps open "${after.title}" is still drawn once`, after.titles.length, 1,
+          after.titles.map((x) => `${x.fov} at y ${x.y}`).join(", ") || "nowhere");
       } finally {
         await page.close();
       }
@@ -617,14 +800,19 @@ export const scenarios = [
       const { checks } = ctx;
       const page = await bootResults(ctx, { width: 360, height: 800 });
       try {
+        // Each option's minutes where they are drawn: in its own row, or for the chosen
+        // option on a portrait phone in the sheet's summary header, which has the same
+        // title, badge and minutes line.
         const lines = await page.eval(`
           const F = window.__fov;
-          return [...document.querySelectorAll('${OPTION_BUTTON}')].map((btn) => {
-            const el = [...btn.querySelectorAll("span")].find((s) => /^\\d+ min$/.test(s.textContent.trim()));
+          return [...document.querySelectorAll('${OPTION}')].map((li) => {
+            const title = F.titleOf(li);
+            const head = title.closest('${OPTION_BUTTON}, [data-fov="sheet-summary"]');
+            const el = [...head.querySelectorAll("span")].find((s) => /^\\d+ min$/.test(s.textContent.trim()));
             const cs = getComputedStyle(el);
             return { text: el.textContent.trim(), h: +el.getBoundingClientRect().height.toFixed(2),
                      lineHeight: parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2,
-                     badge: !!btn.querySelector('[data-fov="option-title"] ~ span') };
+                     badge: !!title.nextElementSibling };
           });
         `);
         for (const l of lines) {
@@ -662,12 +850,15 @@ export const scenarios = [
         const c = await page.eval(`
           const F = window.__fov;
           const li = document.querySelector('${OPTION}[data-selected="true"]');
-          const btn = li.querySelector('${OPTION_BUTTON}');
+          // On a portrait phone the chosen option's title, badge and minutes are in the
+          // sheet's summary header, on the sheet's own surface and off the row's tint.
+          const title = F.titleOf(li);
+          const head = title.closest('${OPTION_BUTTON}, [data-fov="sheet-summary"]');
           const metrics = [...li.querySelectorAll('[data-fov="option-metrics"] li')];
-          const badge = [...btn.querySelectorAll("span")].find((s) => /^(Best|Beste)$/.test(s.textContent.trim()));
-          const minutes = [...btn.querySelectorAll("span")].find((s) => /^\\d+ min$/.test(s.textContent.trim()));
+          const badge = [...head.querySelectorAll("span")].find((s) => /^(Best|Beste)$/.test(s.textContent.trim()));
+          const minutes = [...head.querySelectorAll("span")].find((s) => /^\\d+ min$/.test(s.textContent.trim()));
           return {
-            title: F.contrast(li.querySelector('[data-fov="option-title"]')),
+            title: F.contrast(title),
             minutes: F.contrast(minutes),
             summary: F.contrast(li.querySelector('[data-fov="option-summary"]')),
             metrics: metrics.map((m) => ({ ...F.contrast(m), painted: F.shown(m).painted, w: F.shown(m).w })),
@@ -886,6 +1077,106 @@ export const scenarios = [
             c.ratio,
             AA,
             `${c.ratio}:1 — ${c.fg} on ${c.bg} at ${c.px}px/${c.weight}`,
+          );
+        }
+      } finally {
+        await page.close();
+      }
+    },
+  },
+
+  {
+    // The leg bar under every option header. Two of its promises are about pixels and
+    // can only be held here: each segment is as wide as its leg's share of the minutes,
+    // and a label that does not fit its segment disappears whole instead of being cut
+    // to "Tra" by the segment's clip. The ink has to clear AA on the leg's own colour,
+    // which is the same pairing the step-by-step chips use. Dutch, because "Fiets 6"
+    // is the longer label.
+    name: "390x844 night nl the leg bars draw every leg in proportion, and each label fits or hides whole",
+    async run(ctx) {
+      const { checks } = ctx;
+      const page = await bootResults(ctx, { width: 390, height: 844, theme: "dark", lang: "nl" });
+      // Every segment of every bar on the page: its box, its label's box, and whether the
+      // label is wholly inside the segment, wholly below it (wrapped onto the clipped
+      // second line), or neither, which would be a label cut at the segment's edge.
+      const readBars = `
+        const F = window.__fov;
+        return [...document.querySelectorAll('${OPTION}')].map((li) => {
+          const bar = li.querySelector('[data-fov="leg-bar"]');
+          F.reveal(bar);
+          const b = F.rect(bar);
+          const segs = [...bar.querySelectorAll('[data-fov="leg-segment"]')].map((s) => {
+            const r = F.rect(s);
+            const label = s.lastElementChild;
+            const l = F.rect(label);
+            const inside = l.left >= r.left - 0.5 && l.right <= r.right + 0.5 && l.top >= r.top - 0.5 && l.bottom <= r.bottom + 0.5;
+            const below = l.top >= r.bottom - 0.5;
+            return { w: r.w, grow: parseFloat(getComputedStyle(s).flexGrow), text: label.textContent,
+                     inside, below, fill: getComputedStyle(s).backgroundColor, contrast: F.contrast(label) };
+          });
+          return { title: F.titleOf(li).textContent.trim(),
+                   hidden: bar.getAttribute("aria-hidden"), w: b.w, gap: parseFloat(getComputedStyle(bar).columnGap) || 0, segs };
+        });
+      `;
+      try {
+        const bars = await page.eval(readBars);
+        checks.equal("every option has a leg bar", bars.length, 3);
+        for (const bar of bars) {
+          const at = `"${bar.title}"`;
+          checks.equal(`${at}: the bar is hidden from assistive tech`, bar.hidden, "true");
+          const total = bar.segs.reduce((n, s) => n + s.grow, 0);
+          const room = bar.w - bar.gap * (bar.segs.length - 1);
+          for (const [i, seg] of bar.segs.entries()) {
+            const share = (room * seg.grow) / total;
+            checks.near(
+              `${at} segment ${i + 1} ("${seg.text}") is its leg's share of the bar`,
+              seg.w,
+              Math.max(4, share),
+              1,
+              `${round(seg.w)}px for ${seg.grow} of ${total} min in ${round(room)}px`,
+            );
+            checks.ok(
+              `${at} segment ${i + 1} ("${seg.text}") shows its label whole or not at all`,
+              seg.inside || seg.below,
+              `label inside ${seg.inside}, wrapped out ${seg.below}`,
+            );
+            if (seg.inside) {
+              checks.atLeast(
+                `${at} segment ${i + 1} label "${seg.text}" clears AA on its own colour`,
+                seg.contrast.ratio,
+                AA,
+                `${seg.contrast.ratio}:1 — ${seg.contrast.fg} on ${seg.contrast.bg} at ${seg.contrast.px}px/${seg.contrast.weight}`,
+              );
+            }
+          }
+        }
+
+        // Nothing in the fixture is too short for its label at this width, so squeeze one
+        // bar until most labels cannot fit and ask again: every label must be whole or
+        // gone, at least one must actually be gone, and every leg must keep its colour.
+        const squeezed = await page.eval(`
+          const bars = [...document.querySelectorAll('[data-fov="leg-bar"]')];
+          const widest = bars.sort((a, b) => b.children.length - a.children.length)[0];
+          widest.style.width = "96px";
+          return widest.children.length;
+        `);
+        const after = (await page.eval(readBars)).find((b) => b.segs.length === squeezed);
+        checks.ok("a squeezed bar is found", after != null, `${squeezed} segments`);
+        if (after) {
+          for (const [i, seg] of after.segs.entries()) {
+            checks.ok(
+              `squeezed segment ${i + 1} ("${seg.text}") shows its label whole or not at all`,
+              seg.inside || seg.below,
+              `${round(seg.w)}px wide, label inside ${seg.inside}, wrapped out ${seg.below}`,
+            );
+            checks.atLeast(`squeezed segment ${i + 1} keeps a visible width`, seg.w, 4, `${round(seg.w)}px`);
+            checks.ok(`squeezed segment ${i + 1} keeps its colour`, !/rgba\(0, 0, 0, 0\)|transparent/.test(seg.fill), seg.fill);
+          }
+          checks.atLeast(
+            "squeezed, at least one label hides whole",
+            after.segs.filter((s) => s.below).length,
+            1,
+            after.segs.map((s) => `"${s.text}" ${round(s.w)}px ${s.inside ? "shown" : "hidden"}`).join(", "),
           );
         }
       } finally {

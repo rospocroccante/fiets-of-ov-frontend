@@ -23,16 +23,19 @@ export function FilterBar({
   onToggleRadar,
   kinds,
   onToggleKind,
+  kindsDisabled = false,
   hideMapDisabled = false,
   phone = false,
   compact = false,
+  floating = false,
 }: {
   count: number;
   hideMap: boolean;
   onToggleMap: () => void;
   // While navigating, the map pane is the nav UI (banner, Exit): hiding it would
   // strand a live session with the GPS watch and wake lock still running, so the
-  // toggle locks rather than misfires. Everything else on the bar stays live.
+  // toggle locks rather than misfires. The mode chips lock too (kindsDisabled); the
+  // rest of the bar stays live.
   hideMapDisabled?: boolean;
   armed: Armed;
   onArm: (which: "start" | "end") => void;
@@ -40,6 +43,10 @@ export function FilterBar({
   onToggleRadar: () => void;
   kinds: KindFilter;
   onToggleKind: (m: Mode) => void;
+  // While navigating, the mode chips are locked: the ride follows the chosen option, and
+  // turning off its mode fell back to the next option and swapped the route being
+  // ridden. They stay on the bar with their state and size, and take no click or focus.
+  kindsDisabled?: boolean;
   // The phone bar: the three mode chips stay on the bar and the map's own tools fold
   // behind one control, because all seven never fitted. See the comment on the phone
   // branch below for the measurements.
@@ -47,6 +54,9 @@ export function FilterBar({
   // A phone on its side. Only the vertical padding changes: at 390px of height every
   // row above the map is a row the advice does not get.
   compact?: boolean;
+  // The portrait phone's chip row, floating over a full-bleed map instead of sitting
+  // above it. Only with `phone`.
+  floating?: boolean;
 }) {
   const { t } = useI18n();
   // Two button treatments, both with a constant box so toggling never resizes the bar:
@@ -60,11 +70,22 @@ export function FilterBar({
   // 900px window; this and the padding below take it to 58px and hand the 16px to the
   // map. The finger's 44px is untouched, and the browser suite measures both pointer
   // types so that stays true.
-  const chip = (pressed: boolean) =>
+  //
+  // A locked chip (kindsDisabled) keeps its box and says whether it is on, with no hover.
+  // On, it trades the brand or geel fill for an opaque neutral step (gray by day,
+  // `night.hover` at night) rather than fading it: geel at 40% over navy reads as olive,
+  // which the night palette rules out. Off, its border turns dashed.
+  const chip = (pressed: boolean, locked = false) =>
     `inline-flex min-h-[44px] shrink-0 items-center rounded-full border px-3 text-sm font-medium transition mouse:min-h-[36px] sm:px-4 ${
-      pressed
-        ? "border-transparent bg-brand text-white dark:bg-night-accent dark:text-night-bg"
-        : "border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-night-border dark:text-night-muted dark:hover:bg-night-hover"
+      locked
+        ? `disabled:cursor-not-allowed ${
+            pressed
+              ? "border-transparent bg-gray-200 text-gray-600 dark:bg-night-hover dark:text-night-muted"
+              : "border-dashed border-gray-300 text-gray-500 dark:border-night-border dark:text-night-subtle"
+          }`
+        : pressed
+          ? "border-transparent bg-brand text-white dark:bg-night-accent dark:text-night-bg"
+          : "border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-night-border dark:text-night-muted dark:hover:bg-night-hover"
     }`;
   const segment = (pressed: boolean) =>
     `inline-flex min-h-[44px] items-center rounded-full px-3 text-sm transition mouse:min-h-[36px] ${
@@ -98,10 +119,10 @@ export function FilterBar({
         hideMapDisabled={hideMapDisabled}
         armed={armed}
         onArm={onArm}
-        radar={radar}
-        onToggleRadar={onToggleRadar}
         kinds={kinds}
         onToggleKind={onToggleKind}
+        kindsDisabled={kindsDisabled}
+        floating={floating}
       />
     );
   }
@@ -120,7 +141,8 @@ export function FilterBar({
             type="button"
             aria-pressed={kinds[m]}
             onClick={() => onToggleKind(m)}
-            className={chip(kinds[m])}
+            disabled={kindsDisabled}
+            className={chip(kinds[m], kindsDisabled)}
           >
             {t(KIND_KEY[m])}
           </button>
@@ -183,6 +205,10 @@ export function FilterBar({
 // measure 232px in English and 214px in Dutch against 275px of scroller at 390 and 245px
 // at 360, so on both of those nothing is off screen at all.
 //
+// The radar was one of those tools until it left the menu altogether: on a phone it is a
+// round button on the map (RadarButton, placed by App), seen without opening anything.
+// The `radar` props are the desktop bar's, where it is still a segment.
+//
 // At 320 they do not fit (205px of scroller in English, 199 in Dutch), and that is the
 // case the scroller is still `overflow-x: auto` for — along with anything else the
 // measurements do not cover, a narrower device or a larger text size. When it happens
@@ -198,25 +224,31 @@ function PhoneFilterBar({
   hideMapDisabled,
   armed,
   onArm,
-  radar,
-  onToggleRadar,
   kinds,
   onToggleKind,
+  kindsDisabled,
+  floating,
 }: {
   pad: string;
-  chip: (pressed: boolean) => string;
+  chip: (pressed: boolean, locked?: boolean) => string;
   hideMap: boolean;
   onToggleMap: () => void;
   hideMapDisabled: boolean;
   armed: Armed;
   onArm: (which: "start" | "end") => void;
-  radar: boolean;
-  onToggleRadar: () => void;
   kinds: KindFilter;
   onToggleKind: (m: Mode) => void;
+  kindsDisabled: boolean;
+  floating: boolean;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  // Floating over the map there is no bar behind the chips, so each one brings its own
+  // surface and its own shadow, the way Google Maps' category chips do. A pressed chip
+  // already has a fill; an unpressed one gets the card surface of either theme, opaque
+  // because the map under it is never the same colour twice.
+  const onMap = (pressed: boolean) =>
+    floating ? ` shadow-md${pressed ? "" : " bg-white dark:bg-night-surface"}` : "";
   const moreRef = useRef<HTMLButtonElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -266,12 +298,29 @@ function PhoneFilterBar({
   }, [open]);
 
   return (
-    <div data-fov="filter-bar" className={`relative flex items-center gap-2 ${pad}`}>
-      <div className="relative min-w-0 flex-1">
+    // Floating, the bar is as wide as its chips and no wider (up to the screen), so the
+    // map beside a short row still takes a touch, and "Map" follows the last mode chip
+    // instead of being pushed to the far edge. The scroller then shrinks rather than
+    // grows. Its 8px of padding top and bottom, taken back with a negative margin, is
+    // room for the chips' shadows inside the box that clips them, and the scrollbar is
+    // never drawn: the cue and the cut chip are what say there is more.
+    <div
+      data-fov="filter-bar"
+      className={
+        floating
+          ? "pointer-events-auto relative flex w-fit max-w-full items-center gap-2"
+          : `relative flex items-center gap-2 ${pad}`
+      }
+    >
+      <div className={floating ? "relative min-w-0" : "relative min-w-0 flex-1"}>
         <div
           ref={scrollerRef}
           data-fov="filter-scroller"
-          className="flex items-center gap-2 overflow-x-auto"
+          className={
+            floating
+              ? "-my-2 flex items-center gap-2 overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              : "flex items-center gap-2 overflow-x-auto"
+          }
         >
           <div ref={contentRef} className="flex items-center gap-2">
             {(Object.keys(KIND_KEY) as Mode[]).map((m) => (
@@ -280,7 +329,8 @@ function PhoneFilterBar({
                 type="button"
                 aria-pressed={kinds[m]}
                 onClick={() => onToggleKind(m)}
-                className={chip(kinds[m])}
+                disabled={kindsDisabled}
+                className={chip(kinds[m], kindsDisabled) + onMap(kinds[m])}
               >
                 {t(KIND_KEY[m])}
               </button>
@@ -321,14 +371,16 @@ function PhoneFilterBar({
         // raised surface and a darker label instead — the same step the night ramp uses
         // for a hovered opaque surface — plus the chevron, which turns over.
         //
-        // `motion-safe:` on the transition, like every other transition in the app:
-        // Tailwind's `transition` shorthand includes `transform`, and this control is
-        // the one a rider taps to reach the map's tools.
+        // `motion-safe:` on the transition because Tailwind's `transition` shorthand
+        // includes `transform`, and this control is the one a rider taps to reach the
+        // map's tools. The prefix is only a second guard: most transitions in the app
+        // carry none, and the global rule at the end of index.css is what makes all of
+        // them instant under reduced motion.
         className={`inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center gap-1 rounded-full border px-3 text-sm font-medium motion-safe:transition ${
           open
             ? "border-gray-300 bg-gray-100 text-gray-800 dark:border-night-border dark:bg-night-hover dark:text-night-text"
             : "border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-night-border dark:text-night-muted dark:hover:bg-night-hover"
-        }`}
+        }${onMap(open)}`}
       >
         {t("mapTools")}
         <svg
@@ -355,16 +407,16 @@ function PhoneFilterBar({
               the 288px map pane on a 320px phone, and with the panel 163px tall inside
               a 256px map that came to 53.1% of the map behind the menu — over this
               file's own <=50% standard, at the one width the scenario did not visit.
-              Content width instead: 186px in English, 215px in Dutch (the longest row
-              is "Radar" beside "Verberg kaart"), which is 41.1% and 47.5% there and
-              less on every wider phone. `max-content` also cannot wrap, so the panel
+              Content width instead: 186px in English, 215px in Dutch, measured while
+              the radar was still a row here beside "Verberg kaart", which is 41.1% and
+              47.5% there and less on every wider phone. `max-content` also cannot wrap, so the panel
               can never buy width back by growing a row taller. The cap keeps the old
               240px as the ceiling and keeps the box on screen whatever a future string
               does — and if one ever pushes past it, the row wraps, the panel grows and
               the coverage assertion at 320 is what says so. */}
           <div
             data-fov="filter-panel"
-            className="absolute right-0 top-full z-[1200] mt-1 w-max max-w-[min(15rem,calc(100vw-5rem))] rounded-card border border-gray-100 bg-white p-3 shadow-lg dark:border-white/10 dark:bg-night-raised"
+            className="absolute right-0 top-full z-[1200] mt-1 w-max max-w-[min(15rem,calc(100vw-5rem))] rounded-card border border-gray-100 bg-white p-3 shadow-lg dark:border-night-rim/20 dark:bg-night-raised"
           >
             {!hideMap && (
               <>
@@ -398,21 +450,11 @@ function PhoneFilterBar({
                 <div className="my-3 h-px bg-gray-100 dark:bg-night-border" />
               </>
             )}
-            {/* Radar and Hide map leave the panel open: both change something behind it,
-                and the flip of the chip is the confirmation. Arming Start or End is the
+            {/* Hide map leaves the panel open: it changes something behind it, and the
+                flip of the label is the confirmation. Arming Start or End is the
                 opposite — the next tap belongs to the map, so the panel gets out of the
                 way first. */}
             <div className="flex flex-wrap gap-2">
-              {!hideMap && (
-                <button
-                  type="button"
-                  aria-pressed={radar}
-                  onClick={onToggleRadar}
-                  className={chip(radar)}
-                >
-                  {t("radar")}
-                </button>
-              )}
               <button
                 type="button"
                 onClick={onToggleMap}

@@ -98,6 +98,15 @@ function hex(r, g, b) {
   return "#" + [r, g, b].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
 }
 
+// The night style's water (public/styles/night.json): hsl(202,49%,79%), #afd0e4, L about
+// 0.60. Pale on purpose, the owner's call, so a night map is navy ground with light
+// water, and a square that crosses a canal is part of each.
+export const NIGHT_WATER = [175, 208, 228];
+export const WATER_TOLERANCE = 12;
+// Between navy ground (L about 0.02) and that water sits only antialiasing, the blend
+// along every shore. A square with more of it than this is not measuring a map.
+export const BAND_MAX_SHARE = 0.15;
+
 /**
  * The mean colour of a CSS-pixel patch of a decoded screenshot, with its relative
  * luminance. `scale` is the device pixel ratio the page was captured at, so a spec can
@@ -105,6 +114,15 @@ function hex(r, g, b) {
  *
  * A patch rather than a pixel on purpose: a single sample over a map lands on a street
  * casing or a label as easily as on the ground, and would make the assertion a lottery.
+ *
+ * The mean alone stopped meaning "how dark is the map" once night water went pale: a
+ * square half on a canal averages to L 0.15 over a ground of L 0.02. So each pixel is
+ * also sorted. Within WATER_TOLERANCE per channel of NIGHT_WATER it is water. Otherwise
+ * it is the antialias band along a shore if its L is 0.05 to 0.5, or if it is within
+ * twice the tolerance (the shore's pale edge, which just misses the water colour and
+ * measures L 0.50 to 0.53). Anything else is ground. `ground` is the mean luminance of
+ * the ground pixels alone (null if there are none); `waterShare` and `bandShare` are
+ * fractions of the square.
  */
 export function patch(png, { x, y, size = 24, scale = 1 }) {
   const x0 = Math.max(0, Math.round(x * scale));
@@ -117,19 +135,49 @@ export function patch(png, { x, y, size = 24, scale = 1 }) {
   let g = 0;
   let b = 0;
   let n = 0;
+  let water = 0;
+  let band = 0;
+  let groundN = 0;
+  let groundL = 0;
+  const [wr, wg, wb] = NIGHT_WATER;
   for (let py = y0; py < y1; py++) {
     for (let px = x0; px < x1; px++) {
       const i = py * png.width * png.channels + px * png.channels;
-      r += png.data[i];
-      g += png.data[i + 1];
-      b += png.data[i + 2];
+      const pr = png.data[i];
+      const pg = png.data[i + 1];
+      const pb = png.data[i + 2];
+      r += pr;
+      g += pg;
+      b += pb;
       n++;
+      const off = Math.max(Math.abs(pr - wr), Math.abs(pg - wg), Math.abs(pb - wb));
+      if (off <= WATER_TOLERANCE) {
+        water++;
+        continue;
+      }
+      const l = luminance(pr, pg, pb);
+      if ((l >= 0.05 && l < 0.5) || off <= 2 * WATER_TOLERANCE) {
+        band++;
+      } else {
+        groundN++;
+        groundL += l;
+      }
     }
   }
   r /= n;
   g /= n;
   b /= n;
-  return { r, g, b, n, hex: hex(r, g, b), luminance: +luminance(r, g, b).toFixed(4) };
+  return {
+    r,
+    g,
+    b,
+    n,
+    hex: hex(r, g, b),
+    luminance: +luminance(r, g, b).toFixed(4),
+    ground: groundN ? +(groundL / groundN).toFixed(4) : null,
+    waterShare: +(water / n).toFixed(4),
+    bandShare: +(band / n).toFixed(4),
+  };
 }
 
 /** How many distinct colours a patch contains, at 4 bits per channel. A blank map pane

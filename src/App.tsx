@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { motion, useTransform, useMotionValueEvent } from "framer-motion";
+import { AnimatePresence, motion, useTransform, useMotionValueEvent } from "framer-motion";
 import { EndpointField } from "./components/EndpointField";
 import { MobileSearchSheet, SearchEntryButton } from "./components/MobileSearch";
 import type { HistoryEntry } from "./components/PlaceInput";
@@ -7,17 +7,26 @@ import { FilterBar } from "./components/FilterBar";
 import type { KindFilter } from "./components/FilterBar";
 import { HeaderMenu } from "./components/HeaderMenu";
 import { HomeAurora } from "./components/HomeAurora";
-import { HomeShortcuts } from "./components/HomeShortcuts";
+import { HomeShortcuts, TripList, TripRow } from "./components/HomeShortcuts";
 import { AdviceAttribution } from "./components/Attribution";
 import { PrivacyNotice } from "./components/PrivacyNotice";
+import { ProfileScreen } from "./components/ProfileScreen";
 import { NavigationOverlay } from "./components/NavigationOverlay";
+import { MockBadge } from "./components/MockBadge";
 import { PlaceInfoCard } from "./components/PlaceInfoCard";
 import type { PlaceInfo } from "./components/PlaceInfoCard";
 import { WeatherStrip } from "./components/WeatherStrip";
-import { CARD_ACCENTS, PRIMARY_GRADIENT, TEXT_GRADIENT } from "./lib/gradients";
+import { PRIMARY_GRADIENT } from "./lib/gradients";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
+import { ResultsSheet } from "./components/ResultsSheet";
+import { SheetSummary } from "./components/SheetSummary";
+import { RadarButton } from "./components/RadarButton";
+import { SavedScreen } from "./components/SavedScreen";
+import { TAB_BAR_COMPACT_PX, TAB_BAR_PX, TabBar } from "./components/TabBar";
+import { TabScreen } from "./components/TabScreen";
 import { LazyMapView as MapView, isMapLoaded, preloadMap } from "./components/lazyMap";
 import type { WeatherLayersState } from "./components/RainRadar";
+import { useAppNav, useNavLayer, type Layer, type Tab } from "./hooks/useAppNav";
 import { useLiveLocation } from "./hooks/useLiveLocation";
 import { useMediaQuery } from "./hooks/useMediaQuery";
 import { prefetchAmsterdamPois } from "./hooks/usePois";
@@ -26,11 +35,12 @@ import { useRecentTrips } from "./hooks/useRecentTrips";
 import type { RecentTrip } from "./hooks/useRecentTrips";
 import { useSavedPlaces } from "./hooks/useSavedPlaces";
 import type { SavedPlace } from "./hooks/useSavedPlaces";
-import { useTheme } from "./hooks/useTheme";
+import { centreOf, useTheme } from "./hooks/useTheme";
 import { useTripPlan } from "./hooks/useTripPlan";
 import { useWakeLock } from "./hooks/useWakeLock";
 import { translate, useI18n } from "./lib/i18n";
 import { buildNavRoute, progressAlong } from "./lib/routeProgress";
+import type { Detent } from "./lib/sheetDetents";
 import { isLive } from "./api/client";
 import { reverseGeocode, reverseGeocodeDetail } from "./geocode";
 import type { Mode, Place } from "./api/types";
@@ -73,6 +83,20 @@ interface PopularTrip {
 // two can never disagree again.
 const HOME_FADED_AT = 0.5;
 
+// The mock badge's height (text-xs and 4px of padding top and bottom), for centring it on
+// the pill's row.
+const MOCK_BADGE_PX = 24;
+
+// The badge's box in each of the places App puts it outside the stages (badgeSpot, in
+// App). The portrait map's spot is in the map pane instead (mapPane).
+const MOCK_BADGE_PLACE = {
+  corner: "fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))]",
+  home: "fixed left-1/2 top-[calc(0.75rem+env(safe-area-inset-top))] z-[1850] -translate-x-1/2",
+  pillRow: "fixed right-[calc(0.75rem+env(safe-area-inset-right))] z-[1850]",
+  header: "fixed right-[calc(1rem+env(safe-area-inset-right))] top-[calc(1rem+env(safe-area-inset-top))] z-[1850]",
+  away: "fixed invisible left-[calc(0.75rem+env(safe-area-inset-left))] z-[1850]",
+} as const;
+
 // Phone geometry, in one place. The floating pill is not part of the home's flow (it
 // belongs to the morph, not to either stage), so the home has to leave it a hole: the
 // hero ends, HOME_PILL_GAP of air, the pill, HOME_PILL_CLEAR of air, and only then the
@@ -81,13 +105,37 @@ const HOME_FADED_AT = 0.5;
 // whatever its content makes it.
 const HOME_PILL_GAP = 20;
 const HOME_PILL_CLEAR = 16;
+// A phone on its side has 320 to 390px of height for the hero, the hole and the trips, and
+// with the portrait spacing the trips' scroller was 0 to 36px tall. There the hero is one
+// line and both airs are 8px.
+const HOME_PILL_GAP_SHORT = 8;
+const HOME_PILL_CLEAR_SHORT = 8;
 // The pill's resting offset on anything wider: unchanged, and unmeasured.
 const DESKTOP_PILL_TOP = 260;
 
+// The portrait phone's map stage. The map runs to the top of the screen and its chrome
+// floats over it in two rows under the top inset: the round back button and the search
+// pill share the first, MAP_ROW_Y down, and the filter chips are the second, a gap of the
+// same 8px under it (the stage's `top-[calc(4rem+...)]` is 8 + 48 + 8). The pill flies
+// from the home into that row: it moves right by MAP_PILL_SHIFT to clear the back button
+// and loses padding until it is the button's 48px tall (a 44px target, a 1px border each
+// side and 1px of padding).
+const MAP_ROW_Y = 8;
+const MAP_BACK_PX = 48;
+const MAP_PILL_SHIFT = MAP_BACK_PX + 8;
+const HOME_PILL_PAD = 6;
+const MAP_PILL_PAD = 1;
+// Where the pill's sideways move ends. Its rise ends at 1, and with both ending together
+// the pill crossed the back button's corner on the way up; by 0.75 it is still below that
+// button's row.
+const PILL_SHIFTED_AT = 0.75;
+
 // Height of an element, live. Used for the two boxes the phone home has to fit around
 // each other. Returns 0 where there is no layout (jsdom) or while disabled, and the
-// callers fall back to the desktop constants in that case.
-function useLiveHeight(ref: React.RefObject<HTMLElement>, enabled: boolean): number {
+// callers fall back to the desktop constants in that case. While `frozen` it keeps the
+// last height it read: the portrait pill changes shape on its way to the map, and the
+// home it was measured for is not on screen then.
+function useLiveHeight(ref: React.RefObject<HTMLElement>, enabled: boolean, frozen = false): number {
   const [height, setHeight] = useState(0);
   useLayoutEffect(() => {
     const el = ref.current;
@@ -95,14 +143,47 @@ function useLiveHeight(ref: React.RefObject<HTMLElement>, enabled: boolean): num
       setHeight(0);
       return;
     }
+    if (frozen) return;
     const read = () => setHeight(el.offsetHeight);
     read();
     if (typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(read);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [ref, enabled]);
+  }, [ref, enabled, frozen]);
   return height;
+}
+
+// How far down the map the portrait phone's floating chrome reaches, in px: the bottom of
+// the chip row measured from the top of the map pane, plus 8px of air. This is the map's
+// topInset and the top of the results sheet's frame. 0 without layout (jsdom) or off that
+// layout. The row's box keeps its place while navigation hides it, so the number does
+// not move when a ride starts.
+function useChromeInset(
+  chrome: React.RefObject<HTMLElement>,
+  pane: React.RefObject<HTMLElement>,
+  enabled: boolean,
+): number {
+  const [inset, setInset] = useState(0);
+  useLayoutEffect(() => {
+    const el = chrome.current;
+    const map = pane.current;
+    if (!enabled || !el || !map) {
+      setInset(0);
+      return;
+    }
+    const read = () => {
+      const row = el.getBoundingClientRect();
+      setInset(row.height > 0 ? Math.round(row.bottom - map.getBoundingClientRect().top + 8) : 0);
+    };
+    read();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    ro.observe(map);
+    return () => ro.disconnect();
+  }, [chrome, pane, enabled]);
+  return inset;
 }
 
 const POPULAR: PopularTrip[] = [
@@ -115,7 +196,7 @@ const POPULAR: PopularTrip[] = [
 
 export default function App() {
   const { progress, containerRef, toMap, toHome, reduced } = useMorphProgress();
-  const { dark, toggle: toggleTheme } = useTheme();
+  const { dark, mode: themeMode, toggle: toggleTheme, setMode: setThemeMode } = useTheme();
   const { lang, t, toggle: toggleLang } = useI18n();
 
   const [fromText, setFromText] = useState("");
@@ -125,10 +206,33 @@ export default function App() {
   const [armed, setArmed] = useState<Armed>(null);
   const [hideMap, setHideMap] = useState(false);
   const [selectedMode, setSelectedMode] = useState<Mode | null>(null);
-  // Weather overlay state lives here (not in MapView) so its toggles can sit in the
-  // filter bar alongside Filters, a sibling of the map.
+  // Weather overlay state lives here (not in MapView) so its toggles can sit outside the
+  // map: the filter bar's segment on a wide screen, a round button on a phone's map.
   const [radar, setRadar] = useState(false);
+  // Whether the radar is on because a plan expected rain rather than because the rider
+  // turned it on. The phone's button plays its one cue for that (RadarButton).
+  const [radarCued, setRadarCued] = useState(false);
+  // The rider's choice of layers, which the readout's toggles change.
   const [wLayers, setWLayers] = useState<WeatherLayersState>({ rain: true, wind: true });
+  // A radar the plan turned on shows the rain alone: the wind particles cost battery and
+  // data the rider did not ask for. The hold sits over the rider's choice rather than
+  // changing it, so their own tap on the radar brings back the layers they had, and the
+  // readout's Wind toggle ends it by turning the wind on.
+  const [windHeld, setWindHeld] = useState(false);
+  const mapLayers = useMemo(() => (windHeld ? { ...wLayers, wind: false } : wLayers), [windHeld, wLayers]);
+  const toggleRadar = () => {
+    setRadar((r) => !r);
+    setRadarCued(false);
+    setWindHeld(false);
+  };
+  const toggleLayer = (k: keyof WeatherLayersState) => {
+    if (k === "wind" && windHeld) {
+      setWindHeld(false);
+      setWLayers((s) => ({ ...s, wind: true }));
+      return;
+    }
+    setWLayers((s) => ({ ...s, [k]: !s[k] }));
+  };
   // Turn-by-turn mode: drives the live-location watch, the wake lock, the maneuver
   // overlay and the follow camera. The whole nav chain derives from this one flag.
   const [navigating, setNavigating] = useState(false);
@@ -147,6 +251,10 @@ export default function App() {
   // could see and planned that trip. Invisible now means untouchable, at the same
   // number the fade uses.
   const [homeLive, setHomeLive] = useState(true);
+  // Whether the map stage is the screen the user is on, for the Back button. Separate
+  // from progressIs1 and with a gap between its two thresholds, so a scroll-snap wobble
+  // near the end of the morph does not push and pop a history entry.
+  const [mapOpen, setMapOpen] = useState(false);
   // Whether the map subtree may render at all. It starts false so a visitor who never
   // leaves the home never downloads leaflet; the morph moving off zero is the last
   // possible moment to turn it on, and by then WARM_EVENTS has normally had the chunk
@@ -156,6 +264,7 @@ export default function App() {
   useMotionValueEvent(progress, "change", (v) => {
     setProgressIs1(v > 0.99);
     setHomeLive(v < HOME_FADED_AT);
+    setMapOpen((open) => (v > 0.99 ? true : v < 0.01 ? false : open));
     if (v > 0) setMapWanted(true);
   });
 
@@ -204,7 +313,13 @@ export default function App() {
   // Maps-style local memory: search history and saved places, plus the place-info
   // card opened from the map's "What's here?".
   const { trips: recentTrips, record: recordTrip, clear: clearRecents } = useRecentTrips();
-  const { places: savedPlaces, isSaved, toggle: toggleSaved, clearAll: clearSaved } = useSavedPlaces();
+  const {
+    places: savedPlaces,
+    isSaved,
+    toggle: toggleSaved,
+    clearAll: clearSaved,
+    restore: restoreSaved,
+  } = useSavedPlaces();
   const [placeInfo, setPlaceInfo] = useState<PlaceInfo | null>(null);
   // Real filters: which option kinds show (one chip per kind in the filter bar).
   const [kinds, setKinds] = useState<KindFilter>({ bike: true, transit: true, bike_and_ride: true });
@@ -250,6 +365,8 @@ export default function App() {
     setArmed(null);
     setHideMap(false);
     setRadar(false);
+    setRadarCued(false);
+    setWindHeld(false);
     placeSeq.current++;
     setPlaceInfo(null);
     setNavigating(false);
@@ -268,13 +385,14 @@ export default function App() {
     setSelectedMode(null);
     submitted();
     // Searching from the phone sheet cannot start the morph here. toMap() is a *smooth*
-    // scroll, and the sheet's scroll-restore — the cleanup of the effect that locks the
-    // body, which fires as it unmounts — is an instant window.scrollTo(0, y) with the
-    // offset the sheet was opened at. The instant one lands second and cancels the
-    // smooth one: the plan ran, three options rendered, and the app sat on the home
-    // stage indefinitely. So the sheet closes first and the morph waits for it to be
-    // gone; the effect below is what runs after that. Every other caller (the desktop
-    // pill, the popular trips, a saved place) has no sheet mounted and goes straight.
+    // scroll, and the sheet's scroll-restore (the cleanup of the effect that locks the
+    // body, which runs as the sheet starts to leave) is an instant window.scrollTo(0, y)
+    // with the offset the sheet was opened at. The instant one lands second and cancels
+    // the smooth one: the plan ran, three options rendered, and the app sat on the home
+    // stage indefinitely. So the sheet closes first and the morph waits for it to let go
+    // of the page; the effect below is what runs after that. Every other caller (the
+    // desktop pill, the popular trips, a saved place) has no sheet open and goes
+    // straight.
     if (searchOpen) {
       mapAfterSheet.current = true;
       setSearchOpen(false);
@@ -349,6 +467,40 @@ export default function App() {
     setSelectedMode(null);
     submitted();
     toMap();
+  }
+
+  // The phone's tabs. Each screen keeps its own scroller, and tapping the tab that is
+  // already on screen takes that scroller back to its top.
+  const homeScrollerRef = useRef<HTMLDivElement>(null);
+  const savedRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
+  function scrollTop(el: HTMLElement | null) {
+    if (!el) return;
+    if (typeof el.scrollTo === "function") el.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
+    else el.scrollTop = 0;
+  }
+  function selectTab(next: Tab) {
+    if (next === nav.tab) {
+      scrollTop(next === "saved" ? savedRef.current : next === "profile" ? profileRef.current : homeScrollerRef.current);
+      return;
+    }
+    nav.selectTab(next);
+  }
+  // A saved place from the Saved tab: plan to it straight away if the trip has a start,
+  // otherwise open the search screen with the destination filled and the start to type.
+  function planToSaved(p: SavedPlace) {
+    nav.selectTab("plan");
+    setToText(p.name);
+    setDestination({ label: p.name, query: coordQuery(p.lat, p.lon) });
+    setSelectedMode(null);
+    if (origin) {
+      submitted();
+      toMap();
+    } else {
+      setSearchFocusField("from");
+      setSearchSession((n) => n + 1);
+      setSearchOpen(true);
+    }
   }
 
   // "What's here?" is a reverse geocode too, so card writes follow the same
@@ -520,8 +672,23 @@ export default function App() {
     if (navigating && view.status === "error") setNavigating(false);
   }, [navigating, view.status]);
 
+  // Which search the results on screen answer: the trip as the plan query keys it, so it
+  // changes exactly when a new set of results can arrive. The panel's rows arrive in
+  // sequence when it does. A choice of option or of language re-renders the same rows,
+  // and so does a filter chip for the rows it leaves in place; only a row the chip
+  // brings back arrives, on its own.
+  const search = trip ? JSON.stringify([trip.from, trip.to, trip.submit ?? 0]) : "";
   const panel: PanelState = filteredView
-    ? { status: "ready", view: filteredView, selectedMode: effectiveMode, onSelect: setSelectedMode }
+    ? {
+        status: "ready",
+        view: filteredView,
+        search,
+        selectedMode: effectiveMode,
+        // While a ride is on nothing in the results chooses another option: that would
+        // swap the route being ridden, rebuilt from the itinerary's start rather than
+        // from the rider. The banner's Exit ends the ride.
+        onSelect: navigating ? undefined : setSelectedMode,
+      }
     : view.status === "error"
       ? { status: "error", message: view.message ?? "error" }
       : view.status === "loading"
@@ -529,6 +696,23 @@ export default function App() {
         : { status: "idle" };
 
   const count = visible.length;
+
+  // Rain during the trip turns the radar on, once per search. The test is the verdict the
+  // summary's weather tag shows (PlanView.rainExpected), never the backend's sentence. A
+  // rider who turns the radar off keeps it off until the next search, because the search
+  // is marked decided the first time its plan is in. A dry plan, or one with no forecast,
+  // leaves the radar as it was. A replan during navigation is a new search too, but not
+  // one the rider made, so it is marked and passed over. A radar turned on this way shows
+  // the rain alone (windHeld).
+  const radarDecidedFor = useRef("");
+  useEffect(() => {
+    if (!planView || radarDecidedFor.current === search) return;
+    radarDecidedFor.current = search;
+    if (navigating || planView.rainExpected !== true || radar) return;
+    setRadar(true);
+    setRadarCued(true);
+    setWindHeld(true);
+  }, [planView, search, navigating, radar]);
 
   // What the polite live region says. Empty while idle/loading so the region only ever
   // speaks on an outcome; the strings are translated like everything else.
@@ -583,38 +767,80 @@ export default function App() {
   // the 567px of bar between the wordmark and the menu with room either side — which is
   // exactly the arrangement the app already uses from `lg` up.
   const landscapePhone = isPhone && shortChrome;
+  // Portrait phone: the results live in a sheet over a full-screen map. A phone on its
+  // side keeps the side-by-side panes at any width, below md as well (see the map stage).
+  const sheetLayout = isPhone && !landscapePhone;
+  // Navigation takes the top of a portrait phone's map for its banner: the floating
+  // pill, chips and back button step aside, and nothing up there but the banner's Exit
+  // takes a touch.
+  const navChromeHidden = sheetLayout && navigating;
+  // The sheet is there once there is a trip: planning, planned or failed. With no trip
+  // there is nothing to say, and no sheet.
+  const sheetShown = sheetLayout && panel.status !== "idle";
+  const [detent, setDetent] = useState<Detent>("peek");
+  // The visible height of the sheet once it has settled, for the map's bottom padding.
+  const [sheetInset, setSheetInset] = useState(0);
+  // The floating chrome over the top of a portrait phone's map, for the map's top padding.
+  const mapChromeRef = useRef<HTMLDivElement>(null);
+  const mapMainRef = useRef<HTMLElement>(null);
+  const topInset = useChromeInset(mapChromeRef, mapMainRef, sheetLayout);
+  // A new search lands collapsed, on the summary, so the map and the route stay the
+  // screen; navigation drops the sheet to its peek as well.
+  useEffect(() => {
+    setDetent("peek");
+  }, [search]);
+  useEffect(() => {
+    if (navigating) setDetent("peek");
+  }, [navigating]);
   const heroRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLDivElement>(null);
   const heroHeight = useLiveHeight(heroRef, isPhone);
-  const pillHeight = useLiveHeight(pillRef, isPhone);
+  const pillHeight = useLiveHeight(pillRef, isPhone, sheetLayout && !homeLive);
   // On a phone the pill rests just under the hero instead of at a fixed 260px. At 260
   // it covered the last line of the subtitle on every portrait phone (23px of a 24px
   // line), and a tap aimed at the end of that sentence landed in the To field.
-  const pillTop = isPhone && heroHeight > 0 ? heroHeight + HOME_PILL_GAP : DESKTOP_PILL_TOP;
+  const pillGap = landscapePhone ? HOME_PILL_GAP_SHORT : HOME_PILL_GAP;
+  const pillTop = isPhone && heroHeight > 0 ? heroHeight + pillGap : DESKTOP_PILL_TOP;
   // Every number here is an offset inside the pill's own containing block, whose top is
   // env(safe-area-inset-top) — so 60 means "60px below the notch", not 60px below the
   // physical edge, and the header (3.5rem + the same inset) is cleared on any phone.
-  // 3 centres the 50px landscape pill in its 56px header.
+  // 3 centres the 50px landscape pill in its 56px header. A portrait phone has no header
+  // on the map stage: the pill rests in the floating row beside the back button.
   const searchY = useTransform(
     progress,
     [0, 1],
-    [pillTop, wideChrome ? 9 : landscapePhone ? 3 : shortChrome ? 52 : 60],
+    [pillTop, sheetLayout ? MAP_ROW_Y : wideChrome ? 9 : landscapePhone ? 3 : shortChrome ? 52 : 60],
   );
+  // The rest of the portrait pill's flight, after the home has faded: it moves right to
+  // clear the back button and slims to that button's height. Both reach the pill as CSS
+  // custom properties that only the portrait class list reads. framer leaves a motion
+  // value it was given on the element when the key is later dropped, so a margin or a
+  // padding written directly stayed on the pill after the phone turned on its side and
+  // cut 56px off the left end of the landscape pill; an unread custom property does
+  // nothing.
+  const pillShift = useTransform(progress, [HOME_FADED_AT, PILL_SHIFTED_AT], ["0px", `${MAP_PILL_SHIFT}px`]);
+  const pillPad = useTransform(progress, [HOME_FADED_AT, 1], [`${HOME_PILL_PAD}px`, `${MAP_PILL_PAD}px`]);
   // The hole the home's scroller leaves for the pill.
   const pillSlot =
-    pillHeight > 0 ? HOME_PILL_GAP + pillHeight + HOME_PILL_CLEAR : HOME_PILL_GAP + 58 + HOME_PILL_CLEAR;
+    pillGap + (pillHeight > 0 ? pillHeight : 58) + (landscapePhone ? HOME_PILL_CLEAR_SHORT : HOME_PILL_CLEAR);
 
   // The phone search screen, and the control that opened it: focus has to go back
   // there when the screen closes, or a keyboard user is dropped at the top of the page.
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchFocusField, setSearchFocusField] = useState<"from" | "to">("from");
+  // One key per opening. A sheet closed and reopened within its exit is then a fresh
+  // one, with the focus, scroll lock and field state of an opening, while the old copy
+  // finishes leaving underneath it, inert. A fixed key would hand back the leaving copy
+  // instead, which never mounts again and so never moves focus in.
+  const [searchSession, setSearchSession] = useState(0);
   const searchTriggerRef = useRef<HTMLButtonElement>(null);
   const searchWasOpen = useRef(false);
   // Set by commitSearch when the search came from the sheet: the morph it asked for is
-  // owed once the sheet has unmounted. React runs an unmounting component's effect
-  // cleanups before it runs anyone's effects for that same commit, so by the time this
-  // fires the sheet's scroll-restore has already happened and the smooth scroll below
-  // is the last word on where the page goes.
+  // owed once the sheet has let go of the page. The sheet stays on screen for its exit,
+  // but it releases its scroll lock in the commit that closes it (MobileSearchSheet,
+  // `leaving`), and React runs every effect cleanup of a commit before it runs anyone's
+  // effects for it, so by the time this fires the sheet's scroll-restore has already
+  // happened and the smooth scroll below is the last word on where the page goes.
   const mapAfterSheet = useRef(false);
   useEffect(() => {
     if (searchWasOpen.current && !searchOpen) {
@@ -632,13 +858,324 @@ export default function App() {
   // reader cannot read the map out from under it, and a stray touch cannot reach the
   // home. The scroll lock that goes with it lives in MobileSearchSheet.
   const searchBlocking = isPhone && searchOpen;
-  const behindSheet = searchBlocking ? { "aria-hidden": true as const } : {};
   function openSearch() {
     // The keyboard opens on the field that still needs something. With a whole trip
     // already entered the reason to come back is nearly always a new destination.
     setSearchFocusField(fromText.trim() ? "to" : "from");
+    setSearchSession((n) => n + 1);
     setSearchOpen(true);
   }
+
+  // The Back button. Each layer the app can open has one history entry while it is open;
+  // a Back press closes the top one here, the same way its own close control would.
+  const nav = useAppNav((layer: Layer) => {
+    if (layer === "map") toHome();
+    else if (layer === "search") setSearchOpen(false);
+    else if (layer === "privacy") setPrivacyOpen(false);
+    else if (layer === "place") {
+      placeSeq.current++;
+      setPlaceInfo(null);
+    } else if (layer === "sheet-full") setDetent("half");
+  });
+  // The order of these calls matters: `map` before `sheet-full`, so a stack built in one
+  // render matches the order the user sees.
+  useNavLayer(nav, "map", mapOpen);
+  useNavLayer(nav, "sheet-full", sheetShown && mapOpen && detent === "full");
+  useNavLayer(nav, "place", placeInfo !== null);
+  useNavLayer(nav, "search", isPhone && searchOpen);
+  useNavLayer(nav, "privacy", privacyOpen);
+  // A Saved or Profile screen is over both stages: they go inert and hidden under it, the
+  // same way they do under the phone search screen.
+  const tabCovering = isPhone && nav.tab !== "plan";
+  const behindSheet = searchBlocking || tabCovering ? { "aria-hidden": true as const } : {};
+  // The tab bar steps away while the search screen, navigation or the map stage owns
+  // the screen.
+  const tabBarHidden = searchOpen || navigating || (nav.tab === "plan" && !homeLive);
+  // Whether the home's scroller stops above the bar. The search screen and the map stage
+  // cover or replace the home while the bar is away, so the box keeps its size under
+  // them: growing it there would clamp the scroll, and the home would come back short of
+  // where it was left. Navigation is the one case where the bar is away with the home on
+  // screen (the back arrow leaves navigation running), and there the box runs to the foot.
+  const homeClearsTabBar = !navigating;
+  // Where the mock badge sits, chosen so that nothing is under it on a phone.
+  //   home: the top centre, in the hero's headroom, which does not scroll.
+  //   pillRow: a phone on its side, on the home, whose one-line hero has no headroom. The
+  //     right end of the pill's row: the pill stops 120px short of the screen's edge on
+  //     that layout, and nothing scrolls into its hole.
+  //   header: a phone on its side, at the map stage. The header's right end is empty on
+  //     a phone (the menu is the Profile tab), so it sits there, centred on the bar.
+  //   map: a portrait phone's map stage. A map overlay in the top-left corner, under the
+  //     floating chrome, on the radar button's line: one spot at every height of the
+  //     sheet, and under the sheet's layer, so a sheet that rises over it covers it. It
+  //     used to sit 8px above the sheet's settled top, which is right only while the sheet
+  //     is at rest: a finger holding the sheet between two detents carried the summary's
+  //     Start under it, and keyboard focus low in a half sheet scrolls the sheet's frame
+  //     and put the option rows there. A full sheet hides the map and the badge goes with
+  //     it, as the radar button does.
+  //   away: the Saved and Profile screens. They scroll under anything fixed, the room
+  //     beside their titles does not hold in every language ("Bewaard" at 320px reaches
+  //     the middle), and they show only what is on the device, nothing the mock planner
+  //     answered.
+  //   corner: bottom left, on a desktop.
+  const badgeSpot = !isPhone
+    ? "corner"
+    : tabCovering
+      ? "away"
+      : homeLive
+        ? landscapePhone
+          ? "pillRow"
+          : "home"
+        : landscapePhone
+          ? "header"
+          : "map";
+  const mockBadge = !isLive() && (
+    <MockBadge
+      place={badgeSpot === "map" ? (sheetShown && detent === "full" ? "invisible" : "") : MOCK_BADGE_PLACE[badgeSpot]}
+      top={
+        badgeSpot === "pillRow"
+          ? `calc(env(safe-area-inset-top) + ${pillTop + ((pillHeight > 0 ? pillHeight : 50) - MOCK_BADGE_PX) / 2}px)`
+          : undefined
+      }
+    />
+  );
+
+  // The results and the map, built once and placed by whichever layout is on screen:
+  // the results column and the map pane side by side (or stacked), or, on a portrait
+  // phone, the map filling the stage under the results sheet.
+
+  // On a phone turned sideways the column is ~262px tall and this strip's 55px is the
+  // difference between one readable option row and two. The forecast still reaches the
+  // rider there — in the banner under the list, with the Open-Meteo credit beside it.
+  // Everywhere else the strip leads the column as before.
+  const weatherStrip = !landscapePhone && (
+    <WeatherStrip
+      lat={view.origin?.lat ?? AMS_CENTER.lat}
+      lon={view.origin?.lon ?? AMS_CENTER.lon}
+      compact={isPhone}
+    />
+  );
+  const startNav = route
+    ? () => {
+        // The nav UI (banner, Exit, follow camera) lives in the map
+        // pane: starting nav with the map hidden left the GPS watch
+        // and wake lock running with no banner and no way out.
+        setHideMap(false);
+        setNavigating(true);
+      }
+    : undefined;
+  // On the sheet layout the summary header carries the one Start, at every height of the
+  // sheet, so the chosen option's steps in the content do not repeat it. It also shows
+  // the chosen option's title, Best tag and minutes, so the chosen row in the content
+  // starts at its leg bar.
+  const resultsPanel = (
+    <ResultsPanel
+      state={panel}
+      onStartNav={sheetLayout ? undefined : startNav}
+      narrow={isPhone}
+      chosenInHeader={sheetLayout}
+    />
+  );
+  // Weather and OpenStreetMap credit for the advice itself, which stays on screen whether
+  // or not the map is showing. Open-Meteo's CC BY 4.0 terms ask for a link next to where
+  // its data is shown, and the forecast strip is at the top of this column.
+  const attribution = <AdviceAttribution />;
+  // In the sheet the content is the options, then the forecast and the credits under
+  // them, and only once there are options to show. A plan on its way, a plan that failed
+  // and a filter that hides every option are the summary header alone, which says so.
+  const resultsBody = sheetLayout ? (
+    panel.status === "ready" && panel.view.options.length > 0 ? (
+      <>
+        {resultsPanel}
+        {weatherStrip}
+        {attribution}
+      </>
+    ) : null
+  ) : (
+    <>
+      {weatherStrip}
+      {resultsPanel}
+      {attribution}
+    </>
+  );
+  // The back arrow. Inline SVG, not the icon font: that subset is frozen and a glyph
+  // missing from it paints as the word "ARROW_BACK" across the bar.
+  const backArrow = (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-6 w-6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M19 12H5" />
+      <path d="M12 19l-7-7 7-7" />
+    </svg>
+  );
+  const filterBar = (
+    <FilterBar
+      count={count}
+      // A full sheet already covers the map, so on the sheet layout "Hide map"
+      // takes the sheet to full and back.
+      hideMap={sheetLayout ? detent === "full" : hideMap}
+      onToggleMap={sheetLayout ? () => setDetent((d) => (d === "full" ? "half" : "full")) : () => setHideMap((v) => !v)}
+      // With no trip on a portrait phone there is no sheet for "Hide map" to raise.
+      hideMapDisabled={navigating || (sheetLayout && !sheetShown)}
+      armed={armed}
+      onArm={armPick}
+      radar={radar}
+      onToggleRadar={toggleRadar}
+      kinds={kinds}
+      onToggleKind={(m) => setKinds((s) => ({ ...s, [m]: !s[m] }))}
+      // Locked for the ride: turning off the ridden mode would swap the route being ridden
+      // for the next option's. The map's pin drag, its "Directions from/to here" and the
+      // bar's Start and End pickers stay live: they are deliberate edits of an endpoint,
+      // and the replan they cause is intended.
+      kindsDisabled={navigating}
+      phone={isPhone}
+      compact={landscapePhone}
+      floating={sheetLayout}
+    />
+  );
+  // The place card, lifted above a results sheet. On a portrait phone it lives in the
+  // sheet's frame rather than over the map, which clips it at the chrome when a full sheet
+  // lifts it that far (see the sheet layout below).
+  const placeCard = (
+    <AnimatePresence>
+      {placeInfo && (
+        <PlaceInfoCard
+          key="place-info"
+          place={placeInfo}
+          saved={isSaved(placeInfo.lat, placeInfo.lon)}
+          onToggleSave={() =>
+            toggleSaved({
+              name: placeInfo.name,
+              label: placeInfo.address ?? placeInfo.name,
+              lat: placeInfo.lat,
+              lon: placeInfo.lon,
+            })
+          }
+          onDirections={infoDirections}
+          bottomInset={sheetShown ? sheetInset : 0}
+          onClose={() => {
+            placeSeq.current++;
+            setPlaceInfo(null);
+          }}
+        />
+      )}
+    </AnimatePresence>
+  );
+  // The two notes a map can carry in its top-left corner: the hint while a pick is armed,
+  // and the warning while a ride is far from its route. Elsewhere each is pinned there
+  // on its own; on a portrait phone both go in the corner's column (mapPane).
+  const pickHint = armed && (
+    <div
+      className={`${sheetLayout ? "pointer-events-auto" : "absolute left-3 top-3 z-[1000]"} rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow dark:bg-night-accent dark:text-night-bg`}
+    >
+      {armed === "start" ? t("clickMapSetStart") : t("clickMapSetEnd")}
+    </div>
+  );
+  const routeHint = farFromRoute && (
+    <div
+      className={`${sheetLayout ? "pointer-events-auto" : "absolute left-3 top-24 z-[1000]"} rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-amber-700 shadow dark:bg-night-surface/95 dark:text-amber-300`}
+    >
+      {t("farFromRoute")}
+    </div>
+  );
+  const mapPane = (
+    <>
+      {/* On a portrait phone everything pinned to the top of the map starts under the
+          floating chrome (topInset), not under the map's own edge. There the top-left
+          corner is one column, 12px under topInset, on the radar button's line: a
+          pick's hint, the far-from-route warning (the navigation banner ends above
+          topInset, which the hidden chip row still holds), and the mock badge last, so
+          none of them meets another. The column takes no touches; the notes do, as
+          they do on their own elsewhere. */}
+      {sheetLayout ? (
+        <div className="pointer-events-none absolute left-3 z-[1000] flex flex-col items-start gap-2" style={{ top: 12 + topInset }}>
+          {pickHint}
+          {routeHint}
+          {badgeSpot === "map" && mockBadge}
+        </div>
+      ) : (
+        <>
+          {pickHint}
+          {routeHint}
+        </>
+      )}
+      {/* Both branches render the identical box in the map container's own
+          resting colour, so whether the chunk is here yet or not the stage has
+          the same shape and the same fill: no layout shift, no flash of a hole
+          mid-morph. With the warm-up above, the placeholder is normally gone
+          before the stage is visible at all. */}
+      {!mapWanted ? (
+        <MapPlaceholder />
+      ) : (
+      <Suspense fallback={<MapPlaceholder />}>
+        <MapView
+          origin={view.origin}
+          destination={view.destination}
+          stops={view.stops}
+          route={route}
+          onPick={handlePick}
+          picking={armed !== null}
+          onMovePoint={onMovePoint}
+          onContextPick={onContextPick}
+          onWhatsHere={whatsHere}
+          onPoiPick={(p) => {
+            placeSeq.current++;
+            setPlaceInfo({ name: p.name, address: p.kindLabel, lat: p.lat, lon: p.lon });
+          }}
+          interactive={progressIs1}
+          radar={radar}
+          wLayers={mapLayers}
+          onLayerToggle={toggleLayer}
+          dark={dark}
+          liveFix={fix}
+          navigating={navigating}
+          bottomInset={sheetShown ? sheetInset : 0}
+          topInset={sheetLayout ? topInset : 0}
+          zoomControl={!sheetLayout}
+          radarButton={isPhone}
+        />
+      </Suspense>
+      )}
+      {/* The phone's radar: a round button in the map's top-right corner, the place Google
+          Maps keeps its layers button, 12px under the chips on a portrait phone and under
+          the chip row's in-flow bar on its side. The map's readout starts under it. It
+          steps away when the map does: a full sheet covers the map, and on a phone on its
+          side the navigation banner spans the top of this pane, where the button would sit
+          on the banner's Exit. A wide screen keeps the filter bar's segment instead. */}
+      {isPhone && (
+        <RadarButton
+          on={radar}
+          cued={radarCued}
+          onToggle={toggleRadar}
+          top={12 + (sheetLayout ? topInset : 0)}
+          hidden={(sheetShown && detent === "full") || (landscapePhone && navigating)}
+        />
+      )}
+      {/* The banner and the place card arrive and leave (overlay in
+          lib/motion); each keeps one key, so new content in an open one is an
+          update, not a second card. */}
+      <AnimatePresence>
+        {navigating && navProgress && (
+          <NavigationOverlay
+            key="navigation"
+            next={navProgress.next}
+            toNext={navProgress.toNext}
+            remaining={navProgress.remaining}
+            etaMinutes={etaMinutes}
+            onExit={() => setNavigating(false)}
+            fullBleed={sheetLayout}
+          />
+        )}
+      </AnimatePresence>
+      {!sheetLayout && placeCard}
+    </>
+  );
 
   return (
     <div
@@ -684,172 +1221,132 @@ export default function App() {
             leaving the map and the advice two thirds of the screen. With the pill inside
             the header on that layout there is nothing under the bar to clear any more,
             so the headroom is the 56px bar plus 8px of air, and the whole stack above
-            the content comes to 120px of 390 (30.8%). Every other tier is unchanged. */}
+            the content comes to 120px of 390 (30.8%). A portrait phone has no headroom at
+            all: its map runs to the top of the screen, under the status bar, and the
+            chrome floats over it. Every other tier is unchanged. */}
         <motion.div
           data-fov="map-stage"
           className={`absolute inset-0 z-0 flex flex-col bg-white pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] dark:bg-night-bg ${
             landscapePhone
               ? "pt-[calc(4rem+env(safe-area-inset-top))]"
-              : "pt-[calc(8.25rem+env(safe-area-inset-top))] [@media(max-height:500px)]:pt-[calc(6rem+env(safe-area-inset-top))] lg:pt-[calc(6rem+env(safe-area-inset-top))]"
-          }`}
-          style={{ opacity: mapOpacity, pointerEvents: progressIs1 && !searchBlocking ? "auto" : "none" }}
-          {...inertUnless(progressIs1 && !searchBlocking)}
+              : sheetLayout
+                ? ""
+                : "pt-[calc(8.25rem+env(safe-area-inset-top))] [@media(max-height:500px)]:pt-[calc(6rem+env(safe-area-inset-top))] lg:pt-[calc(6rem+env(safe-area-inset-top))]"
+          }`.trimEnd()}
+          style={{ opacity: mapOpacity, pointerEvents: progressIs1 && !searchBlocking && !tabCovering ? "auto" : "none" }}
+          {...inertUnless(progressIs1 && !searchBlocking && !tabCovering)}
           {...behindSheet}
         >
-          <div className="px-4 md:px-6">
-            <FilterBar
-              count={count}
-              hideMap={hideMap}
-              onToggleMap={() => setHideMap((v) => !v)}
-              hideMapDisabled={navigating}
-              armed={armed}
-              onArm={armPick}
-              radar={radar}
-              onToggleRadar={() => setRadar((r) => !r)}
-              kinds={kinds}
-              onToggleKind={(m) => setKinds((s) => ({ ...s, [m]: !s[m] }))}
-              phone={isPhone}
-              compact={landscapePhone}
-            />
-          </div>
+          {/* On a portrait phone the chips float over the map in a row of their own,
+              under the pill, and the row's box takes no touches: only the chips do. It is
+              a layer over the map pane, not part of it, at the filter popups' own z: the
+              panel it opens has to clear a full sheet, which is z-[1100]. */}
+          {sheetLayout ? (
+            <div
+              ref={mapChromeRef}
+              data-fov="map-chrome"
+              className="pointer-events-none absolute inset-x-0 top-[calc(4rem+env(safe-area-inset-top))] z-[1150] pl-[calc(0.75rem+env(safe-area-inset-left))] pr-[calc(0.75rem+env(safe-area-inset-right))] transition-opacity"
+              style={{ opacity: navChromeHidden ? 0 : 1 }}
+              {...inertUnless(!navChromeHidden)}
+            >
+              {filterBar}
+            </div>
+          ) : (
+            <div className="px-4 md:px-6">{filterBar}</div>
+          )}
           {/* Below md the two panes stack, map first (Maps-style: map on top, results
-              scrolling under it); from md up they sit side by side, results left. */}
+              scrolling under it); from md up they sit side by side, results left. A phone
+              on its side has them side by side at any width: stacked at 568x320, an iPhone
+              SE on its side, the map was a 102px strip, the zoom column and the reset under
+              it took 158px of it, and Leaflet's overflow cut the reset off. On a portrait
+              phone the map fills the stage and the results are a sheet over it. */}
           {/* tabIndex -1 so the skip link can put focus here; without it the browser
               scrolls to the anchor but focus stays where it was and the next Tab
               starts again from the top. */}
           <main
+            ref={mapMainRef}
             id="fov-map-main"
             tabIndex={-1}
-            className={`flex min-h-0 flex-1 flex-col gap-3 px-4 focus:outline-none md:flex-row md:gap-4 md:px-6 ${
-              // 24px of floor is a portrait margin. On a phone turned sideways it is the
-              // last 16px between the advice and two thirds of the screen.
-              landscapePhone
-                ? "pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
-                : "pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
-            }`}
+            className={
+              sheetLayout
+                ? "relative min-h-0 flex-1 overflow-hidden focus:outline-none"
+                : `flex min-h-0 flex-1 px-4 focus:outline-none md:px-6 ${
+                  // 24px of floor is a portrait margin. On a phone turned sideways it is the
+                  // last 16px between the advice and two thirds of the screen.
+                  landscapePhone
+                    ? "flex-row gap-4 pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
+                    : "flex-col gap-3 pb-[calc(1rem+env(safe-area-inset-bottom))] md:flex-row md:gap-4 md:pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+                }`
+            }
           >
-            <section
-              data-fov="results-column"
-              className={`order-2 min-h-0 flex-1 overflow-y-auto md:order-1 md:flex-none ${
-                hideMap ? "md:w-full" : "md:w-1/2"
-              }`}
-            >
-              {/* On a phone turned sideways the column is ~262px tall and this strip's
-                  55px is the difference between one readable option row and two. The
-                  forecast still reaches the rider there — in the banner under the list,
-                  with the Open-Meteo credit beside it. Everywhere else the strip leads
-                  the column as before. */}
-              {!landscapePhone && (
-                <WeatherStrip
-                  lat={view.origin?.lat ?? AMS_CENTER.lat}
-                  lon={view.origin?.lon ?? AMS_CENTER.lon}
-                  compact={isPhone}
-                />
-              )}
-              <ResultsPanel
-                state={panel}
-                onStartNav={
-                  route
-                    ? () => {
-                        // The nav UI (banner, Exit, follow camera) lives in the map
-                        // pane: starting nav with the map hidden left the GPS watch
-                        // and wake lock running with no banner and no way out.
-                        setHideMap(false);
-                        setNavigating(true);
+            {sheetLayout ? (
+              <>
+                <section className="absolute inset-0">{mapPane}</section>
+                {/* The sheet's frame: the part of the map under the floating chrome, so the
+                    full detent stops under the chips rather than under the pill. Half and
+                    peek are measured from the screen and do not move. The frame takes no
+                    touches, only the sheet and the place card in it do, and it clips what
+                    it holds: a full sheet lifts the place card by its own height, which
+                    would otherwise carry the card up under the pill. */}
+                <div
+                  data-fov="sheet-frame"
+                  className="pointer-events-none absolute inset-x-0 bottom-0 overflow-hidden [&>*]:pointer-events-auto"
+                  style={{ top: topInset }}
+                >
+                  {placeCard}
+                  {sheetShown && (
+                    <ResultsSheet
+                      detent={detent}
+                      onDetent={setDetent}
+                      onSettle={setSheetInset}
+                      header={
+                        // While a ride is on the summary offers nothing that would change
+                        // the trip (SheetSummary), and the banner's Exit ends the ride.
+                        // Try again is a new submit of the same trip.
+                        <SheetSummary
+                          state={panel}
+                          onStartNav={startNav}
+                          onRetry={submitted}
+                          navigating={navigating}
+                        />
                       }
-                    : undefined
-                }
-                narrow={isPhone}
-              />
-              {/* Weather and OpenStreetMap credit for the advice itself, which stays on
-                  screen whether or not the map is showing. Open-Meteo's CC BY 4.0 terms
-                  ask for a link next to where its data is shown, and the forecast strip
-                  is at the top of this column. */}
-              <AdviceAttribution />
-            </section>
-            {/* The phone split. 40dvh of map left the results column 246px on a 360x800
-                phone, which is not enough for the option rows to arrive on screen
-                whatever is above them: the map took 40% of the window, the chrome above
-                it 29%, and the product got the 31% left over. 32dvh puts the column at
-                310px against 256px of map — the larger half now belongs to the advice,
-                and the map is still bigger than the whole column used to be. From `md`
-                up the two panes are side by side and this height does not apply at all.
-                "Hide map" in the filter bar remains the way to give the column the
-                whole screen. */}
-            {!hideMap && (
-              <section className="relative order-1 h-[32dvh] shrink-0 md:order-2 md:h-auto md:w-1/2">
-                {armed && (
-                  <div className="absolute left-3 top-3 z-[1000] rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow dark:bg-night-accent dark:text-night-bg">
-                    {armed === "start" ? t("clickMapSetStart") : t("clickMapSetEnd")}
-                  </div>
+                    >
+                      {resultsBody}
+                    </ResultsSheet>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <section
+                  data-fov="results-column"
+                  className={`min-h-0 overflow-y-auto ${
+                    landscapePhone
+                      ? `order-1 flex-none ${hideMap ? "w-full" : "w-1/2"}`
+                      : `order-2 flex-1 md:order-1 md:flex-none ${hideMap ? "md:w-full" : "md:w-1/2"}`
+                  }`}
+                >
+                  {resultsBody}
+                </section>
+                {/* The phone split. 40dvh of map left the results column 246px on a 360x800
+                    phone, which is not enough for the option rows to arrive on screen
+                    whatever is above them: the map took 40% of the window, the chrome above
+                    it 29%, and the product got the 31% left over. 32dvh puts the column at
+                    310px against 256px of map — the larger half now belongs to the advice,
+                    and the map is still bigger than the whole column used to be. From `md`
+                    up the two panes are side by side and this height does not apply at all.
+                    "Hide map" in the filter bar remains the way to give the column the
+                    whole screen. A phone on its side never stacks, so it never gets the 32dvh. */}
+                {!hideMap && (
+                  <section
+                    className={`relative shrink-0 ${
+                      landscapePhone ? "order-2 w-1/2" : "order-1 h-[32dvh] md:order-2 md:h-auto md:w-1/2"
+                    }`}
+                  >
+                    {mapPane}
+                  </section>
                 )}
-                {/* Both branches render the identical box in the map container's own
-                    resting colour, so whether the chunk is here yet or not the stage has
-                    the same shape and the same fill: no layout shift, no flash of a hole
-                    mid-morph. With the warm-up above, the placeholder is normally gone
-                    before the stage is visible at all. */}
-                {!mapWanted ? (
-                  <MapPlaceholder />
-                ) : (
-                <Suspense fallback={<MapPlaceholder />}>
-                  <MapView
-                    origin={view.origin}
-                    destination={view.destination}
-                    stops={view.stops}
-                    route={route}
-                    onPick={handlePick}
-                    picking={armed !== null}
-                    onMovePoint={onMovePoint}
-                    onContextPick={onContextPick}
-                    onWhatsHere={whatsHere}
-                    onPoiPick={(p) => {
-                      placeSeq.current++;
-                      setPlaceInfo({ name: p.name, address: p.kindLabel, lat: p.lat, lon: p.lon });
-                    }}
-                    interactive={progressIs1}
-                    radar={radar}
-                    wLayers={wLayers}
-                    onLayerToggle={(k) => setWLayers((s) => ({ ...s, [k]: !s[k] }))}
-                    dark={dark}
-                    liveFix={fix}
-                    navigating={navigating}
-                  />
-                </Suspense>
-                )}
-                {navigating && navProgress && (
-                  <NavigationOverlay
-                    next={navProgress.next}
-                    toNext={navProgress.toNext}
-                    remaining={navProgress.remaining}
-                    etaMinutes={etaMinutes}
-                    onExit={() => setNavigating(false)}
-                  />
-                )}
-                {farFromRoute && (
-                  <div className="absolute left-3 top-24 z-[1000] rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-amber-700 shadow dark:bg-night-surface/95 dark:text-amber-300">
-                    {t("farFromRoute")}
-                  </div>
-                )}
-                {placeInfo && (
-                  <PlaceInfoCard
-                    place={placeInfo}
-                    saved={isSaved(placeInfo.lat, placeInfo.lon)}
-                    onToggleSave={() =>
-                      toggleSaved({
-                        name: placeInfo.name,
-                        label: placeInfo.address ?? placeInfo.name,
-                        lat: placeInfo.lat,
-                        lon: placeInfo.lon,
-                      })
-                    }
-                    onDirections={infoDirections}
-                    onClose={() => {
-                      placeSeq.current++;
-                      setPlaceInfo(null);
-                    }}
-                  />
-                )}
-              </section>
+              </>
             )}
           </main>
         </motion.div>
@@ -896,8 +1393,18 @@ export default function App() {
             // trip focused the To field instead. Nothing scrolls under the pill now.
             isPhone ? "flex flex-col overflow-y-hidden" : "overflow-y-auto"
           }`}
-          style={{ opacity: homeOpacity, y: homeY, pointerEvents: homeLive && !searchBlocking ? "auto" : "none" }}
-          {...inertUnless(homeLive && !searchBlocking)}
+          // Hidden once it has faded out (opacity 0 from HOME_FADED_AT on, the same
+          // number homeLive uses), not only transparent. The stage is over the map stage,
+          // and Chrome's compositor counted its transparent layers as over the results
+          // sheet: in the bands where the home has a layer, the sheet's touches arrived
+          // uncancellable and a full sheet could not be pulled down from its content.
+          style={{
+            opacity: homeOpacity,
+            y: homeY,
+            visibility: homeLive ? "visible" : "hidden",
+            pointerEvents: homeLive && !searchBlocking && !tabCovering ? "auto" : "none",
+          }}
+          {...inertUnless(homeLive && !searchBlocking && !tabCovering)}
           {...behindSheet}
         >
           {/* Theme and language switches reachable from the home too (the header only
@@ -906,13 +1413,15 @@ export default function App() {
               painted over this corner and swallowed both clicks on every window too
               narrow for max-w-4xl to clear the buttons (under ~1050px) — the home had
               no working language switch at all there. The inset offsets keep the pair
-              clear of a notch/status bar now that the page paints under it. */}
+              clear of a notch/status bar now that the page paints under it. On a phone
+              both live in the Profile tab instead. */}
+          {!isPhone && (
           <div className="absolute right-[calc(1rem+env(safe-area-inset-right))] top-[calc(1rem+env(safe-area-inset-top))] z-10 flex items-center gap-2">
             <button
               type="button"
               aria-label={t("switchLanguage")}
               onClick={toggleLang}
-              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 px-3 text-xs font-semibold leading-[20px] text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-night-accent dark:hover:bg-white/20"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 px-3 text-xs font-semibold leading-[20px] text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-night-rim/20 dark:bg-night-surface/70 dark:text-night-accent dark:hover:bg-night-hover/95"
             >
               {lang === "en" ? "NL" : "EN"}
             </button>
@@ -920,29 +1429,43 @@ export default function App() {
               type="button"
               aria-label={dark ? t("switchToLight") : t("switchToDark")}
               aria-pressed={dark}
-              onClick={toggleTheme}
-              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-white/10 dark:bg-white/10 dark:text-night-accent dark:hover:bg-white/20"
+              onClick={(e) => toggleTheme(centreOf(e.currentTarget))}
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-white/60 bg-white/70 text-slate-500 shadow-sm backdrop-blur-md transition hover:bg-white/90 dark:border-night-rim/20 dark:bg-night-surface/70 dark:text-night-accent dark:hover:bg-night-hover/95"
             >
               <span aria-hidden="true" className="material-symbols-rounded block text-[20px] leading-none">
                 {dark ? "light_mode" : "dark_mode"}
               </span>
             </button>
           </div>
+          )}
           {/* The measured hero. Its height is what tells the pill where to rest on a
               phone, so the wrapper is the thing observed, not the section inside it. */}
           <div ref={heroRef} data-fov="home-hero" className={isPhone ? "shrink-0" : undefined}>
-            {/* Less headroom on a phone: every pixel above the hero is a pixel the
-                popular trips below the pill do not get. Unchanged from `sm` up. */}
+            {/* A phone on its side: the headline on one line, at 20px and 8px from the top,
+                and no subtitle. The two-line hero, the pill's hole and the tab bar took
+                the whole height there, and the trips' scroller was 0 to 36px tall. */}
+            {landscapePhone ? (
+              <section className="relative mx-auto max-w-4xl px-6 pt-2 text-center">
+                <h1 className="text-xl font-bold leading-7 text-gray-900 dark:text-night-text">
+                  {t("headlineTop")} <span className="text-brand dark:text-night-accent">{t("headlineBottom")}</span>
+                </h1>
+              </section>
+            ) : (
+            /* Less headroom on a phone: every pixel above the hero is a pixel the
+                popular trips below the pill do not get. Unchanged from `sm` up. */
             <section className="relative mx-auto max-w-4xl px-6 pt-12 text-center sm:pt-20">
               <h1 className="text-4xl font-bold leading-tight text-gray-900 dark:text-night-text sm:text-5xl">
                 {t("headlineTop")}
                 <br />
-                <span className={TEXT_GRADIENT}>{t("headlineBottom")}</span>
+                {/* One solid colour, the brand navy by day and NS geel at night. The
+                    colour that moves is the aurora behind it. */}
+                <span className="text-brand dark:text-night-accent">{t("headlineBottom")}</span>
               </h1>
               <p className="mx-auto mt-5 max-w-2xl text-base text-gray-600 dark:text-night-muted sm:text-lg">
                 {t("subtitle")}
               </p>
             </section>
+            )}
           </div>
           {/* The hole the pill floats in. Only on a phone: above `sm` the pill rests at
               a fixed 260px and the popular section's own top margin already clears it. */}
@@ -950,49 +1473,45 @@ export default function App() {
             <div aria-hidden="true" className="shrink-0" style={{ height: pillSlot }} />
           )}
           {/* Everything the user scrolls. `contents` above `sm` so the desktop home is
-              byte-for-byte the single flow it has always been. */}
-          <div className={isPhone ? "min-h-0 flex-1 overflow-y-auto overflow-x-hidden" : "contents"}>
-          <section className="mx-auto mt-6 w-full max-w-4xl px-6 text-left sm:mt-[7.5rem]">
-            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-night-text">{t("popularTrips")}</h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {POPULAR.map((trip, i) => {
-                // Clean frosted card. Colour is confined to one small accent (the
-                // origin dot and the connector line) so the grid stays calm and the
-                // vivid background does the talking.
-                const accent = CARD_ACCENTS[i % CARD_ACCENTS.length];
-                return (
-                  <button
-                    key={`${trip.from}-${trip.to}`}
-                    data-fov="popular-trip"
-                    onClick={() => pickPopular(trip)}
-                    aria-label={`${trip.from} → ${trip.to}`}
-                    className="group flex flex-col gap-3 rounded-card border border-white/60 bg-white/70 p-5 text-left shadow-sm ring-1 ring-slate-900/5 backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-white/90 hover:shadow-lg dark:border-white/10 dark:bg-white/10 dark:ring-white/5 dark:hover:bg-white/15"
-                  >
-                    {/* Mini route: origin dot, connector, destination flag. */}
-                    <span className="flex items-center gap-2">
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: accent }}
-                      />
-                      <span
-                        className="h-px flex-1"
-                        style={{ backgroundImage: `linear-gradient(to right, ${accent}, transparent)` }}
-                      />
-                      <span
-                        className="material-symbols-rounded text-[18px] leading-none text-slate-400"
-                        aria-hidden="true"
-                      >
-                        sports_score
-                      </span>
-                    </span>
-                    <div>
-                      <p className="truncate text-[15px] font-semibold text-slate-900 dark:text-night-text">{trip.from}</p>
-                      <p className="truncate text-sm text-slate-500 dark:text-night-subtle">{t("toX", { x: trip.to })}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+              byte-for-byte the single flow it has always been. On a phone the box ends
+              where the tab bar starts, by the same rule as the pill's hole: padding only
+              the content left the box running under the bar, and at 844x390 a touch on a
+              popular trip half above the bar's edge reached a tab. The stage's own
+              bottom padding is the safe area, so the margin is the bar's height. */}
+          <div
+            ref={homeScrollerRef}
+            data-fov={isPhone ? "home-scroller" : undefined}
+            className={isPhone ? "min-h-0 flex-1 overflow-y-auto overflow-x-hidden" : "contents"}
+            style={isPhone ? { marginBottom: homeClearsTabBar ? (landscapePhone ? TAB_BAR_COMPACT_PX : TAB_BAR_PX) : 0 } : undefined}
+          >
+          {/* The 7.5rem from `sm` up clears the desktop pill, which floats over this flow.
+              A phone leaves the pill a hole instead, so a phone on its side, past `sm`,
+              does not take it: there it put the first trip 120px down a scroller 36px
+              tall. On its side the heading starts at the scroller's top. */}
+          <section
+            className={`mx-auto w-full max-w-4xl px-6 text-left${
+              landscapePhone ? "" : isPhone ? " mt-6" : " mt-6 sm:mt-[7.5rem]"
+            }`}
+          >
+            <h2 className="mb-2 text-xl font-semibold text-slate-900 dark:text-night-text">{t("popularTrips")}</h2>
+            {/* Suggestion rows, one colour for all four (TripRow in HomeShortcuts). They
+                were metro lines, four tracks in red, blue, green and yellow between
+                ringed stations, and the colours clashed. Two columns from `sm` up: the
+                rows are one height each, so the hairlines line up across the columns,
+                and one column of max-w-4xl would leave each chevron 700px from its
+                text. */}
+            <TripList columns>
+              {POPULAR.map((trip) => (
+                <TripRow
+                  key={`${trip.from}-${trip.to}`}
+                  fov="popular-trip"
+                  to={trip.to}
+                  from={trip.from}
+                  label={`${trip.from} → ${trip.to}`}
+                  onClick={() => pickPopular(trip)}
+                />
+              ))}
+            </TripList>
           </section>
           <HomeShortcuts
             saved={savedPlaces}
@@ -1000,6 +1519,7 @@ export default function App() {
             onPickSaved={pickSaved}
             onPickRecent={pickRecent}
             onClearRecents={clearRecents}
+            onSeeAll={isPhone ? () => nav.selectTab("saved") : undefined}
           />
           {/* The home has no header, so the notice needs its own way in here. It is the
               last thing on the page, where a footer link belongs. */}
@@ -1024,8 +1544,13 @@ export default function App() {
             the dropdown's z-50 finally outranks it. The home stage (z-10) now paints over
             the header, which is inert: the two never share a visible moment (homeOpacity
             hits 0 at progress 0.5, chromeOpacity only leaves 0 from there on). */}
+        {/* On a portrait phone there is no bar: what is left of the header is the round
+            back button, floating over the map at the start of the pill's row. */}
         <motion.header
-          className={`absolute inset-x-0 top-0 flex items-center justify-between border-b border-gray-100 bg-white/95 pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] dark:border-white/10 dark:bg-night-bg/95 sm:pl-[calc(1.5rem+env(safe-area-inset-left))] sm:pr-[calc(1.5rem+env(safe-area-inset-right))] ${
+          className={
+            sheetLayout
+              ? "absolute left-[calc(0.75rem+env(safe-area-inset-left))] top-[calc(0.5rem+env(safe-area-inset-top))]"
+              : `absolute inset-x-0 top-0 flex items-center justify-between border-b border-gray-100 bg-white/95 pl-[calc(1rem+env(safe-area-inset-left))] pr-[calc(1rem+env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] dark:border-night-rim/20 dark:bg-night-bg/95 sm:pl-[calc(1.5rem+env(safe-area-inset-left))] sm:pr-[calc(1.5rem+env(safe-area-inset-right))] ${
             // Decided in JS rather than by a media variant: the short tier has to beat
             // `lg` on a wide short window, and which of two arbitrary variants wins is
             // a question about the generated stylesheet's order, not about the design.
@@ -1036,57 +1561,66 @@ export default function App() {
               : shortChrome
                 ? "h-[calc(3rem+env(safe-area-inset-top))]"
                 : "h-[calc(3.5rem+env(safe-area-inset-top))] lg:h-[calc(5rem+env(safe-area-inset-top))]"
-          }`}
-          style={{ opacity: chromeOpacity, pointerEvents: progressIs1 && !searchBlocking ? "auto" : "none" }}
-          {...inertUnless(progressIs1 && !searchBlocking)}
+          }`
+          }
+          style={{
+            opacity: chromeOpacity,
+            pointerEvents: progressIs1 && !searchBlocking && !tabCovering && !navChromeHidden ? "auto" : "none",
+          }}
+          {...inertUnless(progressIs1 && !searchBlocking && !tabCovering && !navChromeHidden)}
           {...behindSheet}
         >
-          <div className="flex min-w-0 items-center gap-1">
-            {/* Getting off the map. On a phone the only way back used to be the wordmark,
-                which is a 5px-tall word in the corner reading as branding rather than as
-                a control, and nothing else on the stage said the home was still there.
-                This is the arrow every map app puts in that corner. It walks back to the
-                stage the user came from and leaves the trip alone; the wordmark next to
-                it still means "home, and start again".
-                The arrow is inline SVG, not the icon font: that subset is frozen and a
-                glyph missing from it paints as the word "ARROW_BACK" across the bar. */}
-            {isPhone && (
-              <button
-                type="button"
-                data-fov="map-back"
-                aria-label={t("backToHome")}
-                onClick={toHome}
-                className="-ml-2 flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 dark:text-night-muted dark:hover:bg-night-hover"
-              >
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  className="h-6 w-6"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M19 12H5" />
-                  <path d="M12 19l-7-7 7-7" />
-                </svg>
-              </button>
-            )}
+          {sheetLayout ? (
             <button
-              onClick={goHome}
-              className="flex min-h-[44px] items-center truncate text-xl font-bold text-brand dark:text-night-accent"
+              type="button"
+              data-fov="map-back"
+              aria-label={t("backToHome")}
+              onClick={toHome}
+              className={`flex h-12 w-12 items-center justify-center rounded-full border border-transparent bg-white text-slate-700 shadow-md transition hover:bg-slate-50 dark:border-night-rim/30 dark:bg-night-raised dark:text-night-text dark:hover:bg-night-hover ${
+                navChromeHidden ? "opacity-0" : ""
+              }`.trimEnd()}
             >
-              Fiets of OV
+              {backArrow}
             </button>
-          </div>
-          <HeaderMenu
-            onClearRecents={clearRecents}
-            onClearSaved={clearSaved}
-            onOpenPrivacy={() => setPrivacyOpen(true)}
-            dark={dark}
-            onToggleTheme={toggleTheme}
-          />
+          ) : (
+            <>
+              <div className="flex min-w-0 items-center gap-1">
+                {/* Getting off the map. On a phone the only way back used to be the wordmark,
+                    which is a 5px-tall word in the corner reading as branding rather than as
+                    a control, and nothing else on the stage said the home was still there.
+                    This is the arrow every map app puts in that corner. It walks back to the
+                    stage the user came from and leaves the trip alone; the wordmark next to
+                    it still means "home, and start again". */}
+                {isPhone && (
+                  <button
+                    type="button"
+                    data-fov="map-back"
+                    aria-label={t("backToHome")}
+                    onClick={toHome}
+                    className="-ml-2 flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:bg-slate-100 dark:text-night-muted dark:hover:bg-night-hover"
+                  >
+                    {backArrow}
+                  </button>
+                )}
+                <button
+                  onClick={goHome}
+                  className="flex min-h-[44px] items-center truncate text-xl font-bold text-brand dark:text-night-accent"
+                >
+                  Fiets of OV
+                </button>
+              </div>
+              {/* On a phone the menu's contents live in the Profile tab. */}
+              {!isPhone && (
+                <HeaderMenu
+                  onClearRecents={clearRecents}
+                  onClearSaved={clearSaved}
+                  onOpenPrivacy={() => setPrivacyOpen(true)}
+                  dark={dark}
+                  onToggleTheme={toggleTheme}
+                />
+              )}
+            </>
+          )}
         </motion.header>
 
         {/* Shared morphing search pill: usable in both stages, flies center -> top bar.
@@ -1099,7 +1633,9 @@ export default function App() {
 
             Portrait and desktop: 12px in from each edge plus whatever the device's own
             left/right inset is, centred, capped at max-w-2xl — identical geometry to the
-            `w-[calc(100%-1.5rem)]` it replaces whenever the insets are 0.
+            `w-[calc(100%-1.5rem)]` it replaces whenever the insets are 0. On a portrait
+            phone's map stage a left margin (pillShift) takes the left edge past the
+            floating back button.
 
             Landscape phone: the pill is in the header row, so it stops short of the
             wordmark on its left (which ends at 166px) and the menu on its right (which
@@ -1109,18 +1645,31 @@ export default function App() {
           role="search"
           data-fov="search-pill"
           data-rest-y={pillTop}
-          className={`absolute top-[env(safe-area-inset-top)] z-30 mx-auto flex w-auto items-center gap-0.5 rounded-full border border-gray-200 bg-white shadow-md dark:border-night-border dark:bg-night-surface sm:gap-2 ${
+          className={`absolute top-[env(safe-area-inset-top)] z-30 ${
+            sheetLayout ? "" : "mx-auto "
+          }flex w-auto items-center gap-0.5 rounded-full border border-gray-200 bg-white shadow-md dark:border-night-border dark:bg-night-surface sm:gap-2 ${
             landscapePhone
               ? "left-[calc(11rem+env(safe-area-inset-left))] right-[calc(7.5rem+env(safe-area-inset-right))] max-w-none p-0.5"
-              : `left-[calc(0.75rem+env(safe-area-inset-left))] right-[calc(0.75rem+env(safe-area-inset-right))] max-w-2xl xl:max-w-3xl ${
-                  shortChrome ? "p-1" : "p-1.5 sm:p-2"
-                }`
+              : sheetLayout
+                ? "left-[calc(0.75rem+env(safe-area-inset-left))] right-[calc(0.75rem+env(safe-area-inset-right))] ml-[var(--pill-shift)] p-[var(--pill-pad)] transition-opacity"
+                : `left-[calc(0.75rem+env(safe-area-inset-left))] right-[calc(0.75rem+env(safe-area-inset-right))] max-w-2xl xl:max-w-3xl ${
+                    shortChrome ? "p-1" : "p-1.5 sm:p-2"
+                  }`
           }`}
-          style={{ y: searchY, pointerEvents: searchBlocking ? "none" : "auto" }}
+          style={{
+            y: searchY,
+            // The portrait pill's flight into the floating row beside the back button,
+            // and its step aside for the navigation banner. Nothing here on any other
+            // layout, whose pill keeps its shape all the way.
+            ...(sheetLayout
+              ? { "--pill-shift": pillShift, "--pill-pad": pillPad, opacity: navChromeHidden ? 0 : 1 }
+              : {}),
+            pointerEvents: searchBlocking || tabCovering || navChromeHidden ? "none" : "auto",
+          }}
           // The pill opened the sheet, so it is behind it now — including for the focus
           // ring, which is why inert leaves before the close handler puts focus back on
           // the trigger (React commits the DOM, then runs the effect).
-          {...inertUnless(!searchBlocking)}
+          {...inertUnless(!searchBlocking && !tabCovering && !navChromeHidden)}
           {...behindSheet}
         >
           {isPhone ? (
@@ -1191,36 +1740,80 @@ export default function App() {
 
       {/* Outside both morph stages: one of the two is always inert, and a dialog
           opened from the inert one would be unreachable. The phone search screen is
-          here for the same reason — it opens from the pill, which belongs to neither. */}
-      {isPhone && searchOpen && (
-        <MobileSearchSheet
-          fromText={fromText}
-          toText={toText}
-          onFromText={typeFromText}
-          onToText={typeToText}
-          onSelectFrom={selectFrom}
-          onSelectTo={selectTo}
-          onLocateFrom={locateFrom}
-          onLocateTo={locateTo}
-          beginLocateFrom={beginLocateFrom}
-          beginLocateTo={beginLocateTo}
-          savedPlaces={savedPlaces}
-          history={endpointHistory}
-          onPickHistoryFrom={pickHistoryFrom}
-          onPickHistoryTo={pickHistoryTo}
-          onSwap={swap}
-          onSubmit={commitSearch}
-          onClose={() => setSearchOpen(false)}
-          focusField={searchFocusField}
-        />
-      )}
-      {privacyOpen && <PrivacyNotice onClose={() => setPrivacyOpen(false)} />}
+          here for the same reason — it opens from the pill, which belongs to neither.
+          Both arrive and leave through AnimatePresence (lib/motion: sheet, overlay). */}
+      <AnimatePresence>
+        {isPhone && searchOpen && (
+          <MobileSearchSheet
+            key={`search-${searchSession}`}
+            fromText={fromText}
+            toText={toText}
+            onFromText={typeFromText}
+            onToText={typeToText}
+            onSelectFrom={selectFrom}
+            onSelectTo={selectTo}
+            onLocateFrom={locateFrom}
+            onLocateTo={locateTo}
+            beginLocateFrom={beginLocateFrom}
+            beginLocateTo={beginLocateTo}
+            savedPlaces={savedPlaces}
+            history={endpointHistory}
+            onPickHistoryFrom={pickHistoryFrom}
+            onPickHistoryTo={pickHistoryTo}
+            onSwap={swap}
+            onSubmit={commitSearch}
+            onClose={() => setSearchOpen(false)}
+            focusField={searchFocusField}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {privacyOpen && <PrivacyNotice key="privacy" onClose={() => setPrivacyOpen(false)} />}
+      </AnimatePresence>
 
-      {!isLive() && (
-        <div className="pointer-events-none fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))] rounded-full bg-brand px-3 py-1 text-xs text-white">
-          mock
-        </div>
+      {/* The phone's tabs, outside both morph stages for the same reason as the dialogs
+          above: the stages go inert under a tab screen, and the screens and the bar must
+          not go with them. */}
+      {isPhone && (
+        <>
+          <TabScreen ref={savedRef} name="saved" active={nav.tab === "saved"}>
+            <SavedScreen
+              places={savedPlaces}
+              recents={recentTrips}
+              onPickPlace={planToSaved}
+              onPickRecent={(t) => {
+                nav.selectTab("plan");
+                pickRecent(t);
+              }}
+              onDeletePlace={(p) => toggleSaved(p)}
+              onRestorePlace={restoreSaved}
+              onClearRecents={clearRecents}
+              onSearch={() => {
+                nav.selectTab("plan");
+                openSearch();
+              }}
+            />
+          </TabScreen>
+          <TabScreen ref={profileRef} name="profile" active={nav.tab === "profile"}>
+            <ProfileScreen
+              themeMode={themeMode}
+              onThemeMode={setThemeMode}
+              onClearRecents={clearRecents}
+              onClearSaved={clearSaved}
+              onOpenPrivacy={() => setPrivacyOpen(true)}
+            />
+          </TabScreen>
+          <TabBar
+            tab={nav.tab}
+            onSelect={selectTab}
+            compact={landscapePhone}
+            hidden={tabBarHidden}
+          />
+        </>
       )}
+
+      {/* The mock badge, wherever badgeSpot puts it outside the stages. */}
+      {badgeSpot !== "map" && mockBadge}
     </div>
   );
 }

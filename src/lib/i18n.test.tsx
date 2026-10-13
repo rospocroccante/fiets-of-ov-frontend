@@ -86,3 +86,43 @@ test("a stored Dutch preference sets the document language on the very first ren
   );
   expect(document.documentElement).toHaveAttribute("lang", "nl");
 });
+
+test("the navigation shell's strings exist and fill their placeholders", () => {
+  expect(translate("en", "tabSaved")).toBe("Saved");
+  expect(translate("en", "deleteX", { x: "Artis" })).toBe("Delete Artis");
+  expect(translate("en", "versionX", { x: "0.1.0" })).toBe("Version 0.1.0");
+  // The Dutch lines are the owner's, and fill the same placeholders.
+  expect(translate("nl", "tabProfile")).toBe("Profiel");
+  expect(translate("nl", "deleteX", { x: "Artis" })).toBe("Verwijder Artis");
+  expect(translate("nl", "deletedX", { x: "Artis" })).toBe("Artis verwijderd");
+  expect(translate("nl", "versionX", { x: "0.1.0" })).toBe("Versie 0.1.0");
+});
+
+test("the phone sheet's summary strings have their vetted Dutch", () => {
+  expect(translate("en", "planningTrip")).toBe("Planning your trip…");
+  expect(translate("en", "routesUnavailable")).toBe("Routes are unavailable right now. Try again in a moment.");
+  expect(translate("en", "tryAgain")).toBe("Try again");
+  expect(translate("nl", "planningTrip")).toBe("Je rit wordt gepland…");
+  expect(translate("nl", "routesUnavailable")).toBe("Routes zijn nu niet beschikbaar. Probeer het zo opnieuw.");
+  expect(translate("nl", "tryAgain")).toBe("Opnieuw proberen");
+});
+
+test("a popular or recent trip names its origin with a parameterized from line", () => {
+  expect(translate("en", "fromX", { x: "Zuid" })).toBe("from Zuid");
+  expect(translate("nl", "fromX", { x: "Zuid" })).toBe("vanaf Zuid");
+});
+
+// Every string added for the phone shell had English in both languages until the
+// owner vetted the Dutch. None of them may fall back to the English line now.
+test("no phone-shell string is still English in Dutch", () => {
+  const keys = [
+    "tabsLabel", "tabPlan", "tabSaved", "tabProfile", "savedPlacesHeading", "savedEmpty", "searchForPlace",
+    "edit", "done", "deleteX", "deleteLabel", "deletedX", "undo", "clearAll", "tapAgainToClear", "seeAll",
+    "themeHeading", "themeLight", "themeDark", "themeSystem", "languageHeading", "dataOnDevice", "aboutHeading",
+    "versionX", "expandResults", "collapseResults", "resultsSheetLabel", "planningTrip", "routesUnavailable",
+    "tryAgain", "privacyStaysClear",
+  ] as const;
+  const english = keys.filter((k) => translate("nl", k, { x: "X" }) === translate("en", k, { x: "X" }));
+  expect(english).toEqual([]);
+  expect(translate("nl", "privacyStaysClear")).toContain("onder Profiel");
+});

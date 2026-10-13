@@ -1,6 +1,10 @@
 import { defineConfig } from "vitest/config";
 import { loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { readFileSync } from "node:fs";
+
+// The version the Profile screen shows, read once from package.json at build time.
+const APP_VERSION = (JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { version: string }).version;
 
 // The path the bundled Cloudflare Pages Function answers on (functions/api/[[path]].js),
 // and the same path the dev-server proxy below rewrites. A relative VITE_API_BASE is
@@ -95,6 +99,7 @@ function reloadOnFontChange(): Plugin {
 
 export default defineConfig({
   plugins: [envGuard(), reloadOnFontChange(), react()],
+  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   build: {
     rollupOptions: {
       output: {

@@ -31,14 +31,15 @@
 
 import { sleep } from "../lib/chrome.mjs";
 import { PROBE, TRIP_SEED } from "../lib/measure.mjs";
-import { decodePng, patch, colourCount } from "../lib/pixels.mjs";
+import { openSheetToHalf } from "../lib/sheet.mjs";
+import { decodePng, patch, colourCount, BAND_MAX_SHARE } from "../lib/pixels.mjs";
 
 const PILL = '[data-fov="search-pill"]';
-const MORE = '[data-fov="filter-more"]';
 const MAP = ".leaflet-container";
 const GL = 'canvas[data-fov="basemap-gl"]';
 const GL_PAINTED = `${GL}[data-fov-style="loaded"]`;
 const RADAR_TILES = ".rain-radar-tiles";
+const RADAR = '[data-fov="radar-button"]';
 const RASTER = ".basemap-raster";
 const ZOOM_IN = ".leaflet-control-zoom-in";
 
@@ -56,16 +57,21 @@ const NO_WEBGL = `
 `;
 
 // Measured on this branch, 390x844, over Amsterdam at the app's opening zoom:
-//   dark style    L 0.005 to 0.015 over ground, water and built-up blocks
-//   bright        L 0.59 to 0.80 (its water, #b1d1e2, is the floor of that range)
-//   night page    L 0.021 (night.bg #20282E), night surface L 0.033
+//   night style   ground L 0.021 (hsl(208,60%,16%), #102A41); water L 0.60 (#afd0e4,
+//                 hsl(202,49%,79%), pale on the owner's call). A 28 px square across a
+//                 canal averages L 0.12 to 0.19, so the dark ceiling is held against
+//                 `ground`: the square with its water and shore blend left out
+//                 (lib/pixels), which measures L 0.021 to 0.025
+//   bright        L 0.59 to 0.80 (its water, #b1d1e2, is the floor of that range); its
+//                 ground alone L 0.76 to 0.82
+//   night page    L 0.012 (night.bg #0C1E32)
 // The floors sit between the two styles: a map wearing the wrong one fails them.
 //
 // They do NOT catch a map that never painted, and it is worth being exact about why,
 // because the obvious reading is wrong. What shows through where no basemap drew is the
 // Leaflet container's own background, not the page: leaflet.css:261 ships
 // `.leaflet-container { background: #ddd }`, which measures L 0.7231 and sails past the
-// light floor, and in dark index.css paints it night.shade (#171D21, L 0.0138) which
+// light floor, and in dark index.css paints it night.shade (#050E1A, L 0.004) which
 // sails past the dark one. Both are flat. The guard against a dead map, in either theme,
 // is COLOUR_FLOOR below: a drawn map has streets, water and labels in it, a background
 // has one colour. Keep it on every scenario that samples pixels.
@@ -99,6 +105,10 @@ async function bootMap(ctx, { width, height, theme = "light", lang = "en", injec
   await page.waitFor(`document.querySelector('${MAP}')`, { label: "the map" });
   await sleep(900); // the morph, and the map chunk settling under it
   await page.eval(PROBE);
+  // The squares this file samples were chosen on the view the map fits above a half
+  // sheet, and the map refits its route to whatever the sheet covers. The plan now lands
+  // with the sheet collapsed, so it is opened to half to read that same view.
+  await openSheetToHalf(page);
   return page;
 }
 
@@ -154,11 +164,21 @@ async function hasWebGL(page) {
 // way: things drawn inside the map (the route, the markers) are excluded by their boxes,
 // and anything painted over the map from elsewhere in the page is excluded by hit-testing
 // the square's centre and corners, whatever the DOM shape of the thing on top.
+//
+// The grid is laid out over the part of the map that is free of floating chrome. On a
+// portrait phone the map runs to the top of the screen under the back button, the pill
+// and the chips, and Leaflet's top corners start where that chrome ends (MapView's
+// topInset); the grid starts there too, which is where the map pane's own top was when
+// the chrome sat above it. Everywhere else the corners are at the map's top and nothing
+// moves.
 async function mapSpots(page, { size = 28, want = 5 } = {}) {
   const spots = await page.eval(`
     const size = ${size}, want = ${want};
     const map = document.querySelector('${MAP}');
-    const r = map.getBoundingClientRect();
+    const pane = map.getBoundingClientRect();
+    const corner = map.querySelector('.leaflet-top');
+    const free = corner ? corner.getBoundingClientRect().top : pane.top;
+    const r = { left: pane.left, right: pane.right, bottom: pane.bottom, top: Math.max(pane.top, free) };
     const blockers = [
       ...map.querySelectorAll('.leaflet-overlay-pane path, .leaflet-marker-icon, .leaflet-control-container > *'),
     ].map((n) => n.getBoundingClientRect()).filter((b) => b.width > 0 && b.height > 0);
@@ -206,6 +226,22 @@ async function sample(page, geometry, { size = 28 } = {}) {
 
 const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
+// How dark the night map is, read past its water. Night water is pale on purpose, so a
+// square half on a canal averages bright over navy ground; `ground` leaves the water and
+// the shore's antialias band out (lib/pixels). That is only honest while the band is a
+// thin edge, so a square that is mostly band fails here instead of being read.
+function nightGround(checks, at, patches) {
+  for (const p of patches) {
+    checks.atMost(
+      `${at}: the square at (${p.x}, ${p.y}) reads as ground and water, not shore blend`,
+      p.bandShare,
+      BAND_MAX_SHARE,
+      `band ${round(p.bandShare)}, water ${round(p.waterShare)}, mean ${p.hex}`,
+    );
+  }
+  return mean(patches.map((p) => p.ground).filter((g) => g !== null));
+}
+
 // Is there a MAP in the map, or only a colour? The luminance floors cannot answer this
 // (see the note on them above): a container with no tiles on it is flat #ddd by day and
 // flat night.shade at night, and both pass. Streets, water, buildings and labels are
@@ -223,28 +259,18 @@ function checkDrawn(checks, at, patches) {
   );
 }
 
-// Turn the rain radar on the way a user does: the map-tools control on the filter bar,
-// then the Radar row, then a tap outside to put the panel away. That last tap is not
-// cosmetic: while the panel is open it holds a full-screen click catcher over the map,
-// and a screenshot taken then is of a map nobody can point at.
-async function turnRadarOn(page, { height }) {
-  const more = await page.eval(`
-    const b = document.querySelector('${MORE}');
-    return b ? window.__fov.rect(b) : null;
-  `);
-  if (!more) throw new Error("no map-tools control on the filter bar");
-  await page.tap(more.x + more.w / 2, more.y + more.h / 2);
-  await sleep(300);
+// Turn the rain radar on the way a user does. The seeded trip expects rain, so the radar
+// is normally on by the time the map is: the plan turns it on. When it is not, the round
+// radar button on the map (no longer a row in the Map menu) is one tap. Either way the
+// frames have to be on the map before anything is measured.
+async function turnRadarOn(page) {
   const radar = await page.eval(`
-    const scope = document.querySelector('[data-fov="filter-panel"]') || document;
-    const b = [...scope.querySelectorAll('button')].find((x) => /radar/i.test(x.textContent || ""));
+    const b = document.querySelector('${RADAR}');
     return b ? { ...window.__fov.rect(b), pressed: b.getAttribute("aria-pressed") } : null;
   `);
-  if (!radar) throw new Error("no radar control in the map tools");
-  await page.tap(radar.x + radar.w / 2, radar.y + radar.h / 2);
+  if (!radar) throw new Error("no radar button on the map");
+  if (radar.pressed !== "true") await page.tap(radar.x + radar.w / 2, radar.y + radar.h / 2);
   await page.waitFor(`document.querySelectorAll('${RADAR_TILES} img').length > 0`, { label: "radar tiles" });
-  await page.tap(20, height - 40);
-  await page.waitFor(`!document.querySelector('[data-fov="filter-panel"]')`, { label: "the map tools to close" });
   await sleep(400);
   return radar;
 }
@@ -286,19 +312,27 @@ export const scenarios = [
             3,
             `${patches.length} of 5 candidate squares were free of route, markers and chips`,
           );
-          const lum = mean(patches.map((p) => p.luminance));
-          seen[theme] = lum;
-
           if (theme === "dark") {
+            seen.dark = nightGround(ctx.checks, at, patches);
             for (const p of patches) {
               ctx.checks.atMost(
                 `${at}: the map at (${p.x}, ${p.y}) is painted dark`,
-                p.luminance,
+                p.ground ?? 0,
                 DARK_MAX_LUMINANCE,
-                `${p.hex}, L=${round(p.luminance)} (night.bg is L=0.021, bright measures L 0.59 to 0.80)`,
+                `ground L=${round(p.ground)} beside ${round(p.waterShare)} water, square mean ${p.hex} ` +
+                  `L=${round(p.luminance)} (night.bg #0C1E32 is L 0.012, water #afd0e4 L 0.60, ` +
+                  `bright ground L 0.76 to 0.82)`,
               );
             }
+            // The owner kept night water pale. Darkening it would quietly "fix" the mean,
+            // so the water this view crosses has to be found, at hsl(202,49%,79%).
+            ctx.checks.ok(
+              `${at}: the canals are the owner's pale water, #afd0e4 within 12 per channel`,
+              patches.some((p) => p.waterShare >= 0.1),
+              `water share per square: ${patches.map((p) => round(p.waterShare)).join(", ")}`,
+            );
           } else {
+            seen.light = mean(patches.map((p) => p.luminance));
             for (const p of patches) {
               ctx.checks.atLeast(
                 `${at}: the map at (${p.x}, ${p.y}) is painted light`,
@@ -320,7 +354,7 @@ export const scenarios = [
         "390x844: the night basemap is far darker than the daylight one",
         seen.light / Math.max(seen.dark, 1e-6),
         10,
-        `light L=${round(seen.light)}, dark L=${round(seen.dark)}, ratio ${round(seen.light / Math.max(seen.dark, 1e-6))}x`,
+        `light L=${round(seen.light)}, dark ground L=${round(seen.dark)}, ratio ${round(seen.light / Math.max(seen.dark, 1e-6))}x`,
       );
     },
   },
@@ -336,8 +370,8 @@ export const scenarios = [
       try {
         await waitForBasemap(page);
 
-        // Radar on first, through the map tools, so the toggle has an overlay to lose.
-        await turnRadarOn(page, { height: 844 });
+        // Radar on first, so the toggle has an overlay to lose.
+        await turnRadarOn(page);
 
         const before = await page.eval(`
           const c = document.querySelector('${GL}');
@@ -348,24 +382,53 @@ export const scenarios = [
         const lightPatches = await sample(page, await mapSpots(page));
         checkDrawn(checks, "before the toggle", lightPatches);
 
-        // The theme switch, the way a user makes it.
-        const menu = await page.eval(`
-          const b = [...document.querySelectorAll('button')].find((x) => /^menu/i.test((x.textContent||"").trim()));
-          return b ? window.__fov.rect(b) : null;
-        `);
-        if (!menu) throw new Error("no header menu button");
-        await page.tap(menu.x + menu.w / 2, menu.y + menu.h / 2);
-        await sleep(250);
+        // The theme switch, the way a phone user makes it. A phone has no header menu
+        // any more: the switch is in the Profile tab, and the tab bar is away while the
+        // map is on the screen. So: the back arrow to the home, Profile, Dark, then Plan
+        // and back up to the map, where the same map has to be waiting, restyled.
+        const tapOn = async (sel, label) => {
+          const b = await page.eval(`
+            const e = document.querySelector(${JSON.stringify(sel)});
+            return e ? window.__fov.rect(e) : null;
+          `);
+          if (!b) throw new Error(`no ${label}`);
+          await page.tap(b.x + b.w / 2, b.y + b.h / 2);
+        };
+        await tapOn('[data-fov="map-back"]', "back arrow on the map stage");
+        await page.waitFor(`Math.round(window.scrollY) <= 2`, { label: "the home stage" });
+        // The bar slides back up with the home; a tap is aimed once it is reachable.
+        await page.waitFor(
+          `(() => { const b = document.querySelector('[data-fov="tab-profile"]').getBoundingClientRect();
+                    return window.__fov.hit(b.x + b.width / 2, b.y + b.height / 2, '[data-fov="tab-profile"]').inside; })()`,
+          { label: "the Profile tab to be reachable" },
+        );
+        await tapOn('[data-fov="tab-profile"]', "Profile tab");
+        await page.waitFor(`getComputedStyle(document.querySelector('[data-fov="profile-screen"]')).visibility === "visible"`, {
+          label: "the Profile screen",
+        });
         const toggle = await page.eval(`
-          const b = [...document.querySelectorAll('button')].find((x) => /dark mode|donkere modus/i.test(x.textContent || ""));
+          const b = [...document.querySelectorAll('[data-fov="profile-screen"] [role="group"] button')]
+            .find((x) => /^(dark|donker)$/i.test((x.textContent || "").trim()));
           return b ? window.__fov.rect(b) : null;
         `);
-        if (!toggle) throw new Error("no dark-mode control in the header menu");
+        if (!toggle) throw new Error("no Dark control in the Profile tab");
         await page.tap(toggle.x + toggle.w / 2, toggle.y + toggle.h / 2);
-        // The menu stays open after the switch, by design (every label flips in place).
-        // Close it the way it was opened, or it sits over the map the screenshot is of.
-        await page.tap(menu.x + menu.w / 2, menu.y + menu.h / 2);
-        await sleep(250);
+        // The new theme opens as a circle from the switch (a view transition), and while
+        // it runs the browser hit-tests the root instead of the page, so a tap made then
+        // reaches nothing. Wait for the circle to finish before the next one.
+        await page.waitFor(`!document.documentElement.classList.contains("theme-switching")`, {
+          label: "the theme reveal to finish",
+        });
+        await tapOn('[data-fov="tab-plan"]', "Plan tab");
+        await page.waitFor(`getComputedStyle(document.querySelector('[data-fov="profile-screen"]')).visibility === "hidden"`, {
+          label: "the Profile screen to close",
+        });
+        // Up to the map again. The trip and the radar were left on it.
+        await page.eval(`window.scrollTo(0, innerHeight); return null;`);
+        await page.waitFor(`Math.round(window.scrollY) >= innerHeight - 2 && !document.querySelector('[data-fov="map-stage"]').hasAttribute("inert")`, {
+          label: "the map stage again",
+        });
+        await sleep(400);
         await waitForBasemap(page);
 
         const after = await page.eval(`
@@ -391,13 +454,14 @@ export const scenarios = [
         const darkPatches = await sample(page, await mapSpots(page));
         checkDrawn(checks, "after the toggle", darkPatches);
         const lightL = mean(lightPatches.map((p) => p.luminance));
-        const darkL = mean(darkPatches.map((p) => p.luminance));
+        const darkL = nightGround(checks, "after the toggle", darkPatches);
         checks.atMost(
           `the map went dark where it was light`,
           darkL,
           DARK_MAX_LUMINANCE,
           `before ${lightPatches.map((p) => p.hex).join(",")} L=${round(lightL)}, ` +
-            `after ${darkPatches.map((p) => p.hex).join(",")} L=${round(darkL)}`,
+            `after ${darkPatches.map((p) => p.hex).join(",")} ground L=${round(darkL)} ` +
+            `(night.bg #0C1E32 is L 0.012, water #afd0e4 L 0.60 is left out)`,
         );
         checks.atLeast(`the swap actually changed the pixels`, lightL / Math.max(darkL, 1e-6), 10, `${round(lightL / Math.max(darkL, 1e-6))}x`);
       } finally {
@@ -417,7 +481,7 @@ export const scenarios = [
       const page = await bootMap(ctx, { width: 390, height: 844, theme: "dark" });
       try {
         await waitForBasemap(page);
-        await turnRadarOn(page, { height: 844 });
+        await turnRadarOn(page);
 
         const order = await page.eval(`
           const pane = document.querySelector('.leaflet-tile-pane');
@@ -602,10 +666,14 @@ export const scenarios = [
     // keeps zooming past anything the tiles can draw. MapView sets maxZoom={19} for that
     // reason, and nothing pinned it: removing it left all four gates green while the
     // control tapped 32 times without stopping.
-    name: "390x844 the zoom-in control stops at the basemap's last level",
+    //
+    // On a phone on its side, because that is a phone that still has a + to tap: in
+    // portrait the map zooms by pinch and draws no zoom buttons (phone-nav.checks.mjs
+    // asserts that), and the same maxZoom is the ceiling for the pinch.
+    name: "844x390 the zoom-in control stops at the basemap's last level",
     async run(ctx) {
       const { checks } = ctx;
-      const page = await bootMap(ctx, { width: 390, height: 844, theme: "light" });
+      const page = await bootMap(ctx, { width: 844, height: 390, theme: "light" });
       try {
         await waitForBasemap(page);
         const zoomIn = await page.eval(`
@@ -646,7 +714,9 @@ export const scenarios = [
         // the next settle something to wait for. A screenshot taken mid-load measures how
         // fast the tiles came, not whether there is a map at z19.
         await page.eval(`document.querySelector('${GL}').dataset.fovStyle = "nudged"; return true;`);
-        await page.swipe(195, 320, 290);
+        const pane = await page.eval(`return window.__fov.rect(document.querySelector('${MAP}'));`);
+        const [cx, cy] = [Math.round(pane.x + pane.w / 2), Math.round(pane.y + pane.h / 2)];
+        await page.swipe(cx, cy, cy - 30);
         await waitForBasemap(page);
         const patches = await sample(page, await mapSpots(page));
         checkDrawn(checks, `at the zoom ceiling`, patches);

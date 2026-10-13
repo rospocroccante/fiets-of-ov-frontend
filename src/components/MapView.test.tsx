@@ -1,14 +1,18 @@
-import { fireEvent, render, screen, act } from "@testing-library/react";
+import { fireEvent, render, screen, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { MapView } from "./MapView";
+import type L from "leaflet";
+import { MapView, revealRouteLine } from "./MapView";
+import { DURATION_MS } from "../lib/motion";
 import {
   __fireMapClick,
   __fireMapContextMenu,
   __fireMarkerDragEnd,
   __mapCalls,
   __mapContainerProps,
+  __polylines,
   __wheelZoom,
+  __zoomControl,
 } from "../__mocks__/react-leaflet";
 import type { Itinerary } from "../api/types";
 
@@ -359,4 +363,359 @@ test("an empty map is left where the user put it until they ask for the reset", 
   expect(__mapCalls.setView).toBe(before.view);
   expect(__mapCalls.flyTo).toBe(before.fly);
   expect(__mapCalls.flyToBounds).toBe(before.flyBounds);
+});
+
+// ---------------------------------------------------------------------------
+// Map motion: the route draw and the camera under reduced motion
+// ---------------------------------------------------------------------------
+
+function mapWith(r: Itinerary | null) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return (next: Itinerary | null = r) => (
+    <QueryClientProvider client={client}>
+      <MapView
+        origin={{ lat: 52.379, lon: 4.9 }}
+        destination={{ lat: 52.358, lon: 4.868 }}
+        stops={[]}
+        route={next}
+      />
+    </QueryClientProvider>
+  );
+}
+
+// The coloured line of the first leg (the casing under it is white).
+const legLine = () => __polylines.find((l) => l.options.color !== "#ffffff")!.getElement() as SVGElement;
+const drawing = (el: SVGElement) => el.style.getPropertyValue("stroke-dasharray") !== "";
+
+function reduceMotion(): () => void {
+  const real = window.matchMedia;
+  window.matchMedia = ((query: string) => ({
+    matches: query.includes("prefers-reduced-motion"),
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  })) as unknown as typeof window.matchMedia;
+  return () => {
+    window.matchMedia = real;
+  };
+}
+
+test("a new route draws itself in, and the same line picked again does not", () => {
+  vi.useFakeTimers();
+  try {
+    const view = mapWith(route);
+    const { rerender } = render(view());
+    expect(drawing(legLine())).toBe(true);
+
+    // At the end of the draw the line is exactly what Leaflet drew: no dashes, no
+    // pathLength, no inline style left behind.
+    act(() => {
+      vi.advanceTimersByTime(DURATION_MS.draw);
+    });
+    expect(legLine().style.cssText).toBe("");
+    expect(legLine().hasAttribute("pathLength")).toBe(false);
+
+    // The option already on the map, as a new route object: nothing to draw.
+    rerender(view({ ...route, legs: route.legs.map((leg) => ({ ...leg })) }));
+    expect(drawing(legLine())).toBe(false);
+
+    // Another line: it draws again.
+    const other: Itinerary = {
+      ...route,
+      legs: [{ ...route.legs[0], to: { name: "C", lat: 52.37, lon: 4.95 } }],
+    };
+    rerender(view(other));
+    expect(drawing(legLine())).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a leg with a dash pattern of its own fades in and keeps its pattern", () => {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  const layer = { options: { dashArray: "1 8" }, getElement: () => el, setStyle: () => {} };
+  const stop = revealRouteLine(layer as unknown as L.Path);
+  expect(el.style.getPropertyValue("stroke-dasharray")).toBe("");
+  expect(el.hasAttribute("pathLength")).toBe(false);
+  expect(el.style.getPropertyValue("transition")).toMatch(/^opacity /);
+  stop();
+  expect(el.style.cssText).toBe("");
+});
+
+test("under reduced motion the camera jumps instead of flying, and the route does not draw", () => {
+  const restore = reduceMotion();
+  try {
+    const before = { ...__mapCalls };
+    const view = mapWith(route);
+    const { unmount } = render(view());
+    expect(__mapCalls.flyToBounds).toBe(before.flyToBounds);
+    expect(__mapCalls.fitBounds).toBe(before.fitBounds + 1);
+    expect(drawing(legLine())).toBe(false);
+    expect(legLine().style.cssText).toBe("");
+    unmount();
+
+    // The reset with nothing planned goes back to the city in one step as well.
+    renderMap(<MapView origin={null} destination={null} stops={[]} route={null} />);
+    fireEvent.click(screen.getByRole("button", { name: /whole trip/i }));
+    expect(__mapCalls.flyTo).toBe(before.flyTo);
+    expect(__mapCalls.setView).toBe(before.setView + 1);
+  } finally {
+    restore();
+  }
+});
+
+test("the route fit leaves room for the sheet at the bottom", async () => {
+  renderMap(
+    <MapView
+      origin={{ lat: 52.379, lon: 4.9 }}
+      destination={{ lat: 52.358, lon: 4.868 }}
+      stops={[]}
+      route={route}
+      bottomInset={300}
+    />
+  );
+  await waitFor(() =>
+    expect(__mapCalls.lastBoundsOptions).toMatchObject({ paddingTopLeft: [50, 50], paddingBottomRight: [50, 350] }),
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The portrait phone: a full-bleed map under floating chrome
+// ---------------------------------------------------------------------------
+
+test("the route fit leaves room for the floating chrome at the top", async () => {
+  // topInset is bottomInset's twin: the back button, the search pill and the chip row
+  // float over the top of the map, and a route fitted under them is a route nobody sees.
+  renderMap(
+    <MapView
+      origin={{ lat: 52.379, lon: 4.9 }}
+      destination={{ lat: 52.358, lon: 4.868 }}
+      stops={[]}
+      route={route}
+      topInset={116}
+      bottomInset={300}
+    />
+  );
+  await waitFor(() =>
+    expect(__mapCalls.lastBoundsOptions).toMatchObject({ paddingTopLeft: [50, 166], paddingBottomRight: [50, 350] }),
+  );
+  // The reset goes back to the same view, so it keeps clear of the chrome as well.
+  __mapCalls.lastBoundsOptions = undefined;
+  fireEvent.click(screen.getByRole("button", { name: /whole trip/i }));
+  expect(__mapCalls.lastBoundsOptions).toMatchObject({ paddingTopLeft: [50, 166], paddingBottomRight: [50, 350] });
+});
+
+test("what the map pins to its top moves down by topInset", () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ host: "https://tc.test", radar: { past: [], nowcast: [] } }),
+    })),
+  );
+  const { container } = renderMap(
+    <MapView origin={null} destination={null} stops={[]} route={null} radar topInset={116} />,
+  );
+  // The radar readout's top-right column starts 12px under the chrome instead of 12px
+  // under the map's edge, which is under the search pill on this layout.
+  const readout = screen.getByText("light").closest(".z-\\[1000\\]") as HTMLElement;
+  expect(readout.style.top).toBe("128px");
+  // Leaflet's own corners are built by Leaflet, so the offset reaches them through a
+  // custom property on the wrapper that index.css hands to .leaflet-top.
+  const wrap = container.querySelector(".leaflet-container")!.parentElement as HTMLElement;
+  expect(wrap.style.getPropertyValue("--fov-map-top")).toBe("116px");
+});
+
+test("with the phone's radar button in the top-right corner, the readout starts under it", () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ host: "https://tc.test", radar: { past: [], nowcast: [] } }),
+    })),
+  );
+  // Portrait: the button is 12px under the chrome and 48px tall, so the readout's column
+  // starts 8px under the button: 116 + 12 + 48 + 8.
+  const { unmount } = renderMap(
+    <MapView origin={null} destination={null} stops={[]} route={null} radar topInset={116} radarButton />,
+  );
+  const readout = screen.getByText("light").closest(".z-\\[1000\\]") as HTMLElement;
+  expect(readout).toHaveClass("right-3");
+  expect(readout.style.top).toBe("184px");
+  unmount();
+
+  // A phone on its side has no floating chrome over the map: 12 + 48 + 8.
+  renderMap(<MapView origin={null} destination={null} stops={[]} route={null} radar radarButton />);
+  const side = screen.getByText("light").closest(".z-\\[1000\\]") as HTMLElement;
+  expect(side.style.top).toBe("68px");
+});
+
+test("with no topInset the top of the map is exactly as before", () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ host: "https://tc.test", radar: { past: [], nowcast: [] } }),
+    })),
+  );
+  const { container } = renderMap(<MapView origin={null} destination={null} stops={[]} route={null} radar />);
+  const readout = screen.getByText("light").closest(".z-\\[1000\\]") as HTMLElement;
+  expect(readout).toHaveClass("top-3");
+  expect(readout.style.top).toBe("");
+  const wrap = container.querySelector(".leaflet-container")!.parentElement as HTMLElement;
+  expect(wrap.getAttribute("style")).toBeNull();
+});
+
+test("without the zoom buttons the reset floats in the bottom-right column, above the sheet", () => {
+  // Pinch zoom on a portrait phone, as in Google Maps: no + and -, and the way back to
+  // the trip is a round button with the map's other bottom-right chips.
+  renderMap(
+    <MapView
+      origin={{ lat: 52.379, lon: 4.9 }}
+      destination={{ lat: 52.358, lon: 4.868 }}
+      stops={[]}
+      route={route}
+      zoomControl={false}
+      topInset={116}
+      bottomInset={300}
+    />
+  );
+  expect(__mapContainerProps.last?.zoomControl).toBe(false);
+  expect(__zoomControl.shown).toBe(false);
+  const reset = screen.getByRole("button", { name: /whole trip/i });
+  expect(reset).toHaveAttribute("data-fov", "map-reset-view");
+  expect(reset).toHaveClass("rounded-full", "h-12", "w-12");
+  const column = reset.parentElement as HTMLElement;
+  expect(column).toHaveClass("right-3");
+  expect(column.style.bottom).toBe(`${12 + 300}px`);
+  // The column lives in the part of the map between the chrome and the sheet: when the
+  // sheet is at full and lifts it that far, it is clipped rather than drawn over the pill.
+  const clip = column.parentElement as HTMLElement;
+  expect(clip).toHaveClass("overflow-hidden", "pointer-events-none");
+  expect(clip.style.top).toBe("116px");
+  expect(column).toHaveClass("pointer-events-auto");
+});
+
+test("the zoom buttons and the reset under them stay where they are by default", () => {
+  renderMap(
+    <MapView
+      origin={{ lat: 52.379, lon: 4.9 }}
+      destination={{ lat: 52.358, lon: 4.868 }}
+      stops={[]}
+      route={route}
+    />
+  );
+  expect(__mapContainerProps.last?.zoomControl).not.toBe(false);
+  expect(__zoomControl.shown).not.toBe(false);
+  const reset = screen.getByRole("button", { name: /whole trip/i });
+  // No Leaflet corner in the mock, so the third button of the zoom column falls back to
+  // the wrapper, bottom-left, as it always has.
+  expect(reset).toHaveClass("rounded-[3px]");
+  expect(reset.parentElement).toHaveClass("absolute", "left-3");
+});
+
+// On a phone on its side the map can be 268px wide (568x320), and the "Zoom in to see bars
+// and places" chip, right-aligned and 204px across, reached back over the reset under the
+// zoom column. With the zoom column there, the bottom-right column stops 8px short of it
+// and its chips wrap. Without it the column keeps the map's width.
+test("the bottom-right column stops short of the zoom column, and only when there is one", () => {
+  const props = { origin: { lat: 52.379, lon: 4.9 }, destination: { lat: 52.358, lon: 4.868 }, stops: [], route };
+  const foot = (root: HTMLElement) =>
+    [...root.querySelectorAll<HTMLElement>("div.right-3")].find((d) => d.style.bottom !== "") as HTMLElement;
+
+  const withZoom = renderMap(<MapView {...props} />);
+  expect(foot(withZoom.container).style.maxWidth).toBe("calc(100% - 78px)");
+  withZoom.unmount();
+
+  const pinch = renderMap(<MapView {...props} zoomControl={false} topInset={116} bottomInset={300} />);
+  expect(foot(pinch.container).style.maxWidth).toBe("");
+});
+
+// The map's right edge (lib/mapEdge.ts) is decided from layout: the map's height and the
+// boxes of the readout, the place chips and the reset, with a ResizeObserver for what
+// changes between renders. While navigating, MapView re-renders on every GPS fix, and
+// nothing the edge is decided from changes with a fix. So a fix reads no layout and builds
+// no observer; a new inset, or a resize the observer reports, still decides the edge again.
+test("a new GPS fix leaves the map's right edge alone; an inset or a resize decides it again", () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ host: "https://tc.test", radar: { past: [], nowcast: [] } }),
+    })),
+  );
+  const observers: Array<() => void> = [];
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(cb: ResizeObserverCallback) {
+        observers.push(() => cb([], this as unknown as ResizeObserver));
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  // Layout, which jsdom has none of: a 400px map, the readout's toggles 36px and the rest
+  // of it (here the legend) 80px, and the round reset 48px. The readout starts at 68, under
+  // the radar button, so with the sheet down there is room for all of it.
+  let mapHeight = 400;
+  let mapReads = 0;
+  const heights: Record<string, number> = { "readout-toggles": 36, "readout-extras": 80, "map-reset-view": 48 };
+  const clientHeight = vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(function (this: Element) {
+    if (!this.querySelector(":scope > .leaflet-container")) return 0;
+    mapReads++;
+    return mapHeight;
+  });
+  const rect = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const h = heights[this.getAttribute("data-fov") ?? ""] ?? 0;
+    return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: h, width: 0, height: h, toJSON: () => ({}) } as DOMRect;
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const fix = (i: number) => ({ lat: 52.379 - i * 0.0005, lon: 4.9, accuracy: 10 });
+  const view = (i: number, bottomInset = 0) => (
+    <QueryClientProvider client={client}>
+      <MapView
+        origin={{ lat: 52.379, lon: 4.9 }}
+        destination={{ lat: 52.358, lon: 4.868 }}
+        stops={[]}
+        route={route}
+        navigating
+        liveFix={fix(i)}
+        radar
+        wLayers={{ rain: true, wind: false }}
+        onLayerToggle={() => {}}
+        radarButton
+        zoomControl={false}
+        bottomInset={bottomInset}
+      />
+    </QueryClientProvider>
+  );
+  try {
+    const { rerender } = render(view(0));
+    const legend = () => document.querySelector('[data-fov="readout-extras"]') as HTMLElement;
+    expect(legend().style.visibility).toBe("");
+    expect(observers).toHaveLength(1);
+    const reads = mapReads;
+
+    for (let i = 1; i <= 10; i++) rerender(view(i));
+    expect(observers).toHaveLength(1);
+    expect(mapReads).toBe(reads);
+
+    // The sheet settles 200px up: 72px between the readout's top and the reset, which is
+    // the toggles' 44 and not the legend's 86 after them.
+    rerender(view(10, 200));
+    expect(legend().style.visibility).toBe("hidden");
+    rerender(view(10, 0));
+    expect(legend().style.visibility).toBe("");
+
+    // The map shrinks to 250px and the observer says so: 122px of room, short of 130.
+    mapHeight = 250;
+    act(() => observers[0]());
+    expect(legend().style.visibility).toBe("hidden");
+    expect(observers).toHaveLength(1);
+  } finally {
+    clientHeight.mockRestore();
+    rect.mockRestore();
+  }
 });

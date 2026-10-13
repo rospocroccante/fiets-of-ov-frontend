@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { UseMyLocationButton } from "./UseMyLocationButton";
 
@@ -56,6 +56,10 @@ afterEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
+// The waits below are Testing Library's waitFor, not vi.waitFor. The button sets state
+// when the fix arrives (status, busy), and only the former tells React that an async
+// update is expected, so the latter left an act() warning per update.
+
 describe("UseMyLocationButton", () => {
   it("calls onLocated with precise coords and a label (Vondelpark mock) when GPS succeeds", async () => {
     // Vondelpark coordinates — the mock reverseGeocode recognises these.
@@ -66,7 +70,7 @@ describe("UseMyLocationButton", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /use my location/i }));
 
-    const ep = await vi.waitFor(() => {
+    const ep = await waitFor(() => {
       expect(onLocated).toHaveBeenCalledTimes(1);
       return onLocated.mock.calls[0][0];
     });
@@ -86,7 +90,7 @@ describe("UseMyLocationButton", () => {
     fireEvent.click(screen.getByRole("button", { name: /use my location/i }));
 
     // Wait for onLocated to confirm the click resolved
-    await vi.waitFor(() => expect(onLocated).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onLocated).toHaveBeenCalledTimes(1));
 
     // Amber status line
     const status = await screen.findByRole("status");
@@ -116,7 +120,7 @@ describe("UseMyLocationButton", () => {
     render(<UseMyLocationButton onLocated={onLocated} beginLocate={beginLocate} />);
     fireEvent.click(screen.getByRole("button", { name: /use my location/i }));
 
-    await vi.waitFor(() => expect(sink).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(sink).toHaveBeenCalledTimes(1));
     // beginLocate runs before the first await, so the owner can claim its race guard at click time; the fix then flows through that sink alone, which is what lets App drop a fix the user typed over.
     expect(beginLocate).toHaveBeenCalledTimes(1);
     expect(onLocated).not.toHaveBeenCalled();

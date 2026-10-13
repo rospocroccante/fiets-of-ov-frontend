@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
+import { motion } from "framer-motion";
 import { useI18n } from "../lib/i18n";
+import { fade, overlay, useLeaving, useMotionPreset } from "../lib/motion";
 
 // The privacy notice, as a modal dialog rather than a page: the app has no router, and
 // a notice that opens over whichever stage you are on is reachable from both the home
@@ -19,6 +21,12 @@ export function PrivacyNotice({ onClose }: { onClose: () => void }) {
   const { t } = useI18n();
   const closeRef = useRef<HTMLButtonElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  // App mounts the notice inside AnimatePresence. The card rises into place over a scrim
+  // that only fades (an 8px rise would bare a strip of page along its top edge), and
+  // while both play their exit the whole notice is inert and lets go of the keyboard.
+  const scrimMotion = useMotionPreset(fade);
+  const cardMotion = useMotionPreset(overlay);
+  const [leaving, leavingProps] = useLeaving();
 
   // Focus lands on Close: with the dialog open over an inert stage there is nothing
   // else sensible to start from, and Escape closes it the way the header menu does.
@@ -28,7 +36,12 @@ export function PrivacyNotice({ onClose }: { onClose: () => void }) {
   // the first Tab past Close walked straight into that page, which is still fully
   // interactive underneath, and the promise was false. Only the boundaries are
   // intercepted, so ordinary movement inside the dialog stays the browser's.
+  //
+  // Neither holds once the notice is leaving: its exit runs while the page behind is
+  // already live again, and a Tab caught then would pull focus back into a dialog that
+  // has closed.
   useEffect(() => {
+    if (leaving) return;
     closeRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -61,7 +74,7 @@ export function PrivacyNotice({ onClose }: { onClose: () => void }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, leaving]);
 
   const heading = "fov-privacy-title";
   const section = "mt-5 text-sm font-semibold text-slate-900 dark:text-night-text";
@@ -70,17 +83,20 @@ export function PrivacyNotice({ onClose }: { onClose: () => void }) {
   return (
     <div
       ref={rootRef}
+      {...leavingProps}
       className="fixed inset-0 z-[2000] flex items-end justify-center p-0 sm:items-center sm:p-6"
     >
       {/* The scrim closes on click, and is a button so a keyboard user reaching it by
           Tab can do the same; Escape is the shortcut. */}
-      <button
+      <motion.button
+        {...scrimMotion}
         type="button"
         aria-label={t("closePrivacy")}
         onClick={onClose}
         className="absolute inset-0 cursor-default bg-slate-900/40 backdrop-blur-sm"
       />
-      <div
+      <motion.div
+        {...cardMotion}
         role="dialog"
         aria-modal="true"
         aria-labelledby={heading}
@@ -122,7 +138,7 @@ export function PrivacyNotice({ onClose }: { onClose: () => void }) {
         <h3 className={section}>{t("privacyContactTitle")}</h3>
         <p className={body}>{t("privacyContact")}</p>
         <p className={`${body} text-slate-500 dark:text-night-subtle`}>{t("privacyUpdated")}</p>
-      </div>
+      </motion.div>
     </div>
   );
 }

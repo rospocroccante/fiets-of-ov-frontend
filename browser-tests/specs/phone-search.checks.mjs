@@ -6,7 +6,8 @@
 // judge's breaking mutations kept intact while shipping an unusable screen.
 
 import { sleep } from "../lib/chrome.mjs";
-import { PROBE } from "../lib/measure.mjs";
+import { PROBE, RESULTS } from "../lib/measure.mjs";
+import { openSheetToHalf, sheetSettledAt } from "../lib/sheet.mjs";
 
 // Eight recent trips, which is the cap the app keeps. They become sixteen endpoint
 // history rows, so the suggestion list on an empty focused field is taller than the
@@ -66,11 +67,21 @@ async function bootPhone(ctx, { width, height }) {
   return page;
 }
 
+// Computed opacity 1 and no transform: where an element that arrives through
+// src/lib/motion.ts comes to rest. Geometry is measured there, not part way through.
+const atRest = (sel) => `(() => {
+  const e = document.querySelector(${JSON.stringify(sel)});
+  if (!e) return false;
+  const cs = getComputedStyle(e);
+  return cs.opacity === "1" && cs.transform === "none";
+})()`;
+
 async function openSheet(page) {
   const entry = await page.eval(box(ENTRY));
   await page.tap(entry.x + entry.w / 2, entry.y + entry.h / 2);
   await page.waitFor(`document.querySelector('${SHEET}')`, { label: "the search sheet to open" });
-  await sleep(260); // the 180ms entry animation
+  // The sheet fades in and rises 14px over `base` (200ms).
+  await page.waitFor(atRest(SHEET), { label: "the search sheet to come to rest" });
   return entry;
 }
 
@@ -189,6 +200,8 @@ export const scenarios = [
         await page.waitFor(`document.querySelectorAll('${SHEET} [role="option"]').length > 0`, {
           label: "the recents list to appear under the focused field",
         });
+        // The list grows into place with the sheet, and is measured once it is there.
+        await page.waitFor(atRest(`${SHEET} [role="listbox"]`), { label: "the recents list to come to rest" });
         const list = await page.eval(`
           const ul = document.querySelector('${SHEET} [role="listbox"]');
           const r = ul.getBoundingClientRect();
@@ -496,10 +509,26 @@ export const scenarios = [
           .catch(() => {});
         await sleep(600);
 
+        // The plan lands with the results sheet collapsed on its summary: the chosen
+        // option's title and minutes are what is on the screen. One touch on the handle
+        // opens the sheet to half, and then "on the screen" is the visible part of the
+        // sheet's content, not its whole box.
+        await sheetSettledAt(page, "peek");
+        const landed = await page.eval(`
+          const F = window.__fov;
+          const title = document.querySelector('[data-fov="summary-title"]');
+          return title ? { ...F.shown(title), text: title.textContent.trim() } : null;
+        `);
+        checks.ok(
+          "the collapsed sheet's summary names the chosen option on the screen",
+          landed != null && landed.painted,
+          landed ? `"${landed.text}" painted ${landed.painted}, hit ${landed.hit}` : "no summary title",
+        );
+        await openSheetToHalf(page);
         const after = await page.eval(`
           const F = window.__fov;
-          const col = document.querySelector('[data-fov="results-column"]');
-          const c = col ? col.getBoundingClientRect() : null;
+          const col = document.querySelector('${RESULTS}');
+          const c = col ? F.visible(col) : null;
           const rows = [...document.querySelectorAll('[data-fov="option"]')].map((li) => {
             const r = li.getBoundingClientRect();
             return { h: +r.height.toFixed(2),
@@ -510,7 +539,7 @@ export const scenarios = [
           return { scrollY: Math.round(window.scrollY), ih: innerHeight,
                    mapInert: map.hasAttribute("inert"),
                    sheet: !!document.querySelector('${SHEET}'),
-                   rows, colH: c ? +c.height.toFixed(2) : null };
+                   rows, colH: c ? c.h : null };
         `);
         checks.ok("the sheet is gone", !after.sheet, "the search sheet is still mounted");
         checks.atLeast(
@@ -523,12 +552,12 @@ export const scenarios = [
         checks.atLeast("the plan produced options", after.rows.length, 1, `${after.rows.length} options`);
         const whole = after.rows.filter((r) => r.visible >= r.h - 0.5 && r.shown.painted);
         checks.atLeast(
-          "a whole option row is on the screen when the sheet has closed",
+          "a whole option row is on the screen once the results sheet is open",
           whole.length,
           1,
           after.rows
             .map((r, i) => `option ${i + 1}: ${round(r.visible)} of ${round(r.h)}px, painted ${r.shown.painted}`)
-            .join(", ") + ` in a ${round(after.colH)}px column`,
+            .join(", ") + ` in ${round(after.colH)}px of results on screen`,
         );
       } finally {
         await page.close();

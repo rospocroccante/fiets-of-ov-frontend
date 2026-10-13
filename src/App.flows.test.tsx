@@ -5,6 +5,7 @@ import { I18nProvider } from "./lib/i18n";
 import { getPlan, liveGetPlan } from "./api/client";
 import { __fireMapContextMenu } from "./__mocks__/react-leaflet";
 import { whenMapMounted } from "./test/mapReady";
+import { waitForExit } from "./test/exit";
 
 // The end-to-end regression net for the flows a user actually performs. Everything the
 // rest of the suite renders bare (no I18nProvider, single components) is exercised here
@@ -67,17 +68,26 @@ afterEach(() => {
 });
 
 test("the home language switch flips every visible string, both ways, and persists it", () => {
+  // A recent trip, so the home carries a parameterized string: the popular trips name
+  // both of their ends with no "to {x}" between them since they became metro lines,
+  // and the time-ago on a recent trip is the one left on this screen.
+  window.localStorage.setItem(
+    "fov.recentTrips.v1",
+    JSON.stringify([
+      { fromLabel: "Centraal", fromQuery: "Centraal", toLabel: "NDSM", toQuery: "NDSM", at: Date.now() - 10 * 60_000 },
+    ]),
+  );
   renderApp();
   // jsdom reports navigator.language "en-US", so the app starts in English.
   expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Bike or transit?");
-  expect(screen.getByText("to Vondelpark")).toBeInTheDocument();
+  expect(screen.getByText("10m ago")).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: /switch language/i }));
 
   expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Fiets of OV?");
   expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Laat het weer beslissen.");
   // Parameterized strings must follow the language, not just the static ones.
-  expect(screen.getByText("naar Vondelpark")).toBeInTheDocument();
+  expect(screen.getByText("10 min geleden")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Zoeken" })).toBeInTheDocument();
   expect(window.localStorage.getItem("fov.lang.v1")).toBe("nl");
 
@@ -222,10 +232,13 @@ test("clearing recents from the menu empties both the store and the home shortcu
   await screen.findByRole("button", { name: /Centraal.*Dam/ });
 
   openMenu();
-  fireEvent.click(screen.getByRole("button", { name: /clear recent searches/i }));
+  const row = screen.getByRole("button", { name: /clear recent searches/i });
+  fireEvent.click(row);
 
   expect(JSON.parse(window.localStorage.getItem("fov.recentTrips.v1") ?? "[]")).toEqual([]);
   expect(screen.queryByRole("button", { name: /Centraal.*Dam/ })).toBeNull();
+  // The row closes the menu.
+  await waitForExit(row);
 });
 
 test("a saved place becomes a home chip that plans a trip to it", async () => {
@@ -262,10 +275,13 @@ test("clearing saved places from the menu removes the home chip", async () => {
   await screen.findByRole("button", { name: /^vondelpark$/i });
 
   openMenu();
-  fireEvent.click(screen.getByRole("button", { name: /clear saved places/i }));
+  const row = screen.getByRole("button", { name: /clear saved places/i });
+  fireEvent.click(row);
 
   expect(screen.queryByRole("button", { name: /^vondelpark$/i })).toBeNull();
   expect(JSON.parse(window.localStorage.getItem("fov.savedPlaces.v1") ?? "[]")).toEqual([]);
+  // The row closes the menu.
+  await waitForExit(row);
 });
 
 // --- Privacy notice ---------------------------------------------------------------
@@ -296,8 +312,11 @@ test("the privacy notice is also reachable from the header menu on the map stage
   await whenMapMounted();
   openMenu();
   const menu = screen.getByRole("navigation", { name: /^menu$/i });
-  fireEvent.click(within(menu).getByRole("button", { name: /^privacy$/i }));
+  const row = within(menu).getByRole("button", { name: /^privacy$/i });
+  fireEvent.click(row);
   expect(screen.getByRole("dialog")).toBeInTheDocument();
+  // The notice opens as the menu closes behind it.
+  await waitForExit(row);
 });
 
 test("the notice names every third party that receives what the user typed or picked", () => {
@@ -329,7 +348,7 @@ test("the notice names every third party that receives what the user typed or pi
   expect(dialog).toHaveTextContent(/PLACEHOLDER/);
 });
 
-test("the notice is in Dutch when the app is, and closes on Escape", () => {
+test("the notice is in Dutch when the app is, and closes on Escape", async () => {
   window.localStorage.setItem("fov.lang.v1", "nl");
   renderApp();
   openPrivacyFromHome();
@@ -359,6 +378,8 @@ test("the notice is in Dutch when the app is, and closes on Escape", () => {
 
   fireEvent.keyDown(window, { key: "Escape" });
   expect(screen.queryByRole("dialog")).toBeNull();
+  // Out of reach at once, and out of the document once its exit has played.
+  await waitForExit(dialog);
 });
 
 // --- Skip link --------------------------------------------------------------------

@@ -6,7 +6,8 @@ import { dirname, join } from "node:path";
 // rendering: jsdom has no Tailwind, so the tokens only exist as config values and as
 // class names. What is worth protecting is the three invariants the palette rests on —
 // the browser-chrome colour matching the page, the contrast floors the ramp was solved
-// for, and the fact that nothing hard-codes a dark surface any more.
+// for, and the fact that nothing hard-codes a dark surface any more, translucent white
+// glass included.
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
@@ -98,6 +99,22 @@ test("no component hard-codes a dark surface any more", () => {
     }
     // The greens the dark theme borrowed before the accent swaps replaced them.
     for (const bad of src.match(/dark:[\w:-]*(?:emerald|lime|green)-\d{2,3}(?:\/\d+)?/g) ?? []) {
+      offenders.push(`${file}: ${bad}`);
+    }
+  }
+  expect(offenders).toEqual([]);
+});
+
+test("no component paints night glass with translucent white", () => {
+  const offenders: string[] = [];
+  for (const file of sourceFiles()) {
+    const src = readFileSync(file, "utf8");
+    // `dark:bg-white/10` and `dark:border-white/10` render as grey glass on navy, the
+    // look that made night v3 read sad. Fills take a translucent night surface
+    // (`night-surface/70`, `night-hover/75`) and hairlines and rings take `night-rim`.
+    // Opaque white (the Search action's `dark:from-white`) is a deliberate light
+    // element and does not match.
+    for (const bad of src.match(/dark:[\w:-]*(?:bg|border|ring)-white\/\d+/g) ?? []) {
       offenders.push(`${file}: ${bad}`);
     }
   }

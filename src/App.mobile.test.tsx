@@ -5,6 +5,9 @@ import App from "./App";
 import { I18nProvider } from "./lib/i18n";
 import { whenMapMounted } from "./test/mapReady";
 import { isMapLoaded, mapChunkRequests } from "./components/lazyMap";
+import { waitForExit } from "./test/exit";
+import { morphTo, phoneViewport, stubHeights } from "./test/phone";
+import { __mapContainerProps } from "./__mocks__/react-leaflet";
 
 // The mobile pass's own guardrails: the map chunk stays out of the first render, the
 // plan outcome is announced out of band, and the controls a thumb has to hit keep their
@@ -19,60 +22,6 @@ function renderApp() {
       </I18nProvider>
     </QueryClientProvider>,
   );
-}
-
-// jsdom answers `false` to every media query, which is what keeps the whole existing
-// suite (and the desktop layout it describes) on the unchanged path. A phone is the
-// one query answering true; restore the real matchMedia afterwards or the next test in
-// the file inherits a phone.
-function phoneViewport(): () => void {
-  const real = window.matchMedia;
-  window.matchMedia = ((query: string) => ({
-    matches: /max-width:\s*639\.98px/.test(query),
-    media: query,
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })) as unknown as typeof window.matchMedia;
-  return () => {
-    window.matchMedia = real;
-  };
-}
-
-// jsdom has no layout, so every offsetHeight is 0 and the phone geometry falls back to
-// its desktop constants. These are the two boxes that geometry is solved from; give
-// them the heights a real 390x844 phone measures and the arithmetic becomes testable.
-function stubHeights(byName: Record<string, number>): () => void {
-  const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight");
-  Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
-    configurable: true,
-    get(this: HTMLElement) {
-      const name = this.getAttribute("data-fov");
-      return name != null && name in byName ? byName[name] : 0;
-    },
-  });
-  return () => {
-    if (original) Object.defineProperty(HTMLElement.prototype, "offsetHeight", original);
-    else Reflect.deleteProperty(HTMLElement.prototype, "offsetHeight");
-  };
-}
-
-// Park the morph at a given progress. useMorphProgress divides window.scrollY by
-// window.innerHeight, so this is the whole story.
-async function morphTo(progress: number) {
-  Object.defineProperty(window, "scrollY", {
-    configurable: true,
-    value: Math.round(window.innerHeight * progress),
-  });
-  await act(async () => {
-    window.dispatchEvent(new Event("scroll"));
-    // framer paints motion values on its own frame loop, so the opacity this test
-    // reads only lands after one has run.
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  });
 }
 
 function pillEntry(): HTMLElement {
@@ -183,7 +132,8 @@ test("the controls added by the public-facing pass are 44px too", () => {
   );
 });
 
-test("the home's language and theme pills are 44px square", () => {
+test("on desktop the home's language and theme pills are 44px square", () => {
+  // No phoneViewport(): a phone has no pills, their switches live in the Profile tab.
   renderApp();
   for (const name of [/switch language/i, /switch to dark mode/i]) {
     expect(screen.getByRole("button", { name })).toHaveClass("min-h-[44px]", "min-w-[44px]");
@@ -285,7 +235,7 @@ test("the phone search screen is where a trip gets planned, end to end", async (
   }
 });
 
-test("the phone search screen takes focus, and every way out gives it back", () => {
+test("the phone search screen takes focus, and every way out gives it back", async () => {
   const restore = phoneViewport();
   try {
     renderApp();
@@ -307,12 +257,13 @@ test("the phone search screen takes focus, and every way out gives it back", () 
     fireEvent.click(within(dialog).getByRole("button", { name: /close search/i }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(pillEntry());
+    await waitForExit(dialog);
   } finally {
     restore();
   }
 });
 
-test("with a trip already entered the phone screen opens on the destination", () => {
+test("with a trip already entered the phone screen opens on the destination", async () => {
   const restore = phoneViewport();
   try {
     renderApp();
@@ -321,12 +272,15 @@ test("with a trip already entered the phone screen opens on the destination", ()
     fireEvent.change(within(dialog).getByPlaceholderText("From"), {
       target: { value: "Centraal" },
     });
+    const first = dialog;
     fireEvent.click(within(dialog).getByRole("button", { name: /close search/i }));
 
     fireEvent.click(pillEntry());
     dialog = screen.getByRole("dialog");
     // The start is settled; the reason to come back is the destination.
     expect(document.activeElement).toBe(within(dialog).getByPlaceholderText("To"));
+    // The first screen was reopened over while it still played its exit.
+    await waitForExit(first);
   } finally {
     restore();
   }
@@ -479,12 +433,30 @@ test("half way through the morph the invisible home takes no taps", async () => 
   expect(homeStage).toHaveAttribute("role", "main");
 });
 
+// Faded out, the home is hidden as well as inert. It sits over the map stage (z-10), and
+// Chrome's compositor still counted its transparent layers as over the results sheet:
+// in the bands where the home has a layer, a touch on the sheet's content arrived
+// uncancellable, and at full height the sheet could not take a downward drag there.
+test("once it has faded out, the home stage is hidden, and shown again on the way back", async () => {
+  const { container } = renderApp();
+  const homeStage = container.querySelector('[data-fov="home-stage"]') as HTMLElement;
+  expect(homeStage.style.visibility).toBe("visible");
+  await morphTo(0.4);
+  expect(homeStage.style.visibility).toBe("visible");
+  await morphTo(0.6);
+  expect(homeStage.style.visibility).toBe("hidden");
+  await morphTo(1);
+  expect(homeStage.style.visibility).toBe("hidden");
+  await morphTo(0);
+  expect(homeStage.style.visibility).toBe("visible");
+});
+
 // The four tests below are DOM facts, not layout, which is why they belong here: an
 // attribute is either on an element or it is not, and jsdom can say which. What jsdom
 // cannot say is how wide, how tall, in front of what, or reachable by a finger — those
 // live in browser-tests/, which measures them in a real Chrome at real device metrics.
 
-test("the page behind the phone search screen is locked, inert and hidden", () => {
+test("the page behind the phone search screen is locked, inert and hidden", async () => {
   const restore = phoneViewport();
   try {
     renderApp();
@@ -501,32 +473,107 @@ test("the page behind the phone search screen is locked, inert and hidden", () =
       expect(stage).toHaveAttribute("aria-hidden", "true");
     }
 
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /close search/i }));
+    const sheet = screen.getByRole("dialog");
+    fireEvent.click(within(sheet).getByRole("button", { name: /close search/i }));
+    // All of it in the same click, while the screen is still playing its exit.
+    expect(sheet).toBeInTheDocument();
     expect(document.body.style.overflow).toBe("");
     for (const stage of [home, map]) {
       expect(stage).not.toHaveAttribute("aria-hidden");
     }
     expect(home).not.toHaveAttribute("inert");
+    await waitForExit(sheet);
   } finally {
     restore();
   }
 });
 
-test("closing the phone search screen puts the scroll back where it was", () => {
+test("closing the phone search screen puts the scroll back where it was", async () => {
   const restore = phoneViewport();
   try {
     renderApp();
     Object.defineProperty(window, "scrollY", { configurable: true, value: 485 });
     fireEvent.click(pillEntry());
     (window.scrollTo as ReturnType<typeof vi.fn>).mockClear();
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /close search/i }));
+    const sheet = screen.getByRole("dialog");
+    fireEvent.click(within(sheet).getByRole("button", { name: /close search/i }));
     // Making the viewport unscrollable is allowed to clamp the offset, so the offset is
-    // recorded on the way in and written back on the way out.
+    // recorded on the way in and written back on the way out: in the click that closes
+    // the screen, not after its exit, which is too late for a search's morph to the map.
+    expect(sheet).toBeInTheDocument();
     expect(window.scrollTo).toHaveBeenCalledWith(0, 485);
+    await waitForExit(sheet);
   } finally {
     // scrollY is the morph's only input; a test that leaves it parked mid-morph decides
     // the next test's stage, and the suite runs in a random order.
     Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+    restore();
+  }
+});
+
+test("a closing phone search screen is out of reach for its exit, and then removed", async () => {
+  const restore = phoneViewport();
+  try {
+    renderApp();
+    fireEvent.click(pillEntry());
+    const sheet = document.querySelector('[data-fov="search-sheet"]') as HTMLElement;
+    expect(sheet).not.toHaveAttribute("inert");
+
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /close search/i }));
+
+    // On screen for its exit, and nothing in it answers: the page behind is live again
+    // (the test above) and focus is back on the bar, so the screen must not be the
+    // dialog a screen reader finds or the surface a tap lands on.
+    expect(sheet).toBeInTheDocument();
+    expect(sheet).toHaveAttribute("aria-hidden", "true");
+    expect(sheet).toHaveAttribute("inert", "");
+    expect(sheet).toHaveStyle({ pointerEvents: "none" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(pillEntry());
+
+    await waitForExit(sheet);
+  } finally {
+    restore();
+  }
+});
+
+test("a search screen reopened during the last one's exit is a new one, not the leaving copy", async () => {
+  const restore = phoneViewport();
+  try {
+    renderApp();
+    // Held on to: behind an open screen the bar is hidden, and a role query cannot see it.
+    const entry = pillEntry();
+    fireEvent.click(entry);
+    fireEvent.change(within(screen.getByRole("dialog")).getByPlaceholderText("From"), {
+      target: { value: "Centraal" },
+    });
+    const first = document.querySelector('[data-fov="search-sheet"]') as HTMLElement;
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.click(entry);
+
+    // Two copies in the document for the length of the exit, and only one is live.
+    const sheets = Array.from(document.querySelectorAll<HTMLElement>('[data-fov="search-sheet"]'));
+    expect(sheets).toHaveLength(2);
+    const second = sheets.find((s) => s !== first) as HTMLElement;
+    expect(first).toHaveAttribute("inert", "");
+    expect(second).not.toHaveAttribute("inert");
+    expect(second).not.toHaveAttribute("aria-hidden");
+    // The live one is the dialog, named by its own heading rather than the old one's.
+    const dialog = screen.getByRole("dialog", { name: /plan your trip/i });
+    expect(dialog).toBe(second);
+    expect(second.getAttribute("aria-labelledby")).not.toBe(first.getAttribute("aria-labelledby"));
+    // An opening moves focus in, and the page behind is locked again.
+    expect(document.activeElement).toBe(within(second).getByPlaceholderText("To"));
+    expect(document.body.style.overflow).toBe("hidden");
+    // Only the new screen's trap is listening: a Tab from outside lands in it. The focus
+    // goes through act(), since it blurs the To field and the field's handler sets state.
+    act(() => entry.focus());
+    fireEvent.keyDown(window, { key: "Tab" });
+    expect(second.contains(document.activeElement)).toBe(true);
+
+    await waitForExit(first);
+    expect(second).toBeInTheDocument();
+  } finally {
     restore();
   }
 });
@@ -560,7 +607,8 @@ test("the map stage carries a back control on a phone, and only there", async ()
     renderApp();
     await morphTo(1);
     const back = screen.getByRole("button", { name: /back to home/i });
-    // The wordmark beside it goes home and clears the trip; this only walks back.
+    // What is left of the header on a portrait phone's map stage. It only walks back;
+    // the trip stays.
     expect(back.closest("header")).not.toBeNull();
     (window.scrollTo as ReturnType<typeof vi.fn>).mockClear();
     fireEvent.click(back);
@@ -569,6 +617,215 @@ test("the map stage carries a back control on a phone, and only there", async ()
     Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
     restore();
   }
+});
+
+// ---------------------------------------------------------------------------
+// The portrait phone's map stage: the map runs under floating chrome
+// ---------------------------------------------------------------------------
+
+function mapStage(): HTMLElement {
+  return document.querySelector('[data-fov="map-stage"]') as HTMLElement;
+}
+
+// Plan a popular trip on whatever layout is on screen and wait for its options.
+async function planPopular() {
+  fireEvent.click(screen.getByRole("button", { name: "Amsterdam Centraal → Vondelpark" }));
+  await screen.findByRole("button", { name: /start navigation/i });
+}
+
+test("on a portrait phone the map runs to the top of the screen under floating chrome", async () => {
+  const restore = phoneViewport();
+  try {
+    renderApp();
+    await morphTo(1);
+    // No headroom: the map pane starts at the top of the stage, under the status bar.
+    expect(mapStage().className).not.toMatch(/(^|\s)pt-/);
+    // No header bar: no wordmark, no bar background, no rule under it. What is left of
+    // the header is the round back button, floating at the top-left.
+    expect(screen.queryByRole("button", { name: "Fiets of OV" })).toBeNull();
+    const header = document.querySelector("header") as HTMLElement;
+    expect(header.className).not.toMatch(/bg-|border-b/);
+    expect(header).toHaveClass("top-[calc(0.5rem+env(safe-area-inset-top))]");
+    const back = screen.getByRole("button", { name: /back to home/i });
+    expect(back).toHaveAttribute("data-fov", "map-back");
+    expect(back).toHaveClass("h-12", "w-12", "rounded-full", "bg-white", "shadow-md", "dark:bg-night-raised");
+    expect(back.className).not.toMatch(/dark:(bg|border)-white/);
+    // The filter chips float in a row of their own under the pill, over the map, and the
+    // row's box takes no touches: only the chips do.
+    const chrome = document.querySelector('[data-fov="map-chrome"]') as HTMLElement;
+    expect(chrome).toHaveClass("absolute", "pointer-events-none", "top-[calc(4rem+env(safe-area-inset-top))]");
+    const bar = within(chrome).getByRole("button", { name: /map options/i }).closest('[data-fov="filter-bar"]');
+    expect(bar).toHaveClass("pointer-events-auto");
+    // The pill flies into the back button's row: past the button by a left margin, and
+    // down to the button's 48px by its padding, both read from custom properties the
+    // morph drives. Back on the home it is the hero pill again.
+    const pill = document.querySelector('[data-fov="search-pill"]') as HTMLElement;
+    expect(pill).toHaveClass("ml-[var(--pill-shift)]", "p-[var(--pill-pad)]");
+    expect(pill).not.toHaveClass("mx-auto");
+    expect(pill.style.getPropertyValue("--pill-shift")).toBe("56px");
+    expect(pill.style.getPropertyValue("--pill-pad")).toBe("1px");
+    await morphTo(0);
+    expect(pill.style.getPropertyValue("--pill-shift")).toBe("0px");
+    expect(pill.style.getPropertyValue("--pill-pad")).toBe("6px");
+    await morphTo(1);
+    // The sheet's frame starts under that row (0 in jsdom, which has no layout), so the
+    // full detent reaches the chips and not the pill. With no trip there is no sheet in
+    // it yet, but the frame is there: the place card lives in it.
+    const frame = document.querySelector('[data-fov="sheet-frame"]') as HTMLElement;
+    expect(frame).not.toBeNull();
+    expect(document.querySelector('[data-fov="results-sheet"]')).toBeNull();
+    expect(frame.style.top).toBe("0px");
+  } finally {
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+    restore();
+  }
+});
+
+test("on a portrait phone the map zooms by pinch, and the reset floats bottom-right", async () => {
+  const restore = phoneViewport();
+  try {
+    renderApp();
+    await whenMapMounted();
+    await morphTo(1);
+    expect(__mapContainerProps.last?.zoomControl).toBe(false);
+    const reset = document.querySelector('[data-fov="map-reset-view"]') as HTMLElement;
+    expect(reset).toHaveClass("rounded-full");
+    expect(reset.parentElement).toHaveClass("right-3");
+  } finally {
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+    restore();
+  }
+});
+
+test("while navigating on a portrait phone the floating chrome steps aside for the banner", async () => {
+  const restore = phoneViewport();
+  try {
+    renderApp();
+    await planPopular();
+    await morphTo(1);
+    const pill = document.querySelector('[data-fov="search-pill"]') as HTMLElement;
+    const chrome = document.querySelector('[data-fov="map-chrome"]') as HTMLElement;
+    const header = document.querySelector("header") as HTMLElement;
+    expect(pill).not.toHaveAttribute("inert");
+    expect(chrome).not.toHaveAttribute("inert");
+
+    fireEvent.click(screen.getByRole("button", { name: /start navigation/i }));
+    const exit = screen.getByRole("button", { name: /exit navigation/i });
+    // The pill, the chips and the back button hide and take nothing, so the banner owns
+    // the top row and its Exit is the one control up there.
+    for (const el of [pill, chrome, header]) {
+      expect(el).toHaveAttribute("inert");
+    }
+    expect(pill.style.opacity).toBe("0");
+    expect(chrome.style.opacity).toBe("0");
+    expect(pill.style.pointerEvents).toBe("none");
+    expect(screen.getByRole("button", { name: /back to home/i })).toHaveClass("opacity-0");
+    expect(exit.closest("[inert]")).toBeNull();
+    // The banner sits 8px under the status bar rather than 12px under the map's edge.
+    const banner = exit.closest(".z-\\[1000\\]") as HTMLElement;
+    expect(banner).toHaveClass("top-[calc(0.5rem+env(safe-area-inset-top))]");
+    expect(banner).not.toHaveClass("top-3");
+
+    fireEvent.click(exit);
+    expect(pill).not.toHaveAttribute("inert");
+    expect(chrome).not.toHaveAttribute("inert");
+    expect(chrome.style.opacity).toBe("1");
+    await waitForExit(exit);
+  } finally {
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+    restore();
+  }
+});
+
+test("on desktop the header bar, the filter bar in flow and the zoom column are unchanged", async () => {
+  renderApp();
+  await whenMapMounted();
+  await morphTo(1);
+  expect(mapStage()).toHaveClass(
+    "pt-[calc(8.25rem+env(safe-area-inset-top))]",
+    "lg:pt-[calc(6rem+env(safe-area-inset-top))]",
+  );
+  const header = document.querySelector("header") as HTMLElement;
+  expect(header).toHaveClass("inset-x-0", "border-b", "bg-white/95", "h-[calc(3.5rem+env(safe-area-inset-top))]");
+  expect(screen.getByRole("button", { name: "Fiets of OV" })).toBeInTheDocument();
+  expect(document.querySelector('[data-fov="map-chrome"]')).toBeNull();
+  expect(document.querySelector('[data-fov="filter-bar"]')!.parentElement).toHaveClass("px-4", "md:px-6");
+  expect(__mapContainerProps.last?.zoomControl).toBe(true);
+  expect(document.querySelector('[data-fov="map-reset-view"]')).toHaveClass("rounded-[3px]");
+  const pill = document.querySelector('[data-fov="search-pill"]') as HTMLElement;
+  expect(pill).toHaveClass("mx-auto", "p-1.5", "sm:p-2");
+  expect(pill.style.getPropertyValue("--pill-shift")).toBe("");
+  expect(pill.style.opacity).toBe("");
+  Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+});
+
+test("a phone on its side keeps its header bar, its filter bar in flow and its zoom column", async () => {
+  const restore = phoneViewport({ landscape: true });
+  try {
+    renderApp();
+    await whenMapMounted();
+    await morphTo(1);
+    expect(mapStage()).toHaveClass("pt-[calc(4rem+env(safe-area-inset-top))]");
+    const header = document.querySelector("header") as HTMLElement;
+    expect(header).toHaveClass("inset-x-0", "border-b", "bg-white/95");
+    expect(screen.getByRole("button", { name: "Fiets of OV" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /back to home/i })).toHaveClass("-ml-2", "min-h-[44px]");
+    expect(document.querySelector('[data-fov="map-chrome"]')).toBeNull();
+    expect(document.querySelector('[data-fov="filter-bar"]')!.parentElement).toHaveClass("px-4");
+    expect(__mapContainerProps.last?.zoomControl).toBe(true);
+    expect(document.querySelector('[data-fov="map-reset-view"]')).toHaveClass("rounded-[3px]");
+    expect(document.querySelector('[data-fov="results-sheet"]')).toBeNull();
+  } finally {
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+    restore();
+  }
+});
+
+// The map stage's two panes, beside the map pane's own section.
+function panes() {
+  const main = document.getElementById("fov-map-main") as HTMLElement;
+  const column = main.querySelector('[data-fov="results-column"]') as HTMLElement;
+  const map = [...main.querySelectorAll(":scope > section")].find((s) => s !== column) as HTMLElement;
+  return { main, column, map };
+}
+
+// An iPhone SE on its side is 568x320, under md. The panes used to stack there, a 32dvh
+// map (102px) over the results, so the zoom column and the reset did not fit the map.
+// A phone on its side puts them side by side at any width, the way 844x390 always had
+// them from md up.
+test("a phone on its side lays the results and the map side by side whatever its width", async () => {
+  const restore = phoneViewport({ landscape: true });
+  const size = { w: window.innerWidth, h: window.innerHeight };
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 568 });
+  Object.defineProperty(window, "innerHeight", { configurable: true, value: 320 });
+  try {
+    renderApp();
+    await morphTo(1);
+    const { main, column, map } = panes();
+    expect(main).toHaveClass("flex-row");
+    expect(main).not.toHaveClass("flex-col");
+    expect(column).toHaveClass("order-1", "flex-none", "w-1/2");
+    expect(column).not.toHaveClass("order-2", "flex-1");
+    expect(map).toHaveClass("order-2", "w-1/2");
+    expect(map).not.toHaveClass("order-1", "h-[32dvh]");
+  } finally {
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: size.w });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: size.h });
+    restore();
+  }
+});
+
+// Tablets and desktops keep the stack below md and the row from md up, unchanged.
+test("on a wider screen the panes stack below md and sit side by side from md, as before", async () => {
+  renderApp();
+  await morphTo(1);
+  const { main, column, map } = panes();
+  expect(main).toHaveClass("flex-col", "md:flex-row");
+  expect(main).not.toHaveClass("flex-row");
+  expect(column).toHaveClass("order-2", "flex-1", "md:order-1", "md:flex-none", "md:w-1/2");
+  expect(map).toHaveClass("order-1", "h-[32dvh]", "md:order-2", "md:h-auto", "md:w-1/2");
+  Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
 });
 
 test("the desktop header keeps its wordmark and gains no back arrow", () => {

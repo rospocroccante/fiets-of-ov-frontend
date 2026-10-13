@@ -21,6 +21,7 @@
 
 import { sleep } from "../lib/chrome.mjs";
 import { PROBE, TRIP_SEED } from "../lib/measure.mjs";
+import { openSheetToHalf } from "../lib/sheet.mjs";
 
 const BAR = '[data-fov="filter-bar"]';
 const SCROLLER = '[data-fov="filter-scroller"]';
@@ -49,7 +50,10 @@ function pct(n) {
   return `${(n * 100).toFixed(1)}%`;
 }
 
-async function bootMap(ctx, { width, height, theme = "light", lang = "en", touch = true }) {
+// `reveal` is where the seeded trip is scrolled to before it is touched. The centre,
+// except on a short desktop window: there the home still scrolls under the floating
+// pill, and a row brought to the centre of a 390px screen is behind the pill's From field.
+async function bootMap(ctx, { width, height, theme = "light", lang = "en", touch = true, reveal = "center" }) {
   const page = await ctx.openPhone({ width, height, theme, lang, seed: TRIP_SEED, touch });
   await page.goto(ctx.url);
   await page.waitFor(`document.querySelector('${PILL}')`, { label: "the app to render its search pill" });
@@ -57,7 +61,9 @@ async function bootMap(ctx, { width, height, theme = "light", lang = "en", touch
   const row = await page.eval(`
     const b = [...document.querySelectorAll("button")].find((x) => x.textContent.includes("Zuidplein"));
     if (!b) return null;
-    window.__fov.reveal(b);
+    const y0 = window.scrollY;
+    b.scrollIntoView({ block: ${JSON.stringify(reveal)} });
+    window.scrollTo(0, y0);
     return window.__fov.rect(b);
   `);
   if (!row) throw new Error("the seeded recent trip is not on the home screen");
@@ -327,16 +333,17 @@ export const scenarios = [
                   `elementFromPoint(${r.x}, ${r.y}) = ${r.hit}`,
                 );
               }
-              // Every control that used to be on the bar is in here.
+              // Every control that used to be on the bar is in here, but the radar: that is
+              // a round button on the map now, seen without opening anything.
               const names = open.rows.map((r) => r.text.toLowerCase()).join("|");
               for (const [what, re] of [
                 ["the start picker", /(^|\|)start/],
                 ["the end picker", /end|einde/],
-                ["the radar", /radar/],
                 ["hide map", /hide map|verberg kaart/],
               ]) {
                 checks.ok(`${at}: the panel still offers ${what}`, re.test(names), `rows: ${names}`);
               }
+              checks.ok(`${at}: the radar is not in the panel`, !/radar/.test(names), `rows: ${names}`);
               // Google Maps never hides the map behind its own filters.
               checks.atMost(
                 `${at}: the panel leaves most of the map showing`,
@@ -367,21 +374,29 @@ export const scenarios = [
     // anchored under a 48px header on a 390px screen, with overflow: visible inside a
     // sticky box that clips at the viewport — 82 to 113px of it, including the whole
     // about block, simply gone.
+    //
+    // A phone has no header menu any more, in either orientation: its contents are the
+    // Profile tab. The menu is still what a wider screen gets, so the two screens it is
+    // measured on are the ones that still open it. Portrait is a 768x1024 tablet. The
+    // short screen is the same 844x390 as before with a mouse instead of a finger: a
+    // laptop window dragged short, which is not a phone and keeps the menu, under a
+    // header of the same 48px.
     name: "the header menu fits the screen it is opened on, portrait and landscape",
     async run(ctx) {
       const { checks } = ctx;
-      for (const [width, height] of [[390, 844], [844, 390]]) {
+      for (const [width, height, touch] of [[768, 1024, true], [844, 390, false]]) {
         for (const lang of LANGS) {
           for (const theme of THEMES) {
-            const at = `${width}x${height} ${lang} ${theme}`;
-            const page = await bootMap(ctx, { width, height, lang, theme });
+            const at = `${width}x${height} ${touch ? "touch" : "mouse"} ${lang} ${theme}`;
+            const page = await bootMap(ctx, { width, height, lang, theme, touch, reveal: touch ? "center" : "end" });
             try {
-              const trig = await page.eval(`const F = window.__fov; return F.rect(document.querySelector('nav button'));`);
-              await page.tap(trig.x + trig.w / 2, trig.y + trig.h / 2);
+              const trig = await page.eval(`const F = window.__fov; return F.rect(document.querySelector('header nav button'));`);
+              if (touch) await page.tap(trig.x + trig.w / 2, trig.y + trig.h / 2);
+              else await page.click(trig.x + trig.w / 2, trig.y + trig.h / 2);
               await sleep(260);
               const m = await page.eval(`
                 const F = window.__fov;
-                const panel = document.querySelector('nav > div');
+                const panel = document.querySelector('header nav > div');
                 if (!panel) return { open: false };
                 const cs = getComputedStyle(panel);
                 const rows = [...panel.querySelectorAll('button')].map((b) => {
@@ -410,7 +425,7 @@ export const scenarios = [
               // named. Scroll the panel to its end and read where that block lands.
               const tail = await page.eval(`
                 const F = window.__fov;
-                const panel = document.querySelector('nav > div');
+                const panel = document.querySelector('header nav > div');
                 panel.scrollTop = panel.scrollHeight;
                 const about = panel.lastElementChild;
                 const pr = panel.getBoundingClientRect(), ar = about.getBoundingClientRect();
@@ -442,12 +457,16 @@ export const scenarios = [
     // An open menu is the only thing on the screen. Before the trap, the seventh Tab
     // out of an open menu at 390x844 landed on the search pill's entry button behind
     // the panel — focus on a control the user could not see, under one they could.
-    name: "390x844 Tab stays inside the open header menu, and closing it gives focus back",
+    //
+    // A 390px phone has no header menu any more (its contents are the Profile tab), so
+    // the trap is measured on the narrowest portrait screen that still has one, a
+    // 768x1024 tablet, with the same twelve Tabs and the same tap on the scrim.
+    name: "768x1024 Tab stays inside the open header menu, and closing it gives focus back",
     async run(ctx) {
       const { checks } = ctx;
-      const page = await bootMap(ctx, { width: 390, height: 844, lang: "nl" });
+      const page = await bootMap(ctx, { width: 768, height: 1024, lang: "nl" });
       try {
-        const trig = await page.eval(`const F = window.__fov; return F.rect(document.querySelector('nav button'));`);
+        const trig = await page.eval(`const F = window.__fov; return F.rect(document.querySelector('header nav button'));`);
         await page.tap(trig.x + trig.w / 2, trig.y + trig.h / 2);
         await sleep(260);
         const stops = [];
@@ -461,7 +480,7 @@ export const scenarios = [
             const r = a.getBoundingClientRect();
             return {
               where: a.tagName + " \\"" + ((a.textContent || a.getAttribute("aria-label") || "").trim().slice(0, 22)) + "\\"",
-              inMenu: !!a.closest('nav'),
+              inMenu: !!a.closest('header nav'),
               onScreen: r.top >= 0 && r.bottom <= innerHeight && r.width > 0,
             };
           `));
@@ -483,8 +502,8 @@ export const scenarios = [
         await sleep(240);
         const after = await page.eval(`
           const a = document.activeElement;
-          const trigger = document.querySelector('nav button');
-          return { closed: !document.querySelector('nav > div'), onTrigger: a === trigger,
+          const trigger = document.querySelector('header nav button');
+          return { closed: !document.querySelector('header nav > div'), onTrigger: a === trigger,
                    where: a ? a.tagName + " \\"" + (a.textContent || "").trim().slice(0, 22) + "\\"" : "none" };
         `);
         checks.ok("a tap outside closes the menu", after.closed, after.closed ? "closed" : "still open");
@@ -531,17 +550,27 @@ export const scenarios = [
           return true;
         `;
         await page.eval(specified);
+        // This is a portrait phone, whose map runs to the top of the screen under the
+        // status bar: the stage has no headroom to ask for, and the inset is asked for by
+        // what floats over the map instead, the round back button that is all that is
+        // left of the header and the row of filter chips.
         const boxes = [
-          ["the map stage's headroom", STAGE, "padding-top", "safe-area-inset-top", "132px"],
           ["the map stage's left edge", STAGE, "padding-left", "safe-area-inset-left", "0px"],
           ["the map stage's right edge", STAGE, "padding-right", "safe-area-inset-right", "0px"],
-          ["the header's height", "header", "height", "safe-area-inset-top", "56px"],
-          ["the header's left edge", "header", "padding-left", "safe-area-inset-left", "16px"],
-          ["the header's right edge", "header", "padding-right", "safe-area-inset-right", "16px"],
+          ["the back button's top", "header", "top", "safe-area-inset-top", "8px"],
+          ["the back button's left edge", "header", "left", "safe-area-inset-left", "12px"],
+          ["the chip row's top", '[data-fov="map-chrome"]', "top", "safe-area-inset-top", "64px"],
+          ["the chip row's left edge", '[data-fov="map-chrome"]', "padding-left", "safe-area-inset-left", "12px"],
+          ["the chip row's right edge", '[data-fov="map-chrome"]', "padding-right", "safe-area-inset-right", "12px"],
           ["the search pill's resting top", PILL, "top", "safe-area-inset-top", "0px"],
           ["the search pill's left edge", PILL, "left", "safe-area-inset-left", "12px"],
           ["the search pill's right edge", PILL, "right", "safe-area-inset-right", "12px"],
-          ["the content's bottom", "#fov-map-main", "padding-bottom", "safe-area-inset-bottom", "16px"],
+          // On a portrait phone the results are a sheet over a full-screen map, and the
+          // bottom inset is the sheet content's: the map runs to the edge under it.
+          ["the content's bottom", '[data-fov="sheet-content"]', "padding-bottom", "safe-area-inset-bottom", "16px"],
+          ["the tab bar's bottom", '[data-fov="tab-bar"]', "padding-bottom", "safe-area-inset-bottom", "0px"],
+          ["the tab bar's left edge", '[data-fov="tab-bar"]', "padding-left", "safe-area-inset-left", "0px"],
+          ["the tab bar's right edge", '[data-fov="tab-bar"]', "padding-right", "safe-area-inset-right", "0px"],
           ["the home stage's top", HOME, "padding-top", "safe-area-inset-top", "0px"],
           ["the home stage's bottom", HOME, "padding-bottom", "safe-area-inset-bottom", "0px"],
         ];
@@ -566,18 +595,28 @@ export const scenarios = [
             `specified ${JSON.stringify(m.spec)}`,
           );
         }
+        // The stage asks for no top inset at all: its map is meant to be under the bar.
+        const stagePad = await page.eval(`return getComputedStyle(document.querySelector('${STAGE}')).paddingTop;`);
+        checks.equal("the map stage has no headroom: its map runs under the status bar", stagePad, "0px");
         // And the inset-0 layout is the one the rest of this suite measures: the pill
-        // still rests clear of the header, and the bar still starts clear of the pill.
+        // rests on the back button's row, clear of it, and the bar starts clear of the pill.
         const stack = await page.eval(`
           const F = window.__fov;
-          return { header: F.rect(document.querySelector('header')), pill: F.rect(document.querySelector('${PILL}')),
+          return { back: F.rect(document.querySelector('[data-fov="map-back"]')), pill: F.rect(document.querySelector('${PILL}')),
                    chip: F.rect(document.querySelector('${SCROLLER} button')) };
         `);
-        checks.atLeast(
-          "the pill rests below the header",
+        checks.near(
+          "the pill rests on the back button's row",
           stack.pill.top,
-          stack.header.bottom,
-          `pill top ${round(stack.pill.top)}, header bottom ${round(stack.header.bottom)}`,
+          stack.back.top,
+          0.5,
+          `pill top ${round(stack.pill.top)}, back button top ${round(stack.back.top)}`,
+        );
+        checks.atLeast(
+          "and clear of it",
+          stack.pill.left,
+          stack.back.right,
+          `pill from x ${round(stack.pill.left)}, back button ends ${round(stack.back.right)}`,
         );
         checks.atLeast(
           "the filter bar's first chip starts below the pill",
@@ -638,13 +677,17 @@ export const scenarios = [
           `);
           checks.atLeast(`${lang}: the mode filters are still on the bar`, more.chips.length, 3, more.chips.map((c) => c.text).join(", "));
           checks.ok(`${lang}: the map's tools are one tap away`, more.more != null, more.more ? "trailing control present" : `no ${MORE}`);
-          // The pill shares the header bar here, so it must not run into either of the
-          // header's own controls.
+          // The pill shares the header bar here, so it must not run into the wordmark on
+          // its left or past the bar's own right edge. The menu that used to sit at that
+          // end is the Profile tab on a phone now.
           const clear = await page.eval(`
             const F = window.__fov;
-            const wordmark = [...document.querySelectorAll('header button')].find((b) => b.textContent.includes("Fiets of OV"));
-            const menu = document.querySelector('header nav button');
-            return { wordmark: F.rect(wordmark), menu: F.rect(menu), pill: F.rect(document.querySelector('${PILL}')) };
+            const header = document.querySelector('header');
+            const wordmark = [...header.querySelectorAll('button')].find((b) => b.textContent.includes("Fiets of OV"));
+            const r = header.getBoundingClientRect();
+            return { wordmark: F.rect(wordmark), pill: F.rect(document.querySelector('${PILL}')),
+                     menu: !!header.querySelector('nav'),
+                     barEnd: +(r.right - parseFloat(getComputedStyle(header).paddingRight)).toFixed(2) };
           `);
           checks.atLeast(
             `${lang}: the pill clears the wordmark`,
@@ -652,11 +695,12 @@ export const scenarios = [
             4,
             `wordmark ends ${round(clear.wordmark.right)}, pill starts ${round(clear.pill.left)}`,
           );
+          checks.ok(`${lang}: the phone header carries no menu`, !clear.menu, clear.menu ? "a nav in the header" : "none");
           checks.atLeast(
-            `${lang}: the pill clears the menu button`,
-            clear.menu.left - clear.pill.right,
+            `${lang}: the pill ends inside the bar's right edge`,
+            clear.barEnd - clear.pill.right,
             4,
-            `pill ends ${round(clear.pill.right)}, menu starts ${round(clear.menu.left)}`,
+            `pill ends ${round(clear.pill.right)}, the bar's content ends ${round(clear.barEnd)}`,
           );
           checks.atMost(
             `${lang}: and it stays inside the header bar`,
@@ -919,10 +963,14 @@ scenarios.push(
     // them, and not a box drawn over the map somewhere near them. The gap between it
     // and the zoom bar comes from Leaflet's own stylesheet, so it is read rather than
     // stated.
-    name: "phones the reset-view button is a third control under the zoom column",
+    //
+    // On a phone on its side, the one phone layout that still has a zoom column. A
+    // portrait phone zooms by pinch and floats the button bottom-right instead (the
+    // scenario after this one).
+    name: "844x390 the reset-view button is a third control under the zoom column",
     async run(ctx) {
       const { checks } = ctx;
-      for (const { width, height } of PHONES) {
+      for (const { width, height } of [{ width: 844, height: 390 }]) {
         const at = `${width}x${height}`;
         const page = await bootMap(ctx, { width, height });
         try {
@@ -995,6 +1043,75 @@ scenarios.push(
             checks.equal(`${at}: and still does not overlap the minus`, round(overlapH * overlapW), 0,
               `minus ${round(after.zoomOut.top)}..${round(after.zoomOut.bottom)}, button ${round(after.reset.top)}..${round(after.reset.bottom)}`);
           }
+        } finally {
+          await page.close();
+        }
+      }
+    },
+  },
+
+  {
+    // A portrait phone has no + and -, so the way back to the trip is a round button of
+    // its own at the foot of the map's bottom-right column, lifted with that column above
+    // the results sheet. It has to be reachable there, clear of the chips it shares the
+    // column with, and gone under the chrome rather than drawn over the pill when a full
+    // sheet lifts the column that far.
+    name: "portrait phones the reset-view button floats bottom-right, above the sheet",
+    async run(ctx) {
+      const { checks } = ctx;
+      for (const { width, height } of PHONES) {
+        const at = `${width}x${height}`;
+        const page = await bootMap(ctx, { width, height });
+        try {
+          const read = `
+            const F = window.__fov;
+            const b = document.querySelector('${RESET}');
+            if (!b) return null;
+            const sheet = document.querySelector('[data-fov="results-sheet"]');
+            const others = [...b.parentElement.children].filter((c) => c !== b).map((c) => F.rect(c));
+            return {
+              ...F.shown(b), ...F.rect(b), visible: F.visible(b),
+              pointerEvents: getComputedStyle(b).pointerEvents,
+              inCorner: !!b.closest('.leaflet-control-container'),
+              zoom: !!document.querySelector('.leaflet-control-zoom'),
+              sheetTop: sheet.getBoundingClientRect().top, detent: sheet.getAttribute("data-detent"),
+              chrome: F.rect(document.querySelector('[data-fov="map-chrome"]')),
+              others, iw: innerWidth, ih: innerHeight,
+            };
+          `;
+          const m = await page.eval(read);
+          checks.ok(`${at}: the map offers a way back to the default view`, m != null, m ? "found" : `no ${RESET}`);
+          if (!m) continue;
+          checks.ok(`${at}: there are no zoom buttons for it to sit under`, !m.zoom, m.zoom ? "a zoom control is drawn" : "none");
+          checks.ok(`${at}: it is not in a Leaflet corner`, !m.inCorner, m.inCorner ? "inside one" : "outside");
+          checks.ok(`${at}: it is painted and a finger at its centre reaches it`, m.painted,
+            `${round(m.w)}x${round(m.h)}, opacity ${m.opacity}, elementFromPoint(${m.x}, ${m.y}) = ${m.hit}`);
+          checks.equal(`${at}: and it takes the touch`, m.pointerEvents, "auto");
+          checks.atLeast(`${at}: it is 44px tall`, m.h, 44, `${round(m.h)}px`);
+          checks.atLeast(`${at}: it is 44px wide`, m.w, 44, `${round(m.w)}px`);
+          checks.near(`${at}: it sits at the right edge`, m.right, m.iw - 12, 0.5, `button ends at x ${round(m.right)}`);
+          checks.atMost(`${at}: above the sheet`, m.bottom, m.sheetTop,
+            `button ends ${round(m.bottom)}, the ${m.detent} sheet starts ${round(m.sheetTop)}`);
+          for (const o of m.others) {
+            const overlapH = Math.max(0, Math.min(o.bottom, m.bottom) - Math.max(o.top, m.top));
+            const overlapW = Math.max(0, Math.min(o.right, m.right) - Math.max(o.left, m.left));
+            checks.equal(`${at}: clear of the chip above it in the column`, round(overlapH * overlapW), 0,
+              `chip ${round(o.top)}..${round(o.bottom)}, button ${round(m.top)}..${round(m.bottom)}`);
+          }
+
+          // A full sheet lifts the column by its own height, which is past the chips. The
+          // sheet lands collapsed, so it takes two touches on the handle: half, then full.
+          await openSheetToHalf(page);
+          const handle = await page.eval(`return window.__fov.rect(document.querySelector('[data-fov="sheet-handle"]'));`);
+          await page.tap(handle.x + handle.w / 2, handle.y + handle.h / 2);
+          await page.waitFor(`document.querySelector('[data-fov="results-sheet"][data-detent="full"]')`, { label: "the sheet at full" });
+          await sleep(900);
+          const full = await page.eval(read);
+          checks.ok(
+            `${at}: with the sheet at full it is clipped under the chips, not drawn over the pill`,
+            full.visible.h === 0 && !full.painted,
+            `visible ${full.visible.h}px of it, chips end ${round(full.chrome.bottom)}, elementFromPoint(${full.x}, ${full.y}) = ${full.hit}`,
+          );
         } finally {
           await page.close();
         }
