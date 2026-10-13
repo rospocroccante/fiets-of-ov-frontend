@@ -401,6 +401,10 @@ the first line of the content was a copy. `App` passes `chosenInHeader` to
 `ResultsPanel` on this layout, and the chosen row (`AdviceCard` with `titled` off) starts
 at its leg bar: the bar, the four figures, then the departure line and the folded steps.
 It is still the pressed option button, and during a ride it is disabled with the others.
+Its accessible name opens as a whole row's does, with the title, the Best tag and the
+minutes in that order, from one visually hidden string (`option-name`): a screen reader
+meets the row away from the header, and without it the name started at the route ("Bike
+24 min") and never said which option or how long.
 The other options keep their whole row. Choosing one makes it the chosen option: the
 header names it, its row drops the title line, and the row it replaced gets its own
 back. The results column beside the map, on a desktop and on a phone on its side, has no

@@ -219,6 +219,15 @@ export function AdviceCard({
           </span>
         </span>
       )}
+      {/* Without its title line the row is still read on its own, away from the header
+          that draws the title, so its accessible name opens as a whole row's does: the
+          title, the Best tag and the minutes, in that order, then the route. One string,
+          for a screen reader only. */}
+      {!titled && (
+        <span data-fov="option-name" className="sr-only">
+          {[option.title, option.recommended ? t("best") : null, `${option.minutes} min`].filter(Boolean).join(" ")}
+        </span>
+      )}
       <LegBar legs={option.itinerary.legs} first={!titled} />
       {/* The route in words. Where the bar draws it, this is for a screen reader only;
           an itinerary with no legs to draw keeps it on screen. */}

@@ -203,6 +203,41 @@ test("at half the chosen option's title is in the header alone, and the content 
   expect(within(other).getByText("29 min")).toBeInTheDocument();
 });
 
+// The chosen row draws no title line on this layout, but a screen reader meets the row on
+// its own, away from the header. Its accessible name says what every other row's does,
+// in the same order: the option's title, its Best tag and its minutes, then the route.
+// Without them it read "Bike 24 min ..." and never named the option or its time.
+test.each([
+  ["en", "By bike", "Best"],
+  ["nl", "Met de fiets", "Beste"],
+])("in %s the chosen row's accessible name starts with its title, Best and minutes, as a whole row's does", async (lang, title, best) => {
+  window.localStorage.setItem("fov.lang.v1", lang);
+  phoneLayout();
+  renderApp();
+  fireEvent.click(screen.getByRole("button", { name: "Amsterdam Centraal → Vondelpark" }));
+  await morphTo(1);
+  await waitFor(() => expect(within(summary()).getByText(title)).toBeInTheDocument());
+  fireEvent.click(within(summary()).getByText(title));
+  // The region's name is translated; the sheet is found by its hook.
+  const opened = () => document.querySelector('[data-fov="results-sheet"]') as HTMLElement;
+  await waitFor(() => expect(opened()).toHaveAttribute("data-detent", "half"));
+
+  const chosen = content().querySelector('[data-fov="option"][data-selected="true"] [data-fov="option-button"]') as HTMLElement;
+  // Still the compact row: no title line drawn.
+  expect(chosen.querySelector('[data-fov="option-title"]')).toBeNull();
+  const escape = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const head = new RegExp(`^${escape(title)}\\s*${best}\\s*24 min\\b`);
+  expect(within(content()).getByRole("button", { pressed: true, name: head })).toBe(chosen);
+  // Drawn once on the sheet, in the header: what the row adds for a screen reader is not
+  // painted.
+  expect(within(opened()).getAllByText(title)).toHaveLength(1);
+
+  // The same order as a whole row: choose the other option and the bike row, whole
+  // again, answers to the same opening.
+  fireEvent.click(content().querySelector('[data-fov="option"][data-selected="false"] [data-fov="option-button"]') as HTMLElement);
+  await waitFor(() => expect(within(content()).getByRole("button", { pressed: false, name: head })).toBeInTheDocument());
+});
+
 test("a row chosen in the opened sheet loses its title row to the header, and the one it replaced gets its own back", async () => {
   phoneLayout();
   renderApp();
