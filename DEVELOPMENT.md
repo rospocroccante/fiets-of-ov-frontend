@@ -681,14 +681,22 @@ rather than blue. Primary text measures 15.63:1 on `night.bg` (AAA) and 9.72:1 o
 **The accent is NS geel** (`#FFC917`, the same hex as `ams.ns`), used the way ns.nl
 uses it: details, never surfaces. Icon and link text, the small filled controls
 (filter pills, "Vai", badges, the rain card's tag: geel ground, navy type, the signage
-pairing), the selected-card ring, and the headline accent line of the slogan. It holds
-6.79:1 as text on `hover`, the lightest surface it lands on, and 10.92:1 under
-`night.bg` text when it is the fill. The primary Search action is the one deliberate
+pairing), the selected-card ring, and the second line of the home's headline ("Let the
+weather decide."). It holds 6.79:1 as text on `hover`, the lightest surface it lands on,
+and 10.92:1 under `night.bg` text when it is the fill. The primary Search action is the one deliberate
 exception: it stays white (`from-white to-brand-light`, navy text) so the single
 biggest control reads as light, not gold. In the backdrop geel is one faint lamp glow
 in the night aurora (12% opacity), next to an amber and an orange one.
 `theme.night.test.ts` pins the accent's contrast floors and fails any
 `dark:*-emerald/lime/green-*` class a component reintroduces.
+
+**The headline's second line is one solid colour**, `text-brand` by day and
+`night.accent` at night. It used to be a gradient clipped to the text (sky blue into
+the brand navy, `accent-soft` into `accent` at night); the colour that moves is the
+aurora behind it. Sampled at 390x844 with the headline hidden, every 0.5s over 64s of
+drift, the darkest pixel under the line by day is luminance 0.46, where the brand navy
+measures 4.6:1, and the brightest at night is 0.047, where geel measures 7.0:1. The line
+is 36px bold, so its floor is 3:1.
 
 **Retuning** is one line per token. Move the hue on all surface steps together, or nudge
 one step's lightness. Two things have to follow:

@@ -15,7 +15,7 @@ import { NavigationOverlay } from "./components/NavigationOverlay";
 import { PlaceInfoCard } from "./components/PlaceInfoCard";
 import type { PlaceInfo } from "./components/PlaceInfoCard";
 import { WeatherStrip } from "./components/WeatherStrip";
-import { CARD_ACCENTS, PRIMARY_GRADIENT, TEXT_GRADIENT } from "./lib/gradients";
+import { CARD_ACCENTS, PRIMARY_GRADIENT } from "./lib/gradients";
 import { ResultsPanel, type PanelState } from "./components/ResultsPanel";
 import { ResultsSheet } from "./components/ResultsSheet";
 import { SheetSummary } from "./components/SheetSummary";
@@ -1384,7 +1384,9 @@ export default function App() {
               <h1 className="text-4xl font-bold leading-tight text-gray-900 dark:text-night-text sm:text-5xl">
                 {t("headlineTop")}
                 <br />
-                <span className={TEXT_GRADIENT}>{t("headlineBottom")}</span>
+                {/* One solid colour, the brand navy by day and NS geel at night. The
+                    colour that moves is the aurora behind it. */}
+                <span className="text-brand dark:text-night-accent">{t("headlineBottom")}</span>
               </h1>
               <p className="mx-auto mt-5 max-w-2xl text-base text-gray-600 dark:text-night-muted sm:text-lg">
                 {t("subtitle")}

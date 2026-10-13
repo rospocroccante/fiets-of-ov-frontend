@@ -35,6 +35,17 @@ test("home content is present at rest: headline and Popular trips", () => {
   expect(screen.getByText(/popular trips/i)).toBeInTheDocument();
 });
 
+// The slogan's second line is one solid colour: the brand navy by day, NS geel at
+// night. It was a sky-into-navy gradient clipped to the text; the colour stays in the
+// aurora behind it.
+test("the headline's second line is a solid brand colour, with no gradient", () => {
+  renderApp();
+  const line = screen.getByText("Let the weather decide.");
+  expect(line.closest("h1")).toBe(screen.getByRole("heading", { level: 1 }));
+  expect(line).toHaveClass("text-brand", "dark:text-night-accent");
+  expect(line.className).not.toMatch(/gradient|bg-clip-text|text-transparent|from-|to-/);
+});
+
 // Each popular trip is a metro line: a track in the trip's own line colour between two
 // stations, from named on the left and to on the right. No card, no ring, no hover
 // lift, and none of the dot, fading rule and chequered flag the cards were decorated
