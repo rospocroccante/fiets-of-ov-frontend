@@ -373,30 +373,80 @@ test("on desktop the results column is unchanged: no sheet, no summary, the Star
   expect(within(column).getByRole("button", { name: "Start navigation" })).toBeInTheDocument();
 });
 
-test("the mock badge sits on the map just above the settled sheet, clear of its Start", async () => {
+// The mock badge sits where nothing is under it, in every phone layout. On the home it
+// is at the top centre, in the hero's headroom, which does not scroll. On a portrait
+// phone's map stage it sits on the map 8px above the settled sheet, clear of the
+// summary's Start. A full sheet hides the map and the badge goes with it, as the radar
+// button does: there it would sit on the handle.
+test("the mock badge sits where nothing is under it: the home's top, above the sheet, away at full", async () => {
   phoneLayout();
   renderApp();
-  const badge = document.querySelector('[data-fov="mock-badge"]') as HTMLElement;
-  // On the home, with the tab bar up, it sits over the bar's top edge as before.
-  expect(badge).toHaveClass("bottom-[calc(4.25rem+env(safe-area-inset-bottom))]", "z-[1850]");
-  expect(badge.style.bottom).toBe("");
+  const badge = () => document.querySelector('[data-fov="mock-badge"]') as HTMLElement;
+  expect(document.querySelectorAll('[data-fov="mock-badge"]')).toHaveLength(1);
+  // On the home it used to sit over the tab bar's top edge, over the scroller's rows.
+  expect(badge()).toHaveClass("fixed", "top-[calc(0.75rem+env(safe-area-inset-top))]", "left-1/2", "-translate-x-1/2", "z-[1850]");
+  expect(badge().className).not.toMatch(/(^|\s)bottom-/);
+  expect(badge().style.bottom).toBe("");
 
   await planVondelpark();
   // The collapsed sheet is its 160px header (jsdom has no safe area), and the badge sits
   // 8px above it, on the left: in the corner it used to cover the summary's Start.
-  await waitFor(() => expect(badge.style.bottom).toBe("168px"));
-  expect(badge).toHaveClass("left-[calc(0.75rem+env(safe-area-inset-left))]", "z-[1850]");
-  expect(badge.className).not.toMatch(/(^|\s)bottom-\[/);
+  await waitFor(() => expect(badge().style.bottom).toBe("168px"));
+  expect(badge()).toHaveClass("left-[calc(0.75rem+env(safe-area-inset-left))]", "z-[1850]");
+  expect(badge().className).not.toMatch(/(^|\s)(top|bottom)-\[/);
+  expect(badge()).not.toHaveClass("invisible");
 
   // It follows the sheet when the sheet settles somewhere else: half is half the window.
   fireEvent.click(within(summary()).getByText("By bike"));
   const half = Math.round(window.innerHeight / 2);
-  await waitFor(() => expect(badge.style.bottom).toBe(`${half + 8}px`));
+  await waitFor(() => expect(badge().style.bottom).toBe(`${half + 8}px`));
 
-  // Back on the home the tab bar returns, and so does the badge's place over it.
+  // At full it goes, and it is back when the sheet comes down.
+  fireEvent.click(screen.getByRole("button", { name: "Expand results" }));
+  await waitFor(() => expect(sheet()).toHaveAttribute("data-detent", "full"));
+  expect(badge()).toHaveClass("invisible");
+  fireEvent.click(screen.getByRole("button", { name: "Collapse results" }));
+  await waitFor(() => expect(sheet()).toHaveAttribute("data-detent", "peek"));
+  expect(badge()).not.toHaveClass("invisible");
+
+  // Back on the home, the top centre again.
   await morphTo(0);
+  expect(badge().style.bottom).toBe("");
+  expect(badge()).toHaveClass("top-[calc(0.75rem+env(safe-area-inset-top))]", "left-1/2");
+});
+
+// The Saved and Profile screens scroll under anything fixed, and their titles leave no
+// room that holds in every language ("Bewaard" at 320px reaches the screen's middle).
+// They show only what is on the device, nothing the mock planner or geocoder answered,
+// so the badge has nothing to say there and steps away until the tab bar's Plan.
+test("on a tab screen the mock badge steps away", () => {
+  renderApp();
+  const badge = () => document.querySelector('[data-fov="mock-badge"]') as HTMLElement;
+  const bar = () => within(document.querySelector('[data-fov="tab-bar"]') as HTMLElement);
+  for (const tab of ["Saved", "Profile"]) {
+    fireEvent.click(bar().getByRole("button", { name: tab }));
+    expect(document.querySelectorAll('[data-fov="mock-badge"]')).toHaveLength(1);
+    expect(badge()).toHaveClass("invisible");
+  }
+  fireEvent.click(bar().getByRole("button", { name: "Plan" }));
+  expect(badge()).not.toHaveClass("invisible");
+  expect(badge()).toHaveClass("top-[calc(0.75rem+env(safe-area-inset-top))]", "left-1/2");
+});
+
+// On a phone on its side the badge sat in the bottom-left corner, over the results
+// column's option rows. The header's right end is empty on a phone (the menu is the
+// Profile tab there), so the badge sits in it, centred on the 56px bar.
+test("on a phone on its side the mock badge sits in the header's empty right end", async () => {
+  restore.push(phoneViewport({ landscape: true }));
+  renderApp();
+  fireEvent.click(screen.getByRole("button", { name: "Amsterdam Centraal → Vondelpark" }));
+  await morphTo(1);
+  await waitFor(() => expect(document.querySelectorAll('[data-fov="option"]').length).toBeGreaterThan(0));
+  expect(sheet()).toBeNull();
+  const badge = document.querySelector('[data-fov="mock-badge"]') as HTMLElement;
+  expect(badge).toHaveClass("fixed", "top-[calc(1rem+env(safe-area-inset-top))]", "right-[calc(1rem+env(safe-area-inset-right))]", "z-[1850]");
+  expect(badge.className).not.toMatch(/(^|\s)(bottom|left)-/);
   expect(badge.style.bottom).toBe("");
-  expect(badge).toHaveClass("bottom-[calc(4.25rem+env(safe-area-inset-bottom))]");
 });
 
 test("on desktop the mock badge keeps its corner", async () => {

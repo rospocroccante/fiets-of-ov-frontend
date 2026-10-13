@@ -2008,7 +2008,8 @@ export const scenarios = [
   })),
 
   // In mock mode the badge sat in the bottom-left corner, over the collapsed sheet's Start.
-  // It now sits on the map 8px above the sheet's settled top.
+  // It now sits on the map 8px above the sheet's settled top, and a full sheet takes it
+  // away with the map.
   {
     name: "390x844 the mock badge stays off the collapsed sheet's Start",
     async run(ctx) {
@@ -2047,20 +2048,109 @@ export const scenarios = [
         checks.near("the badge sits 8px above the sheet's top", peek.sheetTop - peek.badge.bottom, 8, 1, `badge ends ${peek.badge.bottom}, sheet starts ${peek.sheetTop}`);
         checks.near("on the left", peek.badge.left, 12, 0.5, `badge from x ${peek.badge.left}`);
 
-        // At full the sheet reaches the chips' line, and the badge keeps off both.
+        // At full the sheet reaches the chips' line and the map is gone. Up there the badge
+        // sat on the handle, a full-width button, so it goes with the map, as the radar
+        // button does.
         await tapOn(page, HANDLE, "sheet handle");
         await sheetAt(page, "half");
         await tapOn(page, HANDLE, "sheet handle");
         await sheetAt(page, "full");
         await sleep(300);
-        const full = await page.eval(READ_BADGE);
-        checks.atLeast("at full the badge stays under the chips", full.badge.top, full.chipBottom, `badge from ${full.badge.top}, chips end ${full.chipBottom}`);
-        for (const c of full.controls) {
-          checks.ok(`and off the summary's "${c.text}"`, !overlaps(full.badge, c), `badge ${span(full.badge)}, control ${span(c)}`);
-        }
+        const full = await page.eval(`const b = document.querySelector('[data-fov="mock-badge"]');
+          return { visibility: getComputedStyle(b).visibility, handle: window.__fov.rect(document.querySelector('${HANDLE}')) };`);
+        checks.equal("at full the badge is away", full.visibility, "hidden", `handle ${span(full.handle)}`);
       } finally {
         await page.close();
       }
     },
   },
+
+  // The badge sits where nothing is under it, in every phone layout: on the home's top
+  // centre, on the map 8px above a portrait sheet, in the header's right end on a phone on
+  // its side; away on a full sheet and on the Saved and Profile screens. For each layout
+  // a 2px grid of touches inside the badge's box (it takes none, so they land on what is
+  // under it) must reach no control, and no painted text run may meet its box. Leaflet's
+  // container is the map the badge sits on, not a control; a marker or a zoom button on it
+  // would still count.
+  ...[
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+  ].map(({ width, height }) => ({
+    name: `${width}x${height} the mock badge covers no control and no text`,
+    async run(ctx) {
+      const { checks } = ctx;
+      const portrait = height > width;
+      const page = await bootPhone(ctx, { width, height });
+      const COVER = `
+        const badge = document.querySelector('[data-fov="mock-badge"]');
+        if (!badge.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return { away: true };
+        const b = badge.getBoundingClientRect();
+        const CONTROL = 'button, a[href], input, select, textarea, summary, [role="button"], [tabindex]:not([tabindex="-1"])';
+        const controls = new Set();
+        for (let y = Math.ceil(b.top); y < b.bottom; y += 2) for (let x = Math.ceil(b.left); x < b.right; x += 2) {
+          const at = document.elementFromPoint(x, y);
+          const c = at && at.closest(CONTROL);
+          if (c && !c.classList.contains("leaflet-container")) controls.add((c.getAttribute("aria-label") || c.textContent).trim().slice(0, 30));
+        }
+        const texts = [];
+        const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+          if (!n.textContent.trim() || badge.contains(n)) continue;
+          const el = n.parentElement;
+          if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+          const range = document.createRange();
+          range.selectNodeContents(n);
+          for (const r of range.getClientRects()) {
+            const l = Math.max(r.left, b.left), t = Math.max(r.top, b.top), rr = Math.min(r.right, b.right), bb = Math.min(r.bottom, b.bottom);
+            if (rr - l < 1 || bb - t < 1) continue;
+            const at = document.elementFromPoint((l + rr) / 2, (t + bb) / 2);
+            if (at && (at === el || el.contains(at) || at.contains(el))) texts.push(n.textContent.trim().slice(0, 30));
+          }
+        }
+        return { box: [b.left, b.top, b.right, b.bottom].map(Math.round).join(","), controls: [...controls], texts };
+      `;
+      const judge = async (where, expectAway = false) => {
+        await sleep(300);
+        const m = await page.eval(COVER);
+        if (expectAway) {
+          checks.ok(`${where}: the badge is away`, m.away, m.away ? "" : `badge at ${m.box}`);
+          return;
+        }
+        checks.ok(`${where}: the badge is on the screen`, !m.away);
+        if (m.away) return;
+        checks.equal(`${where}: no control under the badge`, m.controls.join(" | "), "", `badge at ${m.box}`);
+        checks.equal(`${where}: no text under the badge`, m.texts.join(" | "), "", `badge at ${m.box}`);
+      };
+      try {
+        await judge("home");
+        await page.eval(`const s = document.querySelector('${SCROLLER}'); s.scrollTop = s.scrollHeight; return 1;`);
+        await judge("home, scrolled to its end");
+        await page.eval(`const s = document.querySelector('${SCROLLER}'); s.scrollTop = 0; return 1;`);
+        await tapOn(page, '[data-fov="tab-saved"]', "Saved tab");
+        await page.waitFor(screenShown(SAVED), { label: "the Saved screen" });
+        await judge("Saved", true);
+        await tapOn(page, '[data-fov="tab-plan"]', "Plan tab");
+        await page.waitFor(`getComputedStyle(document.querySelector('${SAVED}')).visibility === "hidden"`, { label: "Saved to close" });
+        if (portrait) {
+          await planCollapsed(page);
+          await judge("map stage, sheet at peek");
+          await tapOn(page, HANDLE, "sheet handle");
+          await sheetAt(page, "half");
+          await judge("map stage, sheet at half");
+          await tapOn(page, HANDLE, "sheet handle");
+          await sheetAt(page, "full");
+          await judge("map stage, sheet at full", true);
+        } else {
+          await tapHomeRow(page, "Zuidplein");
+          await page.waitFor(`document.querySelectorAll('${OPTION}').length >= 3`, { label: "three travel options" });
+          await page.waitFor(`Math.round(window.scrollY) === innerHeight`, { label: "the morph to reach the map stage" });
+          await judge("map stage");
+          await page.eval(`const c = document.querySelector('[data-fov="results-column"]'); c.scrollTop = c.scrollHeight; return 1;`);
+          await judge("map stage, results scrolled to their end");
+        }
+      } finally {
+        await page.close();
+      }
+    },
+  })),
 ];

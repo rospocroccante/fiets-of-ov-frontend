@@ -485,13 +485,28 @@ an option row reads its title with `titleOf` from the probe in
 `browser-tests/lib/measure.mjs`: the row's own title, or for the chosen row on this
 layout the summary header's.
 
-In mock mode the badge used to sit in the bottom-left corner of the map stage, over the
-collapsed sheet's Start. While the sheet is on screen and the tab bar is away, it now sits
-on the map on the left, 8px above the sheet's settled top: `sheetInset + 8` from the foot
-of the screen, 647 to 671px down at 390x844 with the sheet at peek. A sheet too high to
-leave it room under the chips (full) stops it 8px under `topInset`, in the empty left end
-of the handle row. On the home it keeps its place over the tab bar, and everywhere else
-its corner.
+In mock mode a "mock" badge (`MockBadge`) marks the screen. Where it sits depends on the
+layout (`badgeSpot` in `App.tsx`), and in each one nothing is under it:
+
+- On a phone's home, the top centre, 12px under the safe area, in the hero's headroom,
+  which does not scroll. Over the tab bar's top edge, where it used to be, the home's
+  rows and chips scrolled under it.
+- On a portrait phone's map stage, on the map on the left, 8px above the sheet's settled
+  top: `sheetInset + 8` from the foot of the screen, 647 to 671px down at 390x844 with
+  the sheet at peek. In the bottom-left corner it covered the collapsed sheet's Start.
+- At full the map is hidden and the badge goes with it, as the radar button does. Under
+  the chips it sat on the handle, a full-width button.
+- On a phone on its side, in the header's right end, which is empty on a phone, centred
+  on the 56px bar: 773 to 828px across and 16 to 40px down at 844x390. In the corner it
+  covered the results column's option rows and its credit links.
+- On the Saved and Profile screens it is away. They scroll under anything fixed, the room
+  beside their titles does not hold in every language ("Bewaard" at 320px reaches the
+  middle), and nothing on them comes from the mock planner.
+- A desktop keeps the bottom-left corner.
+
+The browser suite's "mock badge covers no control and no text" scenario checks the home,
+Saved and the map stage at 390x844 and 844x390: a 2px grid of `elementFromPoint` touches
+inside the badge's box reaches no control, and no painted text run meets the box.
 
 #### The rain radar
 

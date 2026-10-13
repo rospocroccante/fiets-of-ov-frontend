@@ -12,6 +12,7 @@ import { AdviceAttribution } from "./components/Attribution";
 import { PrivacyNotice } from "./components/PrivacyNotice";
 import { ProfileScreen } from "./components/ProfileScreen";
 import { NavigationOverlay } from "./components/NavigationOverlay";
+import { MockBadge } from "./components/MockBadge";
 import { PlaceInfoCard } from "./components/PlaceInfoCard";
 import type { PlaceInfo } from "./components/PlaceInfoCard";
 import { WeatherStrip } from "./components/WeatherStrip";
@@ -85,6 +86,15 @@ const HOME_FADED_AT = 0.5;
 // The mock badge's height (text-xs and 4px of padding top and bottom), for placing it over
 // a portrait phone's results sheet.
 const MOCK_BADGE_PX = 24;
+
+// The badge's box in each of the places App puts it (badgeSpot, in App).
+const MOCK_BADGE_PLACE = {
+  corner: "fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))]",
+  home: "fixed left-1/2 top-[calc(0.75rem+env(safe-area-inset-top))] z-[1850] -translate-x-1/2",
+  header: "fixed right-[calc(1rem+env(safe-area-inset-right))] top-[calc(1rem+env(safe-area-inset-top))] z-[1850]",
+  sheet: "fixed left-[calc(0.75rem+env(safe-area-inset-left))] z-[1850]",
+  away: "fixed invisible left-[calc(0.75rem+env(safe-area-inset-left))] z-[1850]",
+} as const;
 
 // Phone geometry, in one place. The floating pill is not part of the home's flow (it
 // belongs to the morph, not to either stage), so the home has to leave it a hole: the
@@ -882,14 +892,39 @@ export default function App() {
   // where it was left. Navigation is the one case where the bar is away with the home on
   // screen (the back arrow leaves navigation running), and there the box runs to the foot.
   const homeClearsTabBar = !navigating;
-  // The mock badge over a portrait phone's results sheet, as a distance from the foot of
-  // the screen (see the badge below). Null wherever it keeps a corner of its own.
+  // Where the mock badge sits, chosen so that nothing is under it on a phone.
+  //   home: the top centre, in the hero's headroom, which does not scroll.
+  //   header: a phone on its side, at the map stage. The header's right end is empty on
+  //     a phone (the menu is the Profile tab), so it sits there, centred on the bar.
+  //   sheet: a portrait phone's map stage with a sheet. On the map, 8px above the sheet's
+  //     settled top: in the corner it covered the collapsed sheet's Start.
+  //   away: a full sheet, where the map is hidden and the badge goes with it, as the
+  //     radar button does (up there it would sit on the handle). Also the Saved and
+  //     Profile screens: they scroll under anything fixed, the room beside their titles
+  //     does not hold in every language ("Bewaard" at 320px reaches the middle), and
+  //     they show only what is on the device, nothing the mock planner answered.
+  //   corner: bottom left, on a desktop and on a portrait map stage with no sheet.
   const badgeOverSheet = sheetShown && !homeLive && tabBarHidden;
-  const mockBadgeBottom = !badgeOverSheet
-    ? null
-    : stageHeight > 0
-      ? Math.min(sheetInset + 8, stageHeight - topInset - 8 - MOCK_BADGE_PX)
-      : sheetInset + 8;
+  const badgeSpot = !isPhone
+    ? "corner"
+    : tabCovering
+      ? "away"
+      : homeLive
+        ? "home"
+        : landscapePhone
+          ? "header"
+          : badgeOverSheet
+            ? detent === "full"
+              ? "away"
+              : "sheet"
+            : "corner";
+  // The sheet spot as a distance from the foot of the screen, kept clear of the chips.
+  const mockBadgeBottom =
+    !badgeOverSheet || tabCovering
+      ? undefined
+      : stageHeight > 0
+        ? Math.min(sheetInset + 8, stageHeight - topInset - 8 - MOCK_BADGE_PX)
+        : sheetInset + 8;
 
   // The results and the map, built once and placed by whichever layout is on screen:
   // the results column and the map pane side by side (or stacked), or, on a portrait
@@ -1731,28 +1766,8 @@ export default function App() {
         </>
       )}
 
-      {/* On a phone the badge sits above the tab bar, and over its top edge, while the
-          bar is on screen. On a portrait phone's map stage, where the bar is gone and the
-          results sheet owns the bottom edge, it sits on the map 8px above the sheet's
-          settled top: in the corner it covered the collapsed sheet's Start. A sheet too
-          high to leave it room under the chips (full) has it 8px into the sheet's top,
-          beside the handle, where there is no control. Everywhere else, with the bar gone
-          (navigation, a phone on its side), it drops back to the corner. */}
-      {!isLive() && (
-        <div
-          data-fov="mock-badge"
-          className={`pointer-events-none fixed ${
-            mockBadgeBottom != null
-              ? "z-[1850]"
-              : isPhone && !tabBarHidden
-                ? "bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-[1850]"
-                : "bottom-[calc(0.75rem+env(safe-area-inset-bottom))]"
-          } left-[calc(0.75rem+env(safe-area-inset-left))] rounded-full bg-brand px-3 py-1 text-xs text-white`}
-          style={mockBadgeBottom != null ? { bottom: mockBadgeBottom } : undefined}
-        >
-          mock
-        </div>
-      )}
+      {/* The mock badge, wherever badgeSpot puts it. */}
+      {!isLive() && <MockBadge place={MOCK_BADGE_PLACE[badgeSpot]} bottom={mockBadgeBottom} />}
     </div>
   );
 }
