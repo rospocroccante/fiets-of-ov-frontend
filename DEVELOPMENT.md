@@ -252,13 +252,13 @@ slot from this table instead of a number of its own.
 | Layer | z-index | Mounted in |
 | --- | --- | --- |
 | Map stage, home stage | `z-0`, `z-10` | the sticky morph box |
-| Map overlays: chips, radar button, place card, navigation banner | `z-[1000]` | the map pane |
+| Map overlays: chips, radar button, place card, navigation banner, the mock badge on a portrait map | `z-[1000]` | the map pane |
 | Results sheet | `z-[1100]` | the map stage's `main`, portrait phone only |
 | Floating chip row | `z-[1150]` | the map stage, portrait phone only |
 | Filter popups | `z-[1150]`, `z-[1200]` | the filter bar |
 | Saved and Profile screens | `z-[1400]` | `App`, outside both stages |
 | Tab bar | `z-[1800]` | `App`, outside both stages |
-| Mock badge on a phone | `z-[1850]` | `App`, outside both stages |
+| Mock badge on a phone's home and on a phone on its side | `z-[1850]` | `App`, outside both stages |
 | Undo snackbar | `z-[1900]` | the Saved screen |
 | Search screen, privacy notice | `z-[2000]` | `App`, outside both stages |
 | Skip link | `z-[3000]` | the top of `App` |
@@ -491,11 +491,18 @@ layout (`badgeSpot` in `App.tsx`), and in each one nothing is under it:
 - On a phone's home, the top centre, 12px under the safe area, in the hero's headroom,
   which does not scroll. Over the tab bar's top edge, where it used to be, the home's
   rows and chips scrolled under it.
-- On a portrait phone's map stage, on the map on the left, 8px above the sheet's settled
-  top: `sheetInset + 8` from the foot of the screen, 647 to 671px down at 390x844 with
-  the sheet at peek. In the bottom-left corner it covered the collapsed sheet's Start.
-- At full the map is hidden and the badge goes with it, as the radar button does. Under
-  the chips it sat on the handle, a full-width button.
+- On a portrait phone's map stage, a map overlay in the top-left corner: 12px under
+  `topInset`, on the radar button's line, 12 to 67px across and 128 to 152px down at
+  390x844. It shares a column with the hint of an armed pick and the far-from-route
+  warning and comes last in it, so it drops under either one. The spot is the same at
+  every height of the sheet, and the badge is in the map pane at `z-[1000]`, under the
+  sheet's layer: a sheet that rises over it covers it. In the bottom-left corner it
+  covered the collapsed sheet's Start. Placed 8px above the sheet's settled top, it was
+  right only while the sheet was at rest: a finger holding the sheet 150px above its
+  peek put the summary's Start under it, and keyboard focus low in a half sheet, which
+  scrolls the sheet's frame and paints the sheet higher than its detent, put the option
+  rows there.
+- At full the map is hidden and the badge goes with it, as the radar button does.
 - On a phone on its side, in the header's right end, which is empty on a phone, centred
   on the 56px bar: 773 to 828px across and 16 to 40px down at 844x390. In the corner it
   covered the results column's option rows and its credit links.
@@ -505,8 +512,12 @@ layout (`badgeSpot` in `App.tsx`), and in each one nothing is under it:
 - A desktop keeps the bottom-left corner.
 
 The browser suite's "mock badge covers no control and no text" scenario checks the home,
-Saved and the map stage at 390x844 and 844x390: a 2px grid of `elementFromPoint` touches
-inside the badge's box reaches no control, and no painted text run meets the box.
+Saved and the map stage at 390x844, 320x568 and 844x390: a 2px grid of
+`elementFromPoint` touches inside the badge's box reaches no control, and no painted text
+run meets the box. Only the points where the badge is the topmost element count, since
+whatever is drawn over it there hides it. On a portrait phone the sheet is judged at
+peek, at half, held mid-drag and with focus on its last link, and with a pick armed.
+Judged only on a settled sheet, the old spot passed at the one moment it was right.
 
 #### The rain radar
 

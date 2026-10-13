@@ -83,16 +83,12 @@ interface PopularTrip {
 // two can never disagree again.
 const HOME_FADED_AT = 0.5;
 
-// The mock badge's height (text-xs and 4px of padding top and bottom), for placing it over
-// a portrait phone's results sheet.
-const MOCK_BADGE_PX = 24;
-
-// The badge's box in each of the places App puts it (badgeSpot, in App).
+// The badge's box in each of the places App puts it outside the stages (badgeSpot, in
+// App). The portrait map's spot is in the map pane instead (mapPane).
 const MOCK_BADGE_PLACE = {
   corner: "fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))]",
   home: "fixed left-1/2 top-[calc(0.75rem+env(safe-area-inset-top))] z-[1850] -translate-x-1/2",
   header: "fixed right-[calc(1rem+env(safe-area-inset-right))] top-[calc(1rem+env(safe-area-inset-top))] z-[1850]",
-  sheet: "fixed left-[calc(0.75rem+env(safe-area-inset-left))] z-[1850]",
   away: "fixed invisible left-[calc(0.75rem+env(safe-area-inset-left))] z-[1850]",
 } as const;
 
@@ -778,8 +774,6 @@ export default function App() {
   const mapChromeRef = useRef<HTMLDivElement>(null);
   const mapMainRef = useRef<HTMLElement>(null);
   const topInset = useChromeInset(mapChromeRef, mapMainRef, sheetLayout);
-  // The map stage's height, for the mock badge over the sheet. 0 without layout (jsdom).
-  const stageHeight = useLiveHeight(mapMainRef, sheetLayout);
   // A new search lands collapsed, on the summary, so the map and the route stay the
   // screen; navigation drops the sheet to its peek as well.
   useEffect(() => {
@@ -896,15 +890,19 @@ export default function App() {
   //   home: the top centre, in the hero's headroom, which does not scroll.
   //   header: a phone on its side, at the map stage. The header's right end is empty on
   //     a phone (the menu is the Profile tab), so it sits there, centred on the bar.
-  //   sheet: a portrait phone's map stage with a sheet. On the map, 8px above the sheet's
-  //     settled top: in the corner it covered the collapsed sheet's Start.
-  //   away: a full sheet, where the map is hidden and the badge goes with it, as the
-  //     radar button does (up there it would sit on the handle). Also the Saved and
-  //     Profile screens: they scroll under anything fixed, the room beside their titles
-  //     does not hold in every language ("Bewaard" at 320px reaches the middle), and
-  //     they show only what is on the device, nothing the mock planner answered.
-  //   corner: bottom left, on a desktop and on a portrait map stage with no sheet.
-  const badgeOverSheet = sheetShown && !homeLive && tabBarHidden;
+  //   map: a portrait phone's map stage. A map overlay in the top-left corner, under the
+  //     floating chrome, on the radar button's line: one spot at every height of the
+  //     sheet, and under the sheet's layer, so a sheet that rises over it covers it. It
+  //     used to sit 8px above the sheet's settled top, which is right only while the sheet
+  //     is at rest: a finger holding the sheet between two detents carried the summary's
+  //     Start under it, and keyboard focus low in a half sheet scrolls the sheet's frame
+  //     and put the option rows there. A full sheet hides the map and the badge goes with
+  //     it, as the radar button does.
+  //   away: the Saved and Profile screens. They scroll under anything fixed, the room
+  //     beside their titles does not hold in every language ("Bewaard" at 320px reaches
+  //     the middle), and they show only what is on the device, nothing the mock planner
+  //     answered.
+  //   corner: bottom left, on a desktop.
   const badgeSpot = !isPhone
     ? "corner"
     : tabCovering
@@ -913,18 +911,10 @@ export default function App() {
         ? "home"
         : landscapePhone
           ? "header"
-          : badgeOverSheet
-            ? detent === "full"
-              ? "away"
-              : "sheet"
-            : "corner";
-  // The sheet spot as a distance from the foot of the screen, kept clear of the chips.
-  const mockBadgeBottom =
-    !badgeOverSheet || tabCovering
-      ? undefined
-      : stageHeight > 0
-        ? Math.min(sheetInset + 8, stageHeight - topInset - 8 - MOCK_BADGE_PX)
-        : sheetInset + 8;
+          : "map";
+  const mockBadge = !isLive() && (
+    <MockBadge place={badgeSpot === "map" ? (sheetShown && detent === "full" ? "invisible" : "") : MOCK_BADGE_PLACE[badgeSpot]} />
+  );
 
   // The results and the map, built once and placed by whichever layout is on screen:
   // the results column and the map pane side by side (or stacked), or, on a portrait
@@ -1054,17 +1044,43 @@ export default function App() {
       )}
     </AnimatePresence>
   );
+  // The two notes a map can carry in its top-left corner: the hint while a pick is armed,
+  // and the warning while a ride is far from its route. Elsewhere each is pinned there
+  // on its own; on a portrait phone both go in the corner's column (mapPane).
+  const pickHint = armed && (
+    <div
+      className={`${sheetLayout ? "pointer-events-auto" : "absolute left-3 top-3 z-[1000]"} rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow dark:bg-night-accent dark:text-night-bg`}
+    >
+      {armed === "start" ? t("clickMapSetStart") : t("clickMapSetEnd")}
+    </div>
+  );
+  const routeHint = farFromRoute && (
+    <div
+      className={`${sheetLayout ? "pointer-events-auto" : "absolute left-3 top-24 z-[1000]"} rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-amber-700 shadow dark:bg-night-surface/95 dark:text-amber-300`}
+    >
+      {t("farFromRoute")}
+    </div>
+  );
   const mapPane = (
     <>
       {/* On a portrait phone everything pinned to the top of the map starts under the
-          floating chrome (topInset), not under the map's own edge. */}
-      {armed && (
-        <div
-          className="absolute left-3 top-3 z-[1000] rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow dark:bg-night-accent dark:text-night-bg"
-          style={sheetLayout ? { top: 12 + topInset } : undefined}
-        >
-          {armed === "start" ? t("clickMapSetStart") : t("clickMapSetEnd")}
+          floating chrome (topInset), not under the map's own edge. There the top-left
+          corner is one column, 12px under topInset, on the radar button's line: a
+          pick's hint, the far-from-route warning (the navigation banner ends above
+          topInset, which the hidden chip row still holds), and the mock badge last, so
+          none of them meets another. The column takes no touches; the notes do, as
+          they do on their own elsewhere. */}
+      {sheetLayout ? (
+        <div className="pointer-events-none absolute left-3 z-[1000] flex flex-col items-start gap-2" style={{ top: 12 + topInset }}>
+          {pickHint}
+          {routeHint}
+          {badgeSpot === "map" && mockBadge}
         </div>
+      ) : (
+        <>
+          {pickHint}
+          {routeHint}
+        </>
       )}
       {/* Both branches render the identical box in the map container's own
           resting colour, so whether the chunk is here yet or not the stage has
@@ -1134,17 +1150,6 @@ export default function App() {
           />
         )}
       </AnimatePresence>
-      {/* Under the banner. On a portrait phone the banner starts 8px under the status bar
-          and ends above topInset (which the hidden chip row still holds), so 12px under
-          topInset is the line under it there. */}
-      {farFromRoute && (
-        <div
-          className="absolute left-3 top-24 z-[1000] rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-amber-700 shadow dark:bg-night-surface/95 dark:text-amber-300"
-          style={sheetLayout ? { top: 12 + topInset } : undefined}
-        >
-          {t("farFromRoute")}
-        </div>
-      )}
       {!sheetLayout && placeCard}
     </>
   );
@@ -1766,8 +1771,8 @@ export default function App() {
         </>
       )}
 
-      {/* The mock badge, wherever badgeSpot puts it. */}
-      {!isLive() && <MockBadge place={MOCK_BADGE_PLACE[badgeSpot]} bottom={mockBadgeBottom} />}
+      {/* The mock badge, wherever badgeSpot puts it outside the stages. */}
+      {badgeSpot !== "map" && mockBadge}
     </div>
   );
 }

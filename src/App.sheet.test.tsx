@@ -375,10 +375,12 @@ test("on desktop the results column is unchanged: no sheet, no summary, the Star
 
 // The mock badge sits where nothing is under it, in every phone layout. On the home it
 // is at the top centre, in the hero's headroom, which does not scroll. On a portrait
-// phone's map stage it sits on the map 8px above the settled sheet, clear of the
-// summary's Start. A full sheet hides the map and the badge goes with it, as the radar
-// button does: there it would sit on the handle.
-test("the mock badge sits where nothing is under it: the home's top, above the sheet, away at full", async () => {
+// phone's map stage it is a map overlay in the top-left corner, under the floating
+// chrome: one spot at every height of the sheet, under the sheet's layer, in one column
+// with a pick's hint so the two never meet. Placed from the sheet's settled top instead,
+// it sat on the sheet's Start while a finger held the sheet between two detents. A full
+// sheet hides the map and the badge goes with it, as the radar button does.
+test("the mock badge sits where nothing is under it: the home's top, the map's corner, away at full", async () => {
   phoneLayout();
   renderApp();
   const badge = () => document.querySelector('[data-fov="mock-badge"]') as HTMLElement;
@@ -386,20 +388,33 @@ test("the mock badge sits where nothing is under it: the home's top, above the s
   // On the home it used to sit over the tab bar's top edge, over the scroller's rows.
   expect(badge()).toHaveClass("fixed", "top-[calc(0.75rem+env(safe-area-inset-top))]", "left-1/2", "-translate-x-1/2", "z-[1850]");
   expect(badge().className).not.toMatch(/(^|\s)bottom-/);
-  expect(badge().style.bottom).toBe("");
 
   await planVondelpark();
-  // The collapsed sheet is its 160px header (jsdom has no safe area), and the badge sits
-  // 8px above it, on the left: in the corner it used to cover the summary's Start.
-  await waitFor(() => expect(badge().style.bottom).toBe("168px"));
-  expect(badge()).toHaveClass("left-[calc(0.75rem+env(safe-area-inset-left))]", "z-[1850]");
-  expect(badge().className).not.toMatch(/(^|\s)(top|bottom)-\[/);
+  // On the map, under the chips: 12px under topInset, which jsdom measures as 0.
+  const pane = document.querySelector("#fov-map-main > section") as HTMLElement;
+  await waitFor(() => expect(pane).toContainElement(badge()));
+  expect(document.querySelectorAll('[data-fov="mock-badge"]')).toHaveLength(1);
+  const column = badge().parentElement as HTMLElement;
+  expect(column).toHaveClass("absolute", "left-3", "z-[1000]", "pointer-events-none");
+  expect(column.style.top).toBe("12px");
+  expect(badge().className).not.toMatch(/(^|\s)(fixed|top-|bottom-|z-)/);
+  expect(badge().style.cssText).toBe("");
   expect(badge()).not.toHaveClass("invisible");
 
-  // It follows the sheet when the sheet settles somewhere else: half is half the window.
+  // A pick armed from the map tools puts its hint on the same line, and the badge goes
+  // under it in the column.
+  fireEvent.click(screen.getByRole("button", { name: "Map options" }));
+  fireEvent.click(within(document.querySelector('[data-fov="filter-panel"]') as HTMLElement).getByRole("button", { name: "Start" }));
+  const hint = screen.getByText("Click the map to set the start");
+  expect(hint.parentElement).toBe(column);
+  expect([...column.children]).toEqual([hint, badge()]);
+
+  // The sheet moving does not move it.
   fireEvent.click(within(summary()).getByText("By bike"));
-  const half = Math.round(window.innerHeight / 2);
-  await waitFor(() => expect(badge().style.bottom).toBe(`${half + 8}px`));
+  await waitFor(() => expect(sheet()).toHaveAttribute("data-detent", "half"));
+  expect(badge().parentElement).toBe(column);
+  expect(column.style.top).toBe("12px");
+  expect(badge()).not.toHaveClass("invisible");
 
   // At full it goes, and it is back when the sheet comes down.
   fireEvent.click(screen.getByRole("button", { name: "Expand results" }));
@@ -409,10 +424,10 @@ test("the mock badge sits where nothing is under it: the home's top, above the s
   await waitFor(() => expect(sheet()).toHaveAttribute("data-detent", "peek"));
   expect(badge()).not.toHaveClass("invisible");
 
-  // Back on the home, the top centre again.
+  // Back on the home, the top centre again, and the only badge.
   await morphTo(0);
-  expect(badge().style.bottom).toBe("");
-  expect(badge()).toHaveClass("top-[calc(0.75rem+env(safe-area-inset-top))]", "left-1/2");
+  expect(document.querySelectorAll('[data-fov="mock-badge"]')).toHaveLength(1);
+  expect(badge()).toHaveClass("fixed", "top-[calc(0.75rem+env(safe-area-inset-top))]", "left-1/2");
 });
 
 // The Saved and Profile screens scroll under anything fixed, and their titles leave no
@@ -446,7 +461,6 @@ test("on a phone on its side the mock badge sits in the header's empty right end
   const badge = document.querySelector('[data-fov="mock-badge"]') as HTMLElement;
   expect(badge).toHaveClass("fixed", "top-[calc(1rem+env(safe-area-inset-top))]", "right-[calc(1rem+env(safe-area-inset-right))]", "z-[1850]");
   expect(badge.className).not.toMatch(/(^|\s)(bottom|left)-/);
-  expect(badge.style.bottom).toBe("");
 });
 
 test("on desktop the mock badge keeps its corner", async () => {
@@ -456,5 +470,4 @@ test("on desktop the mock badge keeps its corner", async () => {
   await morphTo(1);
   const badge = document.querySelector('[data-fov="mock-badge"]') as HTMLElement;
   expect(badge).toHaveClass("bottom-[calc(0.75rem+env(safe-area-inset-bottom))]");
-  expect(badge.style.bottom).toBe("");
 });

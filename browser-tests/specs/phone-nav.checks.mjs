@@ -2007,9 +2007,11 @@ export const scenarios = [
     },
   })),
 
-  // In mock mode the badge sat in the bottom-left corner, over the collapsed sheet's Start.
-  // It now sits on the map 8px above the sheet's settled top, and a full sheet takes it
-  // away with the map.
+  // In mock mode the badge sat in the bottom-left corner, over the collapsed sheet's Start,
+  // and then 8px above the sheet's settled top, where a held drag carried the sheet's
+  // Start under it. It now sits on the map in one spot for every height of the sheet: on
+  // the left, on the radar button's line under the chips. It is a map overlay, so a sheet
+  // that rises over it covers it, and a full sheet takes it away with the map.
   {
     name: "390x844 the mock badge stays off the collapsed sheet's Start",
     async run(ctx) {
@@ -2024,7 +2026,6 @@ export const scenarios = [
           const start = document.querySelector('[data-fov="summary-start"]');
           const sheet = document.querySelector('${SHEET}');
           const chips = [...document.querySelector('[data-fov="filter-bar"]').querySelectorAll("button")].map((c) => F.rect(c));
-          const controls = [...document.querySelectorAll('[data-fov="sheet-summary"] button')].map((c) => ({ ...F.rect(c), text: c.textContent.trim() }));
           // The badge takes no touches, so elementFromPoint looks straight through it. For
           // this probe only it is made hittable, so a point it covers answers "the badge".
           badge.style.pointerEvents = "auto";
@@ -2036,8 +2037,8 @@ export const scenarios = [
           });
           badge.style.pointerEvents = "";
           return { badge: F.rect(badge), start: s, sheetTop: +sheet.getBoundingClientRect().top.toFixed(2),
-                   detent: sheet.getAttribute("data-detent"), points, controls,
-                   chipBottom: Math.max(...chips.map((c) => c.bottom)), chips };
+                   detent: sheet.getAttribute("data-detent"), points, radar: F.rect(document.querySelector('${RADAR}')),
+                   z: getComputedStyle(badge.parentElement).zIndex, chipBottom: Math.max(...chips.map((c) => c.bottom)) };
         `;
         const peek = await page.eval(READ_BADGE);
         checks.equal("the sheet is collapsed", peek.detent, "peek");
@@ -2045,14 +2046,20 @@ export const scenarios = [
           checks.ok(`a touch at (${p.x}, ${p.y}), in the Start's left third, reaches Start`, p.start, `elementFromPoint = ${p.hit}`);
         }
         checks.ok("the badge's box and the Start's do not meet", !overlaps(peek.badge, peek.start), `badge ${span(peek.badge)}, Start ${span(peek.start)}`);
-        checks.near("the badge sits 8px above the sheet's top", peek.sheetTop - peek.badge.bottom, 8, 1, `badge ends ${peek.badge.bottom}, sheet starts ${peek.sheetTop}`);
         checks.near("on the left", peek.badge.left, 12, 0.5, `badge from x ${peek.badge.left}`);
+        checks.near("on the radar button's line", peek.badge.top, peek.radar.top, 0.5, `badge from y ${peek.badge.top}, radar from ${peek.radar.top}`);
+        checks.atLeast("under the chips", peek.badge.top, peek.chipBottom + 8, `badge from y ${peek.badge.top}, chips end ${peek.chipBottom}`);
+        checks.equal("at the map overlays' z-index, under the sheet's", peek.z, "1000");
 
-        // At full the sheet reaches the chips' line and the map is gone. Up there the badge
-        // sat on the handle, a full-width button, so it goes with the map, as the radar
-        // button does.
+        // At half the sheet moves and the badge does not.
         await tapOn(page, HANDLE, "sheet handle");
         await sheetAt(page, "half");
+        await sleep(300);
+        const half = await page.eval(READ_BADGE);
+        checks.equal("at half the badge is where it was at peek", span(half.badge), span(peek.badge), `sheet from ${half.sheetTop}`);
+
+        // At full the sheet reaches the chips' line and the map is gone. The badge goes
+        // with the map, as the radar button does.
         await tapOn(page, HANDLE, "sheet handle");
         await sheetAt(page, "full");
         await sleep(300);
@@ -2066,14 +2073,22 @@ export const scenarios = [
   },
 
   // The badge sits where nothing is under it, in every phone layout: on the home's top
-  // centre, on the map 8px above a portrait sheet, in the header's right end on a phone on
+  // centre, on a portrait map under the chip row, in the header's right end on a phone on
   // its side; away on a full sheet and on the Saved and Profile screens. For each layout
   // a 2px grid of touches inside the badge's box (it takes none, so they land on what is
   // under it) must reach no control, and no painted text run may meet its box. Leaflet's
   // container is the map the badge sits on, not a control; a marker or a zoom button on it
   // would still count.
+  //
+  // Only the points where the badge is painted count: where something is drawn over it
+  // (a sheet risen over the map), it covers nothing. And the sheet is judged moving as
+  // well as settled. Judged only at rest, a badge placed from the sheet's settled top
+  // passed at the one moment it was right: a held drag, or keyboard focus on an option
+  // low in a half sheet (which scrolls the sheet's frame and paints the sheet higher than
+  // its detent), put it on the sheet's Start and option rows.
   ...[
     { width: 390, height: 844 },
+    { width: 320, height: 568 },
     { width: 844, height: 390 },
   ].map(({ width, height }) => ({
     name: `${width}x${height} the mock badge covers no control and no text`,
@@ -2083,11 +2098,23 @@ export const scenarios = [
       const page = await bootPhone(ctx, { width, height });
       const COVER = `
         const badge = document.querySelector('[data-fov="mock-badge"]');
-        if (!badge.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return { away: true };
+        if (!badge || !badge.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return { away: true };
         const b = badge.getBoundingClientRect();
         const CONTROL = 'button, a[href], input, select, textarea, summary, [role="button"], [tabindex]:not([tabindex="-1"])';
+        // Is the badge the topmost thing here? It takes no touches, so for this one probe
+        // it is made hittable and asked.
+        const onTop = (x, y) => {
+          badge.style.pointerEvents = "auto";
+          const at = document.elementFromPoint(x, y);
+          badge.style.pointerEvents = "";
+          return !!at && badge.contains(at);
+        };
         const controls = new Set();
+        let painted = 0, points = 0;
         for (let y = Math.ceil(b.top); y < b.bottom; y += 2) for (let x = Math.ceil(b.left); x < b.right; x += 2) {
+          points++;
+          if (!onTop(x, y)) continue;
+          painted++;
           const at = document.elementFromPoint(x, y);
           const c = at && at.closest(CONTROL);
           if (c && !c.classList.contains("leaflet-container")) controls.add((c.getAttribute("aria-label") || c.textContent).trim().slice(0, 30));
@@ -2103,24 +2130,32 @@ export const scenarios = [
           for (const r of range.getClientRects()) {
             const l = Math.max(r.left, b.left), t = Math.max(r.top, b.top), rr = Math.min(r.right, b.right), bb = Math.min(r.bottom, b.bottom);
             if (rr - l < 1 || bb - t < 1) continue;
-            const at = document.elementFromPoint((l + rr) / 2, (t + bb) / 2);
+            const x = (l + rr) / 2, y = (t + bb) / 2;
+            if (!onTop(x, y)) continue;
+            const at = document.elementFromPoint(x, y);
             if (at && (at === el || el.contains(at) || at.contains(el))) texts.push(n.textContent.trim().slice(0, 30));
           }
         }
-        return { box: [b.left, b.top, b.right, b.bottom].map(Math.round).join(","), controls: [...controls], texts };
+        return { box: [b.left, b.top, b.right, b.bottom].map(Math.round).join(","), painted, points, controls: [...controls], texts };
       `;
-      const judge = async (where, expectAway = false) => {
+      // `covered`: the state may draw something over the whole badge, which is then not on
+      // the screen and still has to cover nothing.
+      const judge = async (where, { away = false, covered = false } = {}) => {
         await sleep(300);
         const m = await page.eval(COVER);
-        if (expectAway) {
+        if (away) {
           checks.ok(`${where}: the badge is away`, m.away, m.away ? "" : `badge at ${m.box}`);
           return;
         }
-        checks.ok(`${where}: the badge is on the screen`, !m.away);
+        if (!covered) {
+          checks.ok(`${where}: the badge is on the screen`, !m.away && m.painted > 0, m.away ? "away" : `painted at ${m.painted} of ${m.points} points of ${m.box}`);
+        }
         if (m.away) return;
         checks.equal(`${where}: no control under the badge`, m.controls.join(" | "), "", `badge at ${m.box}`);
         checks.equal(`${where}: no text under the badge`, m.texts.join(" | "), "", `badge at ${m.box}`);
       };
+      const touch = (type, x, y) =>
+        page.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y, radiusX: 12, radiusY: 12, force: 1 }] });
       try {
         await judge("home");
         await page.eval(`const s = document.querySelector('${SCROLLER}'); s.scrollTop = s.scrollHeight; return 1;`);
@@ -2128,18 +2163,52 @@ export const scenarios = [
         await page.eval(`const s = document.querySelector('${SCROLLER}'); s.scrollTop = 0; return 1;`);
         await tapOn(page, '[data-fov="tab-saved"]', "Saved tab");
         await page.waitFor(screenShown(SAVED), { label: "the Saved screen" });
-        await judge("Saved", true);
+        await judge("Saved", { away: true });
         await tapOn(page, '[data-fov="tab-plan"]', "Plan tab");
         await page.waitFor(`getComputedStyle(document.querySelector('${SAVED}')).visibility === "hidden"`, { label: "Saved to close" });
         if (portrait) {
           await planCollapsed(page);
           await judge("map stage, sheet at peek");
-          await tapOn(page, HANDLE, "sheet handle");
+
+          // A pick armed from the map tools puts its hint on the map, under the chips.
+          const arm = async () => {
+            await tapOn(page, '[data-fov="filter-more"]', "map tools");
+            await page.waitFor(`document.querySelector('[data-fov="filter-panel"]')`, { label: "the map tools panel" });
+            const row = await page.eval(`
+              const b = [...document.querySelectorAll('[data-fov="filter-panel"] button')].find((x) => x.textContent.trim() === "Start");
+              return b ? window.__fov.rect(b) : null;
+            `);
+            if (!row) throw new Error("no Start row in the map tools");
+            await page.tap(row.x + row.w / 2, row.y + row.h / 2);
+            await page.waitFor(`!document.querySelector('[data-fov="filter-panel"]')`, { label: "the panel to close" });
+          };
+          await arm();
+          await judge("map stage, a pick armed, its hint on the map");
+          await arm();
+
+          // The sheet in a finger's hold, 150px above its peek, between two detents.
+          const h = await page.eval(`return window.__fov.rect(document.querySelector('${HANDLE}'));`);
+          const x = Math.round(h.x + h.w / 2), y0 = Math.round(h.y + h.h / 2);
+          await touch("touchStart", x, y0);
+          for (let i = 1; i <= 10; i++) {
+            await touch("touchMove", x, y0 - 15 * i);
+            await sleep(16);
+          }
+          await judge("map stage, the sheet held 150px above its peek");
+          await touch("touchEnd");
           await sheetAt(page, "half");
           await judge("map stage, sheet at half");
+
+          // Keyboard focus low in a half sheet scrolls the sheet's frame, which paints the
+          // sheet higher than its detent: focus on its last link, a credit under the
+          // options, lifts it over most of the map. The frame is put back afterwards.
+          await page.eval(`[...document.querySelectorAll('${CONTENT} a[href]')].pop().focus(); return 1;`);
+          await judge("map stage, sheet at half, focus on its last link", { covered: true });
+          await page.eval(`document.activeElement.blur(); document.querySelector('[data-fov="sheet-frame"]').scrollTop = 0; return 1;`);
+
           await tapOn(page, HANDLE, "sheet handle");
           await sheetAt(page, "full");
-          await judge("map stage, sheet at full", true);
+          await judge("map stage, sheet at full", { away: true });
         } else {
           await tapHomeRow(page, "Zuidplein");
           await page.waitFor(`document.querySelectorAll('${OPTION}').length >= 3`, { label: "three travel options" });
