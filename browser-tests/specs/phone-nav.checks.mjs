@@ -553,6 +553,43 @@ export const scenarios = [
     },
   })),
 
+  // A phone on its side: the hero, the pill's hole and the tab bar took the whole height,
+  // and the scroller holding the trips was 0 to 36px tall. Two whole rows have to be on the
+  // screen without scrolling, in reach, and the pill must stay clear of the scroller.
+  {
+    name: "landscape phones the home shows two whole trip rows under the pill",
+    async run(ctx) {
+      const { checks } = ctx;
+      for (const [width, height] of [[568, 320], [667, 375], [844, 390]]) {
+        for (const lang of ["en", "nl"]) {
+          const at = `${width}x${height} ${lang}`;
+          const page = await bootPhone(ctx, { width, height, lang });
+          try {
+            await sleep(300);
+            const m = await page.eval(`
+              const F = window.__fov;
+              const sc = document.querySelector('${SCROLLER}');
+              const box = F.rect(sc), pill = F.rect(document.querySelector('[data-fov="search-pill"]'));
+              const whole = [...sc.querySelectorAll('[data-fov="popular-trip"]')].map((b) => F.rect(b))
+                .filter((r) => r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5);
+              const first = whole[0];
+              const x = first ? Math.round(first.x + first.w / 2) : 0, y = first ? Math.round(first.y + first.h / 2) : 0;
+              const hit = first ? document.elementFromPoint(x, y) : null;
+              return { box, pill, rows: whole.length, x, y, reaches: !!hit && !!hit.closest('[data-fov="popular-trip"]'),
+                       room: sc.scrollHeight - sc.clientHeight };
+            `);
+            checks.atLeast(`${at}: two whole trip rows show without scrolling`, m.rows, 2, `scroller ${m.box.top}..${m.box.bottom} (${m.box.h}px)`);
+            checks.ok(`${at}: a touch at the first one's centre reaches it`, m.reaches, `elementFromPoint(${m.x}, ${m.y})`);
+            checks.atLeast(`${at}: and the list scrolls to the rest`, m.room, 1, `${m.room}px past the box`);
+            checks.atMost(`${at}: the pill ends above the scroller`, m.pill.bottom, m.box.top, `pill ${m.pill.top}..${m.pill.bottom}, scroller from ${m.box.top}`);
+          } finally {
+            await page.close();
+          }
+        }
+      }
+    },
+  },
+
   {
     name: "390x844 Saved covers the screen and Back returns to Plan",
     async run(ctx) {

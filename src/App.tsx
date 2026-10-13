@@ -83,11 +83,16 @@ interface PopularTrip {
 // two can never disagree again.
 const HOME_FADED_AT = 0.5;
 
+// The mock badge's height (text-xs and 4px of padding top and bottom), for centring it on
+// the pill's row.
+const MOCK_BADGE_PX = 24;
+
 // The badge's box in each of the places App puts it outside the stages (badgeSpot, in
 // App). The portrait map's spot is in the map pane instead (mapPane).
 const MOCK_BADGE_PLACE = {
   corner: "fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))]",
   home: "fixed left-1/2 top-[calc(0.75rem+env(safe-area-inset-top))] z-[1850] -translate-x-1/2",
+  pillRow: "fixed right-[calc(0.75rem+env(safe-area-inset-right))] z-[1850]",
   header: "fixed right-[calc(1rem+env(safe-area-inset-right))] top-[calc(1rem+env(safe-area-inset-top))] z-[1850]",
   away: "fixed invisible left-[calc(0.75rem+env(safe-area-inset-left))] z-[1850]",
 } as const;
@@ -100,6 +105,11 @@ const MOCK_BADGE_PLACE = {
 // whatever its content makes it.
 const HOME_PILL_GAP = 20;
 const HOME_PILL_CLEAR = 16;
+// A phone on its side has 320 to 390px of height for the hero, the hole and the trips, and
+// with the portrait spacing the trips' scroller was 0 to 36px tall. There the hero is one
+// line and both airs are 8px.
+const HOME_PILL_GAP_SHORT = 8;
+const HOME_PILL_CLEAR_SHORT = 8;
 // The pill's resting offset on anything wider: unchanged, and unmeasured.
 const DESKTOP_PILL_TOP = 260;
 
@@ -789,7 +799,8 @@ export default function App() {
   // On a phone the pill rests just under the hero instead of at a fixed 260px. At 260
   // it covered the last line of the subtitle on every portrait phone (23px of a 24px
   // line), and a tap aimed at the end of that sentence landed in the To field.
-  const pillTop = isPhone && heroHeight > 0 ? heroHeight + HOME_PILL_GAP : DESKTOP_PILL_TOP;
+  const pillGap = landscapePhone ? HOME_PILL_GAP_SHORT : HOME_PILL_GAP;
+  const pillTop = isPhone && heroHeight > 0 ? heroHeight + pillGap : DESKTOP_PILL_TOP;
   // Every number here is an offset inside the pill's own containing block, whose top is
   // env(safe-area-inset-top) — so 60 means "60px below the notch", not 60px below the
   // physical edge, and the header (3.5rem + the same inset) is cleared on any phone.
@@ -811,7 +822,7 @@ export default function App() {
   const pillPad = useTransform(progress, [HOME_FADED_AT, 1], [`${HOME_PILL_PAD}px`, `${MAP_PILL_PAD}px`]);
   // The hole the home's scroller leaves for the pill.
   const pillSlot =
-    pillHeight > 0 ? HOME_PILL_GAP + pillHeight + HOME_PILL_CLEAR : HOME_PILL_GAP + 58 + HOME_PILL_CLEAR;
+    pillGap + (pillHeight > 0 ? pillHeight : 58) + (landscapePhone ? HOME_PILL_CLEAR_SHORT : HOME_PILL_CLEAR);
 
   // The phone search screen, and the control that opened it: focus has to go back
   // there when the screen closes, or a keyboard user is dropped at the top of the page.
@@ -888,6 +899,9 @@ export default function App() {
   const homeClearsTabBar = !navigating;
   // Where the mock badge sits, chosen so that nothing is under it on a phone.
   //   home: the top centre, in the hero's headroom, which does not scroll.
+  //   pillRow: a phone on its side, on the home, whose one-line hero has no headroom. The
+  //     right end of the pill's row: the pill stops 120px short of the screen's edge on
+  //     that layout, and nothing scrolls into its hole.
   //   header: a phone on its side, at the map stage. The header's right end is empty on
   //     a phone (the menu is the Profile tab), so it sits there, centred on the bar.
   //   map: a portrait phone's map stage. A map overlay in the top-left corner, under the
@@ -908,12 +922,21 @@ export default function App() {
     : tabCovering
       ? "away"
       : homeLive
-        ? "home"
+        ? landscapePhone
+          ? "pillRow"
+          : "home"
         : landscapePhone
           ? "header"
           : "map";
   const mockBadge = !isLive() && (
-    <MockBadge place={badgeSpot === "map" ? (sheetShown && detent === "full" ? "invisible" : "") : MOCK_BADGE_PLACE[badgeSpot]} />
+    <MockBadge
+      place={badgeSpot === "map" ? (sheetShown && detent === "full" ? "invisible" : "") : MOCK_BADGE_PLACE[badgeSpot]}
+      top={
+        badgeSpot === "pillRow"
+          ? `calc(env(safe-area-inset-top) + ${pillTop + ((pillHeight > 0 ? pillHeight : 50) - MOCK_BADGE_PX) / 2}px)`
+          : undefined
+      }
+    />
   );
 
   // The results and the map, built once and placed by whichever layout is on screen:
@@ -1418,8 +1441,18 @@ export default function App() {
           {/* The measured hero. Its height is what tells the pill where to rest on a
               phone, so the wrapper is the thing observed, not the section inside it. */}
           <div ref={heroRef} data-fov="home-hero" className={isPhone ? "shrink-0" : undefined}>
-            {/* Less headroom on a phone: every pixel above the hero is a pixel the
-                popular trips below the pill do not get. Unchanged from `sm` up. */}
+            {/* A phone on its side: the headline on one line, at 20px and 8px from the top,
+                and no subtitle. The two-line hero, the pill's hole and the tab bar took
+                the whole height there, and the trips' scroller was 0 to 36px tall. */}
+            {landscapePhone ? (
+              <section className="relative mx-auto max-w-4xl px-6 pt-2 text-center">
+                <h1 className="text-xl font-bold leading-7 text-gray-900 dark:text-night-text">
+                  {t("headlineTop")} <span className="text-brand dark:text-night-accent">{t("headlineBottom")}</span>
+                </h1>
+              </section>
+            ) : (
+            /* Less headroom on a phone: every pixel above the hero is a pixel the
+                popular trips below the pill do not get. Unchanged from `sm` up. */
             <section className="relative mx-auto max-w-4xl px-6 pt-12 text-center sm:pt-20">
               <h1 className="text-4xl font-bold leading-tight text-gray-900 dark:text-night-text sm:text-5xl">
                 {t("headlineTop")}
@@ -1432,6 +1465,7 @@ export default function App() {
                 {t("subtitle")}
               </p>
             </section>
+            )}
           </div>
           {/* The hole the pill floats in. Only on a phone: above `sm` the pill rests at
               a fixed 260px and the popular section's own top margin already clears it. */}
@@ -1450,7 +1484,15 @@ export default function App() {
             className={isPhone ? "min-h-0 flex-1 overflow-y-auto overflow-x-hidden" : "contents"}
             style={isPhone ? { marginBottom: homeClearsTabBar ? (landscapePhone ? TAB_BAR_COMPACT_PX : TAB_BAR_PX) : 0 } : undefined}
           >
-          <section className="mx-auto mt-6 w-full max-w-4xl px-6 text-left sm:mt-[7.5rem]">
+          {/* The 7.5rem from `sm` up clears the desktop pill, which floats over this flow.
+              A phone leaves the pill a hole instead, so a phone on its side, past `sm`,
+              does not take it: there it put the first trip 120px down a scroller 36px
+              tall. On its side the heading starts at the scroller's top. */}
+          <section
+            className={`mx-auto w-full max-w-4xl px-6 text-left${
+              landscapePhone ? "" : isPhone ? " mt-6" : " mt-6 sm:mt-[7.5rem]"
+            }`}
+          >
             <h2 className="mb-2 text-xl font-semibold text-slate-900 dark:text-night-text">{t("popularTrips")}</h2>
             {/* Suggestion rows, one colour for all four (TripRow in HomeShortcuts). They
                 were metro lines, four tracks in red, blue, green and yellow between

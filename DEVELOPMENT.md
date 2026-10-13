@@ -278,6 +278,17 @@ the bottom edge, during navigation and under the search screen. It is 56px tall 
 icons only on a phone on its side) plus `env(safe-area-inset-bottom)`, and its top rule is
 drawn inside it, so that is its whole height.
 
+A phone on its side has a compact home. With the portrait hero (two lines of headline,
+the subtitle, 48 or 80px of headroom), the pill's hole and the tab bar, the scroller that
+holds the trips was 8px tall at 568x320 in English, 0px in Dutch and 36px at 844x390, and
+from `sm` the popular section added the desktop pill's 7.5rem on top. On that layout the
+hero is one line of 20px headline 8px from the top with no subtitle, the pill sits 8px
+under it with 8px of air below, and the popular section starts at the scroller's top.
+The scroller is then 174px tall at 568x320, with two whole rows under the heading, and
+229px at 667x375 and 244px at 844x390, with four rows in two columns, in English and
+Dutch. The pill ends 8px above the scroller at each size, so nothing scrolls under it.
+Portrait phones and desktops keep their hero.
+
 The home's scroller ends where the bar starts. Its box has a bottom margin of `TAB_BAR_PX`
 or `TAB_BAR_COMPACT_PX` above the stage's own safe-area padding. Padding only the content
 left the box running under the bar, and at 844×390 a touch on a popular trip half above
@@ -505,9 +516,12 @@ layout the summary header's.
 In mock mode a "mock" badge (`MockBadge`) marks the screen. Where it sits depends on the
 layout (`badgeSpot` in `App.tsx`), and in each one nothing is under it:
 
-- On a phone's home, the top centre, 12px under the safe area, in the hero's headroom,
-  which does not scroll. Over the tab bar's top edge, where it used to be, the home's
-  rows and chips scrolled under it.
+- On a portrait phone's home, the top centre, 12px under the safe area, in the hero's
+  headroom, which does not scroll. Over the tab bar's top edge, where it used to be, the
+  home's rows and chips scrolled under it.
+- On the home of a phone on its side, whose one-line hero has no headroom, the right end
+  of the pill's row, centred on the pill. The pill stops 120px short of the screen's
+  right edge on that layout and nothing scrolls into its hole.
 - On a portrait phone's map stage, a map overlay in the top-left corner: 12px under
   `topInset`, on the radar button's line, 12 to 67px across and 128 to 152px down at
   390x844. It shares a column with the hint of an armed pick and the far-from-route
