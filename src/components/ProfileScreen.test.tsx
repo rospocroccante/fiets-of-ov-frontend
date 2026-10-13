@@ -33,7 +33,8 @@ test("language switches to the other language and back", () => {
   const group = screen.getByRole("group", { name: "Language" });
   fireEvent.click(within(group).getByRole("button", { name: "Nederlands" }));
   expect(document.documentElement.lang).toBe("nl");
-  expect(within(screen.getByRole("group", { name: "Language" })).getByRole("button", { name: "Nederlands" })).toHaveAttribute(
+  // The screen is Dutch now, its headings included.
+  expect(within(screen.getByRole("group", { name: "Taal" })).getByRole("button", { name: "Nederlands" })).toHaveAttribute(
     "aria-pressed",
     "true",
   );

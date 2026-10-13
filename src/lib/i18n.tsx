@@ -4,9 +4,9 @@ import type { ReactNode } from "react";
 export type Lang = "en" | "nl";
 
 // Every user-facing string in both languages. Parameterized strings use {name}
-// placeholders substituted by translate/t. The Dutch is vetted verbatim; the few
-// strings without a vetted Dutch line stay English in both languages rather than
-// getting an improvised translation.
+// placeholders substituted by translate/t. The Dutch is vetted verbatim. A new string
+// whose Dutch line has not been vetted yet carries its English in both languages
+// rather than an improvised translation; none does at the moment.
 const STRINGS = {
   headlineTop: { en: "Bike or transit?", nl: "Fiets of OV?" },
   headlineBottom: { en: "Let the weather decide.", nl: "Laat het weer beslissen." },
@@ -289,7 +289,7 @@ const STRINGS = {
   },
   privacyStaysClear: {
     en: "None of it is sent anywhere. On a phone, Profile has “Clear recent searches” and “Clear saved places”; on a computer they are in the menu. Clearing the browser's site data removes the rest.",
-    nl: "Daarvan wordt niets verstuurd. In het menu staan “Wis recente zoekopdrachten” en “Wis opgeslagen plekken”, en de rest verdwijnt als je de sitegegevens van je browser wist.",
+    nl: "Daarvan wordt niets verstuurd. Op een telefoon staan “Wis recente zoekopdrachten” en “Wis opgeslagen plekken” onder Profiel, op een computer in het menu. De rest verdwijnt als je de sitegegevens van je browser wist.",
   },
   privacyContactTitle: { en: "Who is responsible", nl: "Wie verantwoordelijk is" },
   privacyContact: {
@@ -300,47 +300,48 @@ const STRINGS = {
     en: "Last changed: [PLACEHOLDER: date].",
     nl: "Laatst gewijzigd: [IN TE VULLEN: datum].",
   },
-  // Phone navigation shell (tab bar, Saved, Profile, results sheet). English in both
-  // languages until the Dutch lines are vetted; see the comment at the top of STRINGS.
-  tabsLabel: { en: "Sections", nl: "Sections" },
-  tabPlan: { en: "Plan", nl: "Plan" },
-  tabSaved: { en: "Saved", nl: "Saved" },
-  tabProfile: { en: "Profile", nl: "Profile" },
-  savedPlacesHeading: { en: "Places", nl: "Places" },
+  // Phone navigation shell (tab bar, Saved, Profile, results sheet). The Dutch lines are
+  // the owner's. "Resultaten uitklappen" and "inklappen" are only ever heard: they name
+  // the sheet's handle, which shows no text.
+  tabsLabel: { en: "Sections", nl: "Onderdelen" },
+  tabPlan: { en: "Plan", nl: "Plannen" },
+  tabSaved: { en: "Saved", nl: "Bewaard" },
+  tabProfile: { en: "Profile", nl: "Profiel" },
+  savedPlacesHeading: { en: "Places", nl: "Plekken" },
   savedEmpty: {
     en: "Nothing saved yet. Star a place on the map or plan a trip, and it shows up here.",
-    nl: "Nothing saved yet. Star a place on the map or plan a trip, and it shows up here.",
+    nl: "Nog niets bewaard. Geef een plek op de kaart een ster of plan een rit, dan verschijnt die hier.",
   },
-  searchForPlace: { en: "Search for a place", nl: "Search for a place" },
-  edit: { en: "Edit", nl: "Edit" },
-  done: { en: "Done", nl: "Done" },
-  deleteX: { en: "Delete {x}", nl: "Delete {x}" },
-  deleteLabel: { en: "Delete", nl: "Delete" },
-  deletedX: { en: "Removed {x}", nl: "Removed {x}" },
-  undo: { en: "Undo", nl: "Undo" },
-  clearAll: { en: "Clear all", nl: "Clear all" },
-  tapAgainToClear: { en: "Tap again to clear", nl: "Tap again to clear" },
-  seeAll: { en: "See all", nl: "See all" },
-  themeHeading: { en: "Theme", nl: "Theme" },
-  themeLight: { en: "Light", nl: "Light" },
-  themeDark: { en: "Dark", nl: "Dark" },
-  themeSystem: { en: "System", nl: "System" },
-  languageHeading: { en: "Language", nl: "Language" },
-  dataOnDevice: { en: "Data on this device", nl: "Data on this device" },
-  aboutHeading: { en: "About and sources", nl: "About and sources" },
-  versionX: { en: "Version {x}", nl: "Version {x}" },
-  expandResults: { en: "Expand results", nl: "Expand results" },
-  collapseResults: { en: "Collapse results", nl: "Collapse results" },
-  resultsSheetLabel: { en: "Trip results", nl: "Trip results" },
+  searchForPlace: { en: "Search for a place", nl: "Zoek een plek" },
+  edit: { en: "Edit", nl: "Bewerken" },
+  done: { en: "Done", nl: "Klaar" },
+  deleteX: { en: "Delete {x}", nl: "Verwijder {x}" },
+  deleteLabel: { en: "Delete", nl: "Verwijderen" },
+  deletedX: { en: "Removed {x}", nl: "{x} verwijderd" },
+  undo: { en: "Undo", nl: "Ongedaan maken" },
+  clearAll: { en: "Clear all", nl: "Alles wissen" },
+  tapAgainToClear: { en: "Tap again to clear", nl: "Tik nogmaals om te wissen" },
+  seeAll: { en: "See all", nl: "Alles bekijken" },
+  themeHeading: { en: "Theme", nl: "Thema" },
+  themeLight: { en: "Light", nl: "Licht" },
+  themeDark: { en: "Dark", nl: "Donker" },
+  themeSystem: { en: "System", nl: "Systeem" },
+  languageHeading: { en: "Language", nl: "Taal" },
+  dataOnDevice: { en: "Data on this device", nl: "Gegevens op dit apparaat" },
+  aboutHeading: { en: "About and sources", nl: "Over en bronnen" },
+  versionX: { en: "Version {x}", nl: "Versie {x}" },
+  expandResults: { en: "Expand results", nl: "Resultaten uitklappen" },
+  collapseResults: { en: "Collapse results", nl: "Resultaten inklappen" },
+  resultsSheetLabel: { en: "Trip results", nl: "Ritresultaten" },
   // The phone results sheet's summary header (SheetSummary), while a plan is on its way
   // and when one fails. The error line stands in for whatever the backend said: a raw
   // "routing upstream unavailable" tells a rider nothing they can act on.
-  planningTrip: { en: "Planning your trip…", nl: "Planning your trip…" },
+  planningTrip: { en: "Planning your trip…", nl: "Je rit wordt gepland…" },
   routesUnavailable: {
     en: "Routes are unavailable right now. Try again in a moment.",
-    nl: "Routes are unavailable right now. Try again in a moment.",
+    nl: "Routes zijn nu niet beschikbaar. Probeer het zo opnieuw.",
   },
-  tryAgain: { en: "Try again", nl: "Try again" },
+  tryAgain: { en: "Try again", nl: "Opnieuw proberen" },
 } as const;
 
 export type StringKey = keyof typeof STRINGS;

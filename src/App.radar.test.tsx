@@ -277,7 +277,8 @@ test("turned off by the rider, the radar stays off for that search; a new search
   await morphTo(0);
   fireEvent.click(screen.getByRole("button", { name: "Profile" }));
   fireEvent.click(screen.getByRole("button", { name: "Nederlands" }));
-  fireEvent.click(screen.getByRole("button", { name: "Plan" }));
+  // The tab bar is Dutch from here on.
+  fireEvent.click(screen.getByRole("button", { name: "Plannen" }));
   await morphTo(1);
   await waitFor(() => expect(screen.getAllByText("Regen op komst").length).toBeGreaterThan(0));
   await idle();
