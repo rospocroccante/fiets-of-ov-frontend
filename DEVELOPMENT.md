@@ -288,6 +288,11 @@ Saved and Profile (`TabScreen`) stay mounted while another tab is showing, hidde
 `visibility: hidden` and `inert`, so each keeps its scroll position. Tapping the tab that
 is already active scrolls its screen to the top.
 
+All three tabs have one page inset, the home's `px-6`. Saved and Profile were `px-5`, so
+a recent trip, listed on the home and on Saved, moved 4px sideways with a tab. Each
+screen's title and content share the inset, so at 390x844 the titles, the section
+headings and the rows all start 24px in, in English and Dutch.
+
 #### The Back button
 
 `src/hooks/useAppNav.ts` mirrors the app's open layers and its active tab into history

@@ -197,3 +197,15 @@ test("while navigation keeps the tab bar away, the home's scroller runs to the f
   expect(bar).toHaveAttribute("aria-hidden", "true");
   expect(homeScroller().style.marginBottom).toBe("0px");
 });
+
+// One page inset on every tab. The home's sections are px-6, and the Saved and Profile
+// screens were px-5, so a recent trip, listed on both, moved 4px sideways with a tab.
+test("Plan, Saved and Profile share one page inset", () => {
+  renderApp();
+  const inset = (el: Element) => [...el.classList].filter((c) => /^px-/.test(c));
+  const home = screen.getByRole("heading", { name: "Popular trips" }).parentElement as HTMLElement;
+  for (const name of ["saved", "profile"]) {
+    const page = document.querySelector(`[data-fov="${name}-screen"]`)?.firstElementChild as HTMLElement;
+    expect(inset(page)).toEqual(inset(home));
+  }
+});

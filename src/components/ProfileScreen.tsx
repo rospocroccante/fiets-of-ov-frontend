@@ -21,7 +21,7 @@ export function ProfileScreen({ themeMode, onThemeMode, onClearRecents, onClearS
   const row =
     "flex min-h-[44px] w-full items-center justify-between px-4 py-3 text-left text-[15px] text-slate-900 transition-colors hover:bg-slate-50 dark:text-night-text dark:hover:bg-night-hover";
   return (
-    <div className="px-5 pb-6 pt-[calc(1rem+env(safe-area-inset-top))]">
+    <div className="px-6 pb-6 pt-[calc(1rem+env(safe-area-inset-top))]">
       <h1 className="flex min-h-[44px] items-center text-[28px] font-bold leading-tight text-slate-900 dark:text-night-text">
         {t("tabProfile")}
       </h1>

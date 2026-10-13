@@ -50,7 +50,7 @@ export function SavedScreen({
     "-mr-2 inline-flex min-h-[44px] items-center px-2 text-[15px] font-semibold text-brand transition-colors hover:text-brand-dark dark:text-night-accent dark:hover:text-night-accent-soft";
 
   return (
-    <div className="px-5 pb-6 pt-[calc(1rem+env(safe-area-inset-top))]">
+    <div className="px-6 pb-6 pt-[calc(1rem+env(safe-area-inset-top))]">
       <div className="flex min-h-[44px] items-center justify-between">
         <h1 className="text-[28px] font-bold leading-tight text-slate-900 dark:text-night-text">{t("tabSaved")}</h1>
         {places.length > 0 && (
