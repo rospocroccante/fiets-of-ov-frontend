@@ -81,12 +81,18 @@ function legBarLabel(leg: PlanLeg, lang: Lang): string {
  * as the bar: the label either fits on the strut's line or wraps to a second one, which
  * overflow clips away. Pure CSS, so it holds through every resize without measuring
  * anything. The 4px floor keeps a zero-minute transfer visible as colour.
+ *
+ * `first` drops the top margin, for a row with no title line above the bar.
  */
-function LegBar({ legs }: { legs: PlanLeg[] }) {
+function LegBar({ legs, first = false }: { legs: PlanLeg[]; first?: boolean }) {
   const { lang } = useI18n();
   if (legs.length === 0) return null;
   return (
-    <span aria-hidden="true" data-fov="leg-bar" className="mt-2 mb-1.5 flex h-[22px] w-full gap-[3px]">
+    <span
+      aria-hidden="true"
+      data-fov="leg-bar"
+      className={`${first ? "" : "mt-2 "}mb-1.5 flex h-[22px] w-full gap-[3px]`}
+    >
       {legs.map((leg, i) => {
         const fill = modeColor(leg.mode);
         return (
@@ -133,12 +139,17 @@ function LegBar({ legs }: { legs: PlanLeg[] }) {
  * The old selected state filled the row with `bg-emerald-600` in the night theme and
  * put `text-white/85` on it: 3.14:1, the least legible text on the screen, on the
  * option the user had actually chosen.
+ *
+ * Without `titled` the row starts at its leg bar. The phone sheet's summary header
+ * already shows the chosen option's title, Best tag and minutes over the list, and the
+ * chosen row repeated them as the first line of the content.
  */
 export function AdviceCard({
   option,
   selected,
   onSelect,
   detailsId,
+  titled = true,
 }: {
   option: OptionView;
   selected: boolean;
@@ -146,6 +157,8 @@ export function AdviceCard({
   onSelect?: () => void;
   // The panel this row expands to, when it is the selected one.
   detailsId?: string;
+  // False where a header above the list already names this option.
+  titled?: boolean;
 }) {
   const { lang, t } = useI18n();
   const { fareEur, kcal, co2Grams, co2Complete } = option.metrics;
@@ -176,35 +189,37 @@ export function AdviceCard({
         selected || !onSelect ? "" : "hover:bg-slate-900/5 dark:hover:bg-night-hover/60"
       }`}
     >
-      <span className="flex w-full items-baseline gap-3">
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-          {/* No truncate. The row is as wide as the column, which is the whole point
-              of the shape: "Openbaar vervoer" fits, and anything longer wraps rather
-              than losing the word that says which option this is. */}
-          <h3
-            data-fov="option-title"
-            className={`min-w-0 text-[15px] font-semibold ${
-              selected ? "text-brand dark:text-night-accent" : "text-slate-900 dark:text-night-text"
-            }`}
-          >
-            {option.title}
-          </h3>
-          {option.recommended && (
-            // A 6px tag; pills are kept for controls. At night it is the signage
-            // pairing, geel ground and navy type (10.92:1): the translucent
-            // accent-deep it had before composited to olive on the navy page.
-            <span className="shrink-0 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-bold leading-none text-emerald-700 dark:bg-night-accent dark:text-night-bg">
-              {t("best")}
-            </span>
-          )}
+      {titled && (
+        <span className="flex w-full items-baseline gap-3">
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            {/* No truncate. The row is as wide as the column, which is the whole point
+                of the shape: "Openbaar vervoer" fits, and anything longer wraps rather
+                than losing the word that says which option this is. */}
+            <h3
+              data-fov="option-title"
+              className={`min-w-0 text-[15px] font-semibold ${
+                selected ? "text-brand dark:text-night-accent" : "text-slate-900 dark:text-night-text"
+              }`}
+            >
+              {option.title}
+            </h3>
+            {option.recommended && (
+              // A 6px tag; pills are kept for controls. At night it is the signage
+              // pairing, geel ground and navy type (10.92:1): the translucent
+              // accent-deep it had before composited to olive on the navy page.
+              <span className="shrink-0 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-bold leading-none text-emerald-700 dark:bg-night-accent dark:text-night-bg">
+                {t("best")}
+              </span>
+            )}
+          </span>
+          {/* The total, large, because it is the number the three rows are compared on.
+              nowrap, so the Best tag can never push "28" over "min". */}
+          <span className="shrink-0 whitespace-nowrap text-xl font-bold leading-7 tabular-nums text-slate-900 dark:text-night-text">
+            {option.minutes} min
+          </span>
         </span>
-        {/* The total, large, because it is the number the three rows are compared on.
-            nowrap, so the Best tag can never push "28" over "min". */}
-        <span className="shrink-0 whitespace-nowrap text-xl font-bold leading-7 tabular-nums text-slate-900 dark:text-night-text">
-          {option.minutes} min
-        </span>
-      </span>
-      <LegBar legs={option.itinerary.legs} />
+      )}
+      <LegBar legs={option.itinerary.legs} first={!titled} />
       {/* The route in words. Where the bar draws it, this is for a screen reader only;
           an itinerary with no legs to draw keeps it on screen. */}
       <span

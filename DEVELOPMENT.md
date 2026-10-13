@@ -362,6 +362,17 @@ the credits, and `App` renders it only when there are options to show. The chose
 option's steps in the content have no Start of their own, since the header carries one
 at every height.
 
+The chosen option's row in the content does not repeat the header either. It used to
+open on the same title, Best tag and minutes the header shows just above it, so at half
+the first line of the content was a copy. `App` passes `chosenInHeader` to
+`ResultsPanel` on this layout, and the chosen row (`AdviceCard` with `titled` off) starts
+at its leg bar: the bar, the four figures, then the departure line and the folded steps.
+It is still the pressed option button, and during a ride it is disabled with the others.
+The other options keep their whole row. Choosing one makes it the chosen option: the
+header names it, its row drops the title line, and the row it replaced gets its own
+back. The results column beside the map, on a desktop and on a phone on its side, has no
+header above it and keeps the whole row on every option.
+
 The detents are solved in `src/lib/sheetDetents.ts` from what the sheet measures with a
 `ResizeObserver`. `detentHeights` takes the frame, the window height, the bottom inset,
 the header (handle and summary) and the content's natural height. Peek is the header
@@ -388,7 +399,7 @@ come back. `data-hugs` marks this state on the sheet. In the app it happens only
 there is no content: a plan on its way, a plan that failed, and a filter that hides every
 option, where the sheet is the summary alone (45px for "No options match the current
 filters."). A real plan never hugs, even with one option: the option row, the forecast
-strip and the credits make header and content 636px for the mock's bike-only plan
+strip and the credits make header and content 600px for the mock's bike-only plan
 against a half of 284 to 422px at 320x568, 360x800 and 390x844, so it keeps peek, half
 and full.
 
@@ -423,7 +434,10 @@ map stay side by side (`sheetLayout` is `isPhone && !landscapePhone`).
 
 In the browser suite the plan lands collapsed, so a scenario that measures the options
 opens the sheet to half first with `openSheetToHalf` from `browser-tests/lib/sheet.mjs`,
-a touch on the handle followed by a wait for the spring to stop.
+a touch on the handle followed by a wait for the spring to stop. A scenario that names
+an option row reads its title with `titleOf` from the probe in
+`browser-tests/lib/measure.mjs`: the row's own title, or for the chosen row on this
+layout the summary header's.
 
 In mock mode the badge used to sit in the bottom-left corner of the map stage, over the
 collapsed sheet's Start. While the sheet is on screen and the tab bar is away, it now sits

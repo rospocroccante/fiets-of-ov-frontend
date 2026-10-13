@@ -916,8 +916,17 @@ export default function App() {
       }
     : undefined;
   // On the sheet layout the summary header carries the one Start, at every height of the
-  // sheet, so the chosen option's steps in the content do not repeat it.
-  const resultsPanel = <ResultsPanel state={panel} onStartNav={sheetLayout ? undefined : startNav} narrow={isPhone} />;
+  // sheet, so the chosen option's steps in the content do not repeat it. It also shows
+  // the chosen option's title, Best tag and minutes, so the chosen row in the content
+  // starts at its leg bar.
+  const resultsPanel = (
+    <ResultsPanel
+      state={panel}
+      onStartNav={sheetLayout ? undefined : startNav}
+      narrow={isPhone}
+      chosenInHeader={sheetLayout}
+    />
+  );
   // Weather and OpenStreetMap credit for the advice itself, which stays on screen whether
   // or not the map is showing. Open-Meteo's CC BY 4.0 terms ask for a link next to where
   // its data is shown, and the forecast strip is at the top of this column.

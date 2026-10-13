@@ -203,7 +203,7 @@ async function optionPoint(page, n) {
     const r = F.rect(li), v = F.visible(li);
     return { x: Math.round(r.x + r.w / 2), y: Math.round((v.top + v.bottom) / 2), visible: v.h, h: r.h,
              selected: li.getAttribute("data-selected") === "true",
-             title: li.querySelector('[data-fov="option-title"]').textContent.trim() };
+             title: F.titleOf(li).textContent.trim() };
   `);
 }
 
@@ -301,12 +301,13 @@ const READ_RADAR = `
 `;
 
 // The ride as the screen states it: the banner's ETA, the summary's option and the option
-// the content has selected.
+// the content has selected. The chosen row has no title of its own under the summary, so
+// it is known by its route in words, which differs between the options.
 const READ_RIDE = `
   const banner = document.querySelector('[aria-label="Exit navigation"]').closest(".rounded-card");
   const eta = (banner.innerText.match(/~(\\d+) min/) || [])[1];
   const title = document.querySelector('[data-fov="summary-title"]');
-  const chosen = document.querySelector('[data-fov="option"][data-selected="true"] [data-fov="option-title"]');
+  const chosen = document.querySelector('[data-fov="option"][data-selected="true"] [data-fov="option-summary"]');
   return { eta: eta == null ? null : Number(eta), title: title ? title.textContent.trim() : null,
            chosen: chosen ? chosen.textContent.trim() : null, banner: banner.innerText.replace(/\\s+/g, " ") };
 `;

@@ -86,6 +86,13 @@ window.__fov = {
   // own scroll back: moving that would drive the home/map morph and change the screen
   // the test is standing on.
   reveal(el) { const y0 = window.scrollY; el.scrollIntoView({ block: "center" }); window.scrollTo(0, y0); },
+  // The element that names an option row. Every row draws its own title except the chosen
+  // one on a portrait phone: the results sheet's summary header names that option, and
+  // the row under it starts at its leg bar.
+  titleOf(li) {
+    return li.querySelector('[data-fov="option-title"]') ||
+      (li.getAttribute("data-selected") === "true" ? document.querySelector('[data-fov="summary-title"]') : null);
+  },
   // Is this element PAINTED, rather than merely in the document?
   //
   // Three separate things can be true of a node nobody can see: \`display: none\` (its

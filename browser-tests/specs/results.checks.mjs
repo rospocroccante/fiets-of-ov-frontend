@@ -104,7 +104,7 @@ const readRows = `
   const rows = [...document.querySelectorAll('${OPTION}')].map((li) => {
     const btn = li.querySelector('${OPTION_BUTTON}');
     const details = li.querySelector('${OPTION_DETAILS}');
-    const title = li.querySelector('[data-fov="option-title"]');
+    const title = F.titleOf(li);
     return {
       box: F.rect(li),
       button: F.rect(btn),
@@ -157,7 +157,7 @@ export const scenarios = [
                 // for reasons that have nothing to do with the figures.
                 F.reveal(list);
                 return {
-                  title: li.querySelector('[data-fov="option-title"]').textContent.trim(),
+                  title: F.titleOf(li).textContent.trim(),
                   text: btn.innerText,
                   figures: [...list.querySelectorAll("li")].map((x) => F.shown(x)),
                 };
@@ -569,6 +569,101 @@ export const scenarios = [
   })),
 
   {
+    // The summary header names the chosen option at every height of the sheet: its title,
+    // its Best tag and its minutes. At half the content under it used to open on that same
+    // line again, as the chosen row's first. That row now starts at its leg bar, and its
+    // figures, departure line and steps are what it adds.
+    name: "390x844 at half the chosen option's title is on the sheet once, in its header, and its steps open",
+    async run(ctx) {
+      const { checks } = ctx;
+      const page = await bootResults(ctx, { width: 390, height: 844 });
+      // Every element on the visible part of the sheet whose text reads `want` and that
+      // holds no smaller element reading the same: drawn, and inside every clip and the
+      // screen. The header's title and minutes are leaves of their own.
+      const readOnce = `
+        const F = window.__fov;
+        const sheet = document.querySelector('[data-fov="results-sheet"]');
+        const head = document.querySelector('[data-fov="sheet-summary"]');
+        const title = document.querySelector('[data-fov="summary-title"]');
+        const minutes = [...head.querySelectorAll("span")].find((s) => /^\\d+ min$/.test(s.textContent.trim()));
+        const drawn = (el) => el.checkVisibility({ contentVisibilityAuto: true, opacityProperty: true, visibilityProperty: true }) &&
+          F.visible(el).h > 0;
+        const reading = (want) => [...sheet.querySelectorAll("*")]
+          .filter((el) => el.textContent.trim() === want &&
+            ![...el.children].some((c) => c.textContent.trim() === want) && drawn(el))
+          .map((el) => ({ fov: (el.closest("[data-fov]") || el).getAttribute("data-fov"), y: Math.round(el.getBoundingClientRect().top) }));
+        const chosen = document.querySelector('${OPTION}[data-selected="true"]');
+        return {
+          detent: sheet.getAttribute("data-detent"),
+          title: title.textContent.trim(), minutes: minutes.textContent.trim(),
+          titles: reading(title.textContent.trim()), minuteLines: reading(minutes.textContent.trim()),
+          bar: F.shown(chosen.querySelector('[data-fov="leg-bar"]')),
+          figures: [...chosen.querySelectorAll('${OPTION_METRICS} li')].map((m) => F.shown(m).painted),
+          departure: F.shown(chosen.querySelector('${OPTION_DETAILS} [data-fov="departure"]')),
+        };
+      `;
+      try {
+        const m = await page.eval(readOnce);
+        checks.equal("the sheet is at half", m.detent, "half");
+        checks.equal(
+          `"${m.title}" is drawn once on the visible sheet`,
+          m.titles.length,
+          1,
+          m.titles.map((t) => `${t.fov} at y ${t.y}`).join(", ") || "nowhere",
+        );
+        checks.ok(
+          "and that once is the summary header",
+          m.titles.length === 1 && m.titles[0].fov === "summary-title",
+          m.titles.map((t) => t.fov).join(", "),
+        );
+        checks.equal(
+          `"${m.minutes}" is drawn once on the visible sheet`,
+          m.minuteLines.length,
+          1,
+          m.minuteLines.map((t) => `${t.fov} at y ${t.y}`).join(", ") || "nowhere",
+        );
+        checks.ok("the chosen option's leg bar is painted in the content", m.bar.painted,
+          `${round(m.bar.w)}x${round(m.bar.h)}, hit ${m.bar.hit}`);
+        checks.equal("so are its four figures", m.figures.filter(Boolean).length, 4, m.figures.join(", "));
+        checks.ok("and its departure line", m.departure.painted, `"${m.departure.text}", hit ${m.departure.hit}`);
+
+        // Touched where it is, not revealed first: scrollIntoView would scroll the sheet's
+        // clipping frame as well and move the header this counts on.
+        const t = await page.eval(`
+          const F = window.__fov;
+          const s = document.querySelector('${OPTION}[data-selected="true"] ${STEPS_TOGGLE}');
+          if (!s) return null;
+          const v = F.visible(s), b = F.rect(s);
+          return { x: Math.round(b.x + b.w / 2), y: Math.round((v.top + v.bottom) / 2), visible: v.h,
+                   hit: F.hit(Math.round(b.x + b.w / 2), Math.round((v.top + v.bottom) / 2), '${STEPS_TOGGLE}') };
+        `);
+        checks.ok("the chosen option's steps toggle is on the half sheet and takes a touch", t != null && t.visible >= 44 && t.hit.inside,
+          t ? `${round(t.visible)}px of it visible, hit ${t.hit.desc}` : "no steps disclosure");
+        if (!t) return;
+        await page.tap(t.x, t.y);
+        await sleep(300);
+        const steps = await page.eval(`
+          const F = window.__fov;
+          const d = document.querySelector('${OPTION}[data-selected="true"] ${OPTION_STEPS}');
+          const itin = d && d.querySelector('[data-fov="itinerary"]');
+          return { open: !!d && d.open, shown: itin ? F.shown(itin) : null };
+        `);
+        checks.ok("a tap on the departure line opens them", steps.open, `open ${steps.open}`);
+        checks.ok(
+          "and the steps are on the screen",
+          steps.shown != null && steps.shown.painted,
+          steps.shown ? `${round(steps.shown.w)}x${round(steps.shown.h)}, hit ${steps.shown.hit}` : "no itinerary",
+        );
+        const after = await page.eval(readOnce);
+        checks.equal(`with the steps open "${after.title}" is still drawn once`, after.titles.length, 1,
+          after.titles.map((x) => `${x.fov} at y ${x.y}`).join(", ") || "nowhere");
+      } finally {
+        await page.close();
+      }
+    },
+  },
+
+  {
     name: "390x844 the chosen option and its itinerary are one block",
     async run(ctx) {
       const { checks } = ctx;
@@ -704,14 +799,19 @@ export const scenarios = [
       const { checks } = ctx;
       const page = await bootResults(ctx, { width: 360, height: 800 });
       try {
+        // Each option's minutes where they are drawn: in its own row, or for the chosen
+        // option on a portrait phone in the sheet's summary header, which has the same
+        // title, badge and minutes line.
         const lines = await page.eval(`
           const F = window.__fov;
-          return [...document.querySelectorAll('${OPTION_BUTTON}')].map((btn) => {
-            const el = [...btn.querySelectorAll("span")].find((s) => /^\\d+ min$/.test(s.textContent.trim()));
+          return [...document.querySelectorAll('${OPTION}')].map((li) => {
+            const title = F.titleOf(li);
+            const head = title.closest('${OPTION_BUTTON}, [data-fov="sheet-summary"]');
+            const el = [...head.querySelectorAll("span")].find((s) => /^\\d+ min$/.test(s.textContent.trim()));
             const cs = getComputedStyle(el);
             return { text: el.textContent.trim(), h: +el.getBoundingClientRect().height.toFixed(2),
                      lineHeight: parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2,
-                     badge: !!btn.querySelector('[data-fov="option-title"] ~ span') };
+                     badge: !!title.nextElementSibling };
           });
         `);
         for (const l of lines) {
@@ -749,12 +849,15 @@ export const scenarios = [
         const c = await page.eval(`
           const F = window.__fov;
           const li = document.querySelector('${OPTION}[data-selected="true"]');
-          const btn = li.querySelector('${OPTION_BUTTON}');
+          // On a portrait phone the chosen option's title, badge and minutes are in the
+          // sheet's summary header, on the sheet's own surface and off the row's tint.
+          const title = F.titleOf(li);
+          const head = title.closest('${OPTION_BUTTON}, [data-fov="sheet-summary"]');
           const metrics = [...li.querySelectorAll('[data-fov="option-metrics"] li')];
-          const badge = [...btn.querySelectorAll("span")].find((s) => /^(Best|Beste)$/.test(s.textContent.trim()));
-          const minutes = [...btn.querySelectorAll("span")].find((s) => /^\\d+ min$/.test(s.textContent.trim()));
+          const badge = [...head.querySelectorAll("span")].find((s) => /^(Best|Beste)$/.test(s.textContent.trim()));
+          const minutes = [...head.querySelectorAll("span")].find((s) => /^\\d+ min$/.test(s.textContent.trim()));
           return {
-            title: F.contrast(li.querySelector('[data-fov="option-title"]')),
+            title: F.contrast(title),
             minutes: F.contrast(minutes),
             summary: F.contrast(li.querySelector('[data-fov="option-summary"]')),
             metrics: metrics.map((m) => ({ ...F.contrast(m), painted: F.shown(m).painted, w: F.shown(m).w })),
@@ -1010,7 +1113,7 @@ export const scenarios = [
             return { w: r.w, grow: parseFloat(getComputedStyle(s).flexGrow), text: label.textContent,
                      inside, below, fill: getComputedStyle(s).backgroundColor, contrast: F.contrast(label) };
           });
-          return { title: li.querySelector('[data-fov="option-title"]').textContent.trim(),
+          return { title: F.titleOf(li).textContent.trim(),
                    hidden: bar.getAttribute("aria-hidden"), w: b.w, gap: parseFloat(getComputedStyle(bar).columnGap) || 0, segs };
         });
       `;

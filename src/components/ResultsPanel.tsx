@@ -164,6 +164,7 @@ export function ResultsPanel({
   state,
   onStartNav,
   narrow = false,
+  chosenInHeader = false,
 }: {
   state: PanelState;
   // Starts turn-by-turn navigation for the selected option; the button only renders
@@ -175,12 +176,17 @@ export function ResultsPanel({
   // are about what is on screen when the plan lands — see the comments where they are
   // used. App decides this on the same query that decides the rest of the phone layout.
   narrow?: boolean;
+  // A header over the panel already shows the chosen option's title, Best tag and
+  // minutes: the portrait phone's results sheet, whose summary stays on top of the
+  // content at every height. The chosen row then drops that line and starts at its leg
+  // bar. The other rows keep theirs, since the header names only the one.
+  chosenInHeader?: boolean;
 }) {
   return (
     // `relative` holds the leaving skeleton in place over what replaces it.
     <div className="relative">
       <AnimatePresence>{state.status === "loading" && <Skeleton key="skeleton" />}</AnimatePresence>
-      <PanelBody state={state} onStartNav={onStartNav} narrow={narrow} />
+      <PanelBody state={state} onStartNav={onStartNav} narrow={narrow} chosenInHeader={chosenInHeader} />
     </div>
   );
 }
@@ -193,10 +199,12 @@ function PanelBody({
   state,
   onStartNav,
   narrow,
+  chosenInHeader,
 }: {
   state: PanelState;
   onStartNav?: () => void;
   narrow: boolean;
+  chosenInHeader: boolean;
 }) {
   const { t } = useI18n();
   const now = useNow(TICK_MS);
@@ -297,6 +305,7 @@ function PanelBody({
                 selected={isSelected}
                 onSelect={onSelect ? () => onSelect(option.mode) : undefined}
                 detailsId={detailsId}
+                titled={!(isSelected && chosenInHeader)}
               />
               {isSelected && (
                 <SelectedDetails

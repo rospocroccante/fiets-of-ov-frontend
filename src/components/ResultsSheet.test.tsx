@@ -199,7 +199,7 @@ test("the content scrolls only at full height", () => {
 // The sheet hugs: content that fits under half leaves one resting height, and nothing
 // pretends there is more to open. The content here is a test's paragraph. In the app no
 // real plan is that short (the one-option plan in browser-tests/specs/phone-nav.checks.mjs
-// runs to 636px against a half of 422 at most), and only a sheet with no content hugs.
+// runs to 600px against a half of 422 at most), and only a sheet with no content hugs.
 describe("a sheet whose content fits under half", () => {
   test("rests at the header and content's own height, with no handle to expand", async () => {
     layout({ body: 100 });

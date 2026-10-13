@@ -153,8 +153,11 @@ test("while a ride is on, the option rows in the opened sheet choose nothing, an
   const rows = [...content().querySelectorAll('[data-fov="option-button"]')];
   expect(rows).toHaveLength(2);
   for (const row of rows) fireEvent.click(row);
+  // The chosen row carries no title on this layout: the header names it, and the row
+  // that is not chosen is still the other option.
   const chosen = content().querySelector('[data-fov="option"][data-selected="true"]') as HTMLElement;
-  expect(within(chosen).getByText("By bike")).toBeInTheDocument();
+  const other = content().querySelector('[data-fov="option"][data-selected="false"]') as HTMLElement;
+  expect(within(other).getByText("Public transport")).toHaveAttribute("data-fov", "option-title");
   expect(within(summary()).getByText("By bike")).toHaveAttribute("data-fov", "summary-title");
   expect(screen.getByText(/~24 min/)).toBeInTheDocument();
   expect(screen.queryByText(/~29 min/)).toBeNull();
@@ -167,19 +170,95 @@ test("while a ride is on, the option rows in the opened sheet choose nothing, an
   await waitFor(() => expect(within(steps).getAllByRole("listitem").length).toBeGreaterThan(0));
 });
 
+// The summary header names the chosen option, with its Best tag and minutes, at every
+// height of the sheet. At half and full the chosen option in the content shows only what
+// the header does not: its leg bar, its four figures, the departure line and the steps.
+test("at half the chosen option's title is in the header alone, and the content holds its figures and steps", async () => {
+  phoneLayout();
+  renderApp();
+  await planVondelpark();
+  fireEvent.click(within(summary()).getByText("By bike"));
+  expect(sheet()).toHaveAttribute("data-detent", "half");
+  await waitFor(() => expect(within(content()).getByRole("list", { name: "Travel options" })).toBeInTheDocument());
+
+  const titles = within(sheet()!).getAllByText("By bike");
+  expect(titles).toHaveLength(1);
+  expect(titles[0]).toHaveAttribute("data-fov", "summary-title");
+  expect(within(sheet()!).getAllByText("Best")).toHaveLength(1);
+  expect(within(sheet()!).getAllByText("24 min")).toHaveLength(1);
+
+  const chosen = content().querySelector('[data-fov="option"][data-selected="true"]') as HTMLElement;
+  expect(chosen.querySelector('[data-fov="option-title"]')).toBeNull();
+  expect(chosen.querySelector('[data-fov="leg-bar"]')).not.toBeNull();
+  expect(chosen.querySelectorAll('[data-fov="option-metrics"] li')).toHaveLength(4);
+  expect(chosen.querySelector('[data-fov="departure"]')).not.toBeNull();
+  const steps = chosen.querySelector('[data-fov="option-steps"]') as HTMLDetailsElement;
+  fireEvent.click(chosen.querySelector('[data-fov="steps-toggle"]') as HTMLElement);
+  expect(steps.open).toBe(true);
+  expect(within(steps).getAllByRole("listitem").length).toBeGreaterThan(0);
+
+  // The other option is a whole row, title, minutes and all.
+  const other = content().querySelector('[data-fov="option"][data-selected="false"]') as HTMLElement;
+  expect(within(other).getByText("Public transport")).toHaveAttribute("data-fov", "option-title");
+  expect(within(other).getByText("29 min")).toBeInTheDocument();
+});
+
+test("a row chosen in the opened sheet loses its title row to the header, and the one it replaced gets its own back", async () => {
+  phoneLayout();
+  renderApp();
+  await planVondelpark();
+  fireEvent.click(within(summary()).getByText("By bike"));
+  await waitFor(() => expect(within(content()).getByRole("list", { name: "Travel options" })).toBeInTheDocument());
+
+  const transit = content().querySelector('[data-fov="option"][data-selected="false"] [data-fov="option-button"]') as HTMLElement;
+  fireEvent.click(transit);
+  expect(within(summary()).getByText("Public transport")).toHaveAttribute("data-fov", "summary-title");
+  const titles = within(sheet()!).getAllByText("Public transport");
+  expect(titles).toHaveLength(1);
+  expect(titles[0]).toHaveAttribute("data-fov", "summary-title");
+  const chosen = content().querySelector('[data-fov="option"][data-selected="true"]') as HTMLElement;
+  expect(chosen.querySelector('[data-fov="option-title"]')).toBeNull();
+  expect(chosen.querySelector('[data-fov="option-steps"]')).not.toBeNull();
+
+  const bike = content().querySelector('[data-fov="option"][data-selected="false"]') as HTMLElement;
+  expect(within(bike).getByText("By bike")).toHaveAttribute("data-fov", "option-title");
+  expect(within(bike).getByText("Best")).toBeInTheDocument();
+  expect(within(bike).getByText("24 min")).toBeInTheDocument();
+});
+
 // A desktop, or a phone on its side: the Vondelpark trip planned into the results column
-// beside the map, and a ride started from the column's Start.
-async function rideFromColumn(landscape: boolean) {
+// beside the map.
+async function planIntoColumn(landscape: boolean) {
   for (const r of restore.reverse()) r();
   restore = landscape ? [phoneViewport({ landscape: true })] : [];
   renderApp();
   fireEvent.click(screen.getByRole("button", { name: "Amsterdam Centraal → Vondelpark" }));
   await morphTo(1);
-  const column = await waitFor(() => {
+  return waitFor(() => {
     const c = document.querySelector('[data-fov="results-column"]') as HTMLElement | null;
     if (!c || !within(c).queryByRole("button", { name: "Start navigation" })) throw new Error("no results yet");
     return c;
   });
+}
+
+// The column has no summary header above it, so its chosen option keeps the whole row.
+test.each([
+  ["on desktop", false],
+  ["on a phone on its side", true],
+] as const)("%s the chosen option in the results column keeps its title, Best tag and minutes", async (_where, landscape) => {
+  const column = await planIntoColumn(landscape);
+  expect(sheet()).toBeNull();
+  const chosen = column.querySelector('[data-fov="option"][data-selected="true"]') as HTMLElement;
+  expect(within(chosen).getByText("By bike")).toHaveAttribute("data-fov", "option-title");
+  expect(within(chosen).getByText("Best")).toBeInTheDocument();
+  expect(within(chosen).getByText("24 min")).toBeInTheDocument();
+  expect(chosen.querySelector('[data-fov="leg-bar"]')).not.toBeNull();
+  expect(chosen.querySelector('[data-fov="departure"]')).not.toBeNull();
+});
+
+// A desktop, or a phone on its side: a ride started from the results column's Start.
+async function rideFromColumn(landscape: boolean) {
+  const column = await planIntoColumn(landscape);
   fireEvent.click(within(column).getByRole("button", { name: "Start navigation" }));
   expect(screen.getByText(/~24 min/)).toBeInTheDocument();
   return column;
@@ -230,8 +309,8 @@ test("the other option's minutes choose it, as a tap on its row would", async ()
   await planVondelpark();
   fireEvent.click(within(summary()).getByRole("button", { name: "Public transport, 29 min" }));
   expect(within(summary()).getByText("Public transport")).toHaveAttribute("data-fov", "summary-title");
-  const chosen = content().querySelector('[data-fov="option"][data-selected="true"]') as HTMLElement;
-  expect(within(chosen).getByText("Public transport")).toBeInTheDocument();
+  const other = content().querySelector('[data-fov="option"][data-selected="false"]') as HTMLElement;
+  expect(within(other).getByText("By bike")).toHaveAttribute("data-fov", "option-title");
 });
 
 test("the forecast strip and the credits are in the content, under the options", async () => {
