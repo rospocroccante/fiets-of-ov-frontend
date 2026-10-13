@@ -92,13 +92,14 @@ export function TripRow({
 }
 
 // The rows' list. A hairline under each row, inset to the text, and none under the last
-// row. With two columns the last row holds the last two items when their number is
-// even, and the last item alone when it is odd.
+// row of a column. Two columns fill row by row, so each column ends on one of the last
+// two items whatever their number: with an odd number the first column ends on the last
+// item and the second on the one before it, which is a row higher.
 export function TripList({ columns = false, children }: { columns?: boolean; children: ReactNode }) {
   return (
     <ul className={`grid grid-cols-1 ${columns ? "gap-x-8 sm:grid-cols-2" : ""}`}>
       {Children.map(children, (row) => (
-        <li className={columns ? `${ROW_DIVIDER} sm:[&:nth-last-child(2):nth-child(odd)]:after:hidden` : ROW_DIVIDER}>{row}</li>
+        <li className={columns ? `${ROW_DIVIDER} sm:[&:nth-last-child(2)]:after:hidden` : ROW_DIVIDER}>{row}</li>
       ))}
     </ul>
   );

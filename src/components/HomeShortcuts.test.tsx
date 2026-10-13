@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { glassClasses } from "../test/glass";
-import { HomeShortcuts } from "./HomeShortcuts";
+import { HomeShortcuts, TripList } from "./HomeShortcuts";
 
 const saved = [
   { id: "52.4010,4.8935", name: "NDSM", label: "NDSM Werf", lat: 52.401, lon: 4.8935, savedAt: 1 },
@@ -149,4 +149,17 @@ test("See all appears only when the host asks for it", () => {
   rerender(shortcutsElement({ onSeeAll }));
   fireEvent.click(screen.getByRole("button", { name: /see all/i }));
   expect(onSeeAll).toHaveBeenCalledTimes(1);
+});
+
+// From `sm` the rows stand in two columns, filled row by row, so each column ends on one of
+// the last two rows. Neither draws a hairline, for any number of rows. jsdom applies no
+// CSS, so each item's own `last:` and `sm:[&...]` selectors are matched against it.
+test.each([1, 2, 3, 4, 5, 6, 7, 8])("in two columns of %i rows, the last row of each column has no hairline", (n) => {
+  render(<TripList columns>{Array.from({ length: n }, (_, i) => <span key={i} />)}</TripList>);
+  const hides = (li: Element) =>
+    li.className.split(" ").some((c) => {
+      const m = /^(?:sm:\[&(.+)\]|(last)):after:hidden$/.exec(c);
+      return m != null && li.matches(m[1] ?? ":last-child");
+    });
+  expect([...document.querySelectorAll("li")].map(hides)).toEqual(Array.from({ length: n }, (_, i) => i + 2 >= n));
 });

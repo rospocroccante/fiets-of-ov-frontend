@@ -534,10 +534,11 @@ export const scenarios = [
             checks.near(`${at}: the text starts 16px past the circle`, r.text.left - r.glyph.right, 16, 0.5);
             checks.near(`${at}: the chevron ends 8px in from the row's end`, r.row.right - r.chevron.right, 8, 0.5);
             for (const p of r.reach) checks.ok(`${at}: a touch at x ${p.x} reaches the row`, p.inside, `hit ${p.hit}`);
-            // A hairline under every row but those of the last line.
-            const lastLine = i >= rows.length - (rows.length % columns || columns);
-            checks.equal(`${at} ${lastLine ? "has no hairline (last line)" : "sits on a 1px hairline"}`, r.line, lastLine ? 0 : 1);
-            if (!lastLine) checks.near(`${at}: its hairline starts at the text`, r.li.left + r.lineLeft, r.text.left, 0.5);
+            // A hairline under every row but the last of each column. The columns fill row
+            // by row, so with an odd number of rows the second column ends a line higher.
+            const lastInColumn = i + columns >= rows.length;
+            checks.equal(`${at} ${lastInColumn ? "has no hairline (last in its column)" : "sits on a 1px hairline"}`, r.line, lastInColumn ? 0 : 1);
+            if (!lastInColumn) checks.near(`${at}: its hairline starts at the text`, r.li.left + r.lineLeft, r.text.left, 0.5);
           });
           if (columns === 2) {
             for (let i = 0; i + 1 < rows.length; i += 2) {

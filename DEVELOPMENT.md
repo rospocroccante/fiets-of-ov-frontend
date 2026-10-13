@@ -212,7 +212,7 @@ row (`TripRow` in `HomeShortcuts.tsx`), drawn like a maps app's suggestion list.
 neutral circle (`slate-100`, `night.raised` at night) holds a pin for a popular trip and a
 clock for a recent one, then the destination in 15px semibold over "from {origin}" in
 13px, a recent trip's time-ago, and a chevron. Rows are 64px tall. Every row sits on a
-1px hairline inset to its text, except those on the list's last line (`TripList`,
+1px hairline inset to its text, except the last row of each column (`TripList`,
 `ROW_DIVIDER`). Nothing is coloured per trip: the popular trips used to be metro lines
 in red, blue, green and yellow, and the colours clashed. The Saved tab's place rows take
 the same circle (with the amber star), height and hairline, so the text of both
@@ -220,7 +220,10 @@ sections starts on one line.
 
 From `sm` up the home lists the rows in two columns. Each row is one height, so the
 hairlines line up across the columns; a single column 848px wide would leave each
-chevron about 700px from its text and double the list's height.
+chevron about 700px from its text and double the list's height. The columns fill row by
+row, so each one ends on one of the last two items: with an odd number of rows the
+second column ends a line higher than the first, and its last row drew a hairline under
+nothing until `TripList` hid it there too.
 
 A popular trip's accessible name is unchanged: origin, arrow, destination. A recent
 trip's adds its time-ago after a comma, so a trip that is both popular and recent does
